@@ -19,7 +19,10 @@ Required Convex server variables:
 ```env
 SITE_URL=https://app.hookedcue.com
 CONVEX_SITE_URL=https://cnx.hookedcue.com
+BETTER_AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 ```
+
+`CONVEX_SELF_HOSTED_ADMIN_KEY` is only for the CLI when deploying to the self-hosted Convex server. Do not expose it to the browser, and do not prefix it with `VITE_`.
 
 The dashboard domain must not be used for auth. This URL should return JWKS keys:
 
@@ -47,6 +50,7 @@ $env:CONVEX_SELF_HOSTED_ADMIN_KEY = "<admin-key-from-your-convex-server>"
 
 npx convex env set SITE_URL "https://app.hookedcue.com"
 npx convex env set CONVEX_SITE_URL "https://cnx.hookedcue.com"
+npx convex env set BETTER_AUTH_SECRET "<random-32-byte-secret>"
 npx convex deploy
 ```
 
