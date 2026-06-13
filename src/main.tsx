@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { ConvexReactClient } from "convex/react";
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
 import App from "./App";
+import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { authClient } from "./lib/auth-client";
 import "./styles/global.css";
 
@@ -10,8 +11,10 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ConvexBetterAuthProvider client={convex} authClient={authClient}>
-      <App />
-    </ConvexBetterAuthProvider>
+    <AppErrorBoundary>
+      <ConvexBetterAuthProvider client={convex} authClient={authClient}>
+        <App />
+      </ConvexBetterAuthProvider>
+    </AppErrorBoundary>
   </StrictMode>,
 );

@@ -33,6 +33,67 @@ body {
   height: 100%;
 }
 
+.fatal-screen {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 12%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 34%),
+    #030305;
+}
+.fatal-card {
+  width: min(430px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) 90%, black);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.6);
+  padding: 28px;
+}
+.fatal-kicker {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.fatal-card h1 {
+  margin-top: 10px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1.1;
+}
+.fatal-copy {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.fatal-detail {
+  margin-top: 16px;
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 14px;
+  background: #07070a;
+  color: #d6d3dd;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 12px;
+}
+.fatal-action {
+  margin-top: 18px;
+  width: 100%;
+  border-radius: 14px;
+  background: var(--accent);
+  color: white;
+  font-weight: 800;
+  padding: 13px 16px;
+}
+
 button {
   font-family: inherit;
   color: inherit;
