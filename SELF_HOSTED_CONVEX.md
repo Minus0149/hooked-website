@@ -7,6 +7,32 @@ The production app is configured for these domains:
 - Convex HTTP/auth site: `https://cnx.hookedcue.com`
 - Convex dashboard: `https://convexdash.hookedcue.com`
 
+Required frontend build variables:
+
+```env
+VITE_CONVEX_URL=https://convex.hookedcue.com
+VITE_CONVEX_SITE_URL=https://cnx.hookedcue.com
+```
+
+Required Convex server variables:
+
+```env
+SITE_URL=https://app.hookedcue.com
+CONVEX_SITE_URL=https://cnx.hookedcue.com
+```
+
+The dashboard domain must not be used for auth. This URL should return JWKS keys:
+
+```text
+https://cnx.hookedcue.com/api/auth/convex/jwks
+```
+
+This URL should not be used and returns a dashboard 404:
+
+```text
+https://convexdash.hookedcue.com/api/auth/convex/jwks
+```
+
 The browser errors below mean the Convex functions and HTTP routes have not been deployed to the self-hosted backend yet:
 
 - `Could not find public function for 'library:getLibrary'`
