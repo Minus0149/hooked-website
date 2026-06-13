@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://app.hookedcue.com/sitemap.xml

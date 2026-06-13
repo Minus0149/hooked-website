@@ -1,0 +1,19 @@
+{
+  "name": "hooked.",
+  "short_name": "hooked.",
+  "description": "Swipe through 30-second song previews and discover your next favorite track.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#08080C",
+  "theme_color": "#08080C",
+  "categories": ["music", "entertainment"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "48x46",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
