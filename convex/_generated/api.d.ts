@@ -12,6 +12,7 @@ import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as http from "../http.js";
 import type * as library from "../library.js";
+import type * as security from "../security.js";
 import type * as tracks from "../tracks.js";
 
 import type {
@@ -25,6 +26,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   http: typeof http;
   library: typeof library;
+  security: typeof security;
   tracks: typeof tracks;
 }>;
 

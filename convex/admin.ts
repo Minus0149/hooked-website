@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { authComponent } from "./auth";
 import { PERMISSIONS } from "./schema";
+import { enforceRateLimit, requireAdmin, requirePermission } from "./security";
 
 type Perm = (typeof PERMISSIONS)[number];
 
@@ -221,8 +222,8 @@ export const userDetail = query({
 export const setSuspended = mutation({
   args: { profileId: v.id("profiles"), suspended: v.boolean() },
   handler: async (ctx, { profileId, suspended }) => {
-    const viewer = await getViewer(ctx);
-    if (!hasPerm(viewer, "users.manage")) throw new Error("Requires users.manage");
+    const { user } = await requirePermission(ctx, "users.manage");
+    await enforceRateLimit(ctx, `admin:suspend:${user.id}`, 60, 60_000);
     const target = await ctx.db.get(profileId);
     if (!target) throw new Error("No such user");
     if (target.isAdmin) throw new Error("Admins can't be suspended");
@@ -234,8 +235,8 @@ export const setSuspended = mutation({
 export const deleteUserData = mutation({
   args: { profileId: v.id("profiles") },
   handler: async (ctx, { profileId }) => {
-    const viewer = await getViewer(ctx);
-    if (!viewer?.isAdmin) throw new Error("Admin only");
+    const { user } = await requireAdmin(ctx);
+    await enforceRateLimit(ctx, `admin:delete-user:${user.id}`, 10, 10 * 60_000);
     const target = await ctx.db.get(profileId);
     if (!target) throw new Error("No such user");
     if (target.isAdmin) throw new Error("Demote the admin first");
@@ -257,8 +258,8 @@ export const deleteUserData = mutation({
 export const setAdmin = mutation({
   args: { profileId: v.id("profiles"), isAdmin: v.boolean() },
   handler: async (ctx, { profileId, isAdmin }) => {
-    const viewer = await getViewer(ctx);
-    if (!viewer?.isAdmin) throw new Error("Admin only");
+    const { user } = await requireAdmin(ctx);
+    await enforceRateLimit(ctx, `admin:set-admin:${user.id}`, 30, 60_000);
     if (!isAdmin) {
       const admins = (await ctx.db.query("profiles").collect()).filter((p) => p.isAdmin);
       if (admins.length === 1 && admins[0]._id === profileId) {
@@ -277,8 +278,8 @@ export const setPermission = mutation({
     granted: v.boolean(),
   },
   handler: async (ctx, { profileId, permission, granted }) => {
-    const viewer = await getViewer(ctx);
-    if (!viewer?.isAdmin) throw new Error("Admin only");
+    const { user } = await requireAdmin(ctx);
+    await enforceRateLimit(ctx, `admin:set-permission:${user.id}`, 60, 60_000);
     if (!(PERMISSIONS as readonly string[]).includes(permission)) {
       throw new Error("Unknown permission");
     }

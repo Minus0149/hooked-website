@@ -7,15 +7,34 @@ import { query } from "./_generated/server";
 import authConfig from "./auth.config";
 
 const siteUrl = process.env.SITE_URL ?? "https://app.hookedcue.com";
-const convexSiteUrl = process.env.CONVEX_SITE_URL ?? "https://cnx.hookedcue.com";
+const authSiteUrl = process.env.BETTER_AUTH_URL ?? "https://cnx.hookedcue.com";
+const authSecret = process.env.BETTER_AUTH_SECRET;
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
 export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth({
-    baseURL: convexSiteUrl,
+    baseURL: authSiteUrl,
+    secret: authSecret,
     // web SPA + the Expo app (dev client scheme and Expo Go)
     trustedOrigins: [siteUrl, "hooked://", "exp://"],
+    advanced: {
+      ipAddress: {
+        ipAddressHeaders: ["cf-connecting-ip", "x-real-ip", "x-forwarded-for"],
+      },
+    },
+    rateLimit: {
+      enabled: true,
+      storage: "database",
+      window: 60,
+      max: 120,
+      customRules: {
+        "/sign-in/*": { window: 60, max: 5 },
+        "/sign-up/*": { window: 60 * 60, max: 10 },
+        "/convex/token": { window: 60, max: 60 },
+        "/get-session": { window: 60, max: 120 },
+      },
+    },
     database: authComponent.adapter(ctx),
     emailAndPassword: {
       enabled: true,

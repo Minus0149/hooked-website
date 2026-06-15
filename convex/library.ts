@@ -1,30 +1,25 @@
-import { v, type Infer } from "convex/values";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import { v } from "convex/values";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { authComponent } from "./auth";
 import { saveTarget, swipeAction, trackFields } from "./schema";
-
-const trackValidator = v.object(trackFields);
-type TrackInput = Infer<typeof trackValidator>;
-
-async function requireUser(ctx: QueryCtx | MutationCtx) {
-  const user = await authComponent.getAuthUser(ctx);
-  if (!user) throw new Error("Not signed in");
-  return { id: String(user._id), email: user.email, name: user.name };
-}
-
-async function getProfile(ctx: QueryCtx | MutationCtx, userId: string) {
-  return ctx.db
-    .query("profiles")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .unique();
-}
+import {
+  cleanAccent,
+  cleanText,
+  cleanTrack,
+  enforceRateLimit,
+  ensureActiveProfile,
+  getProfile,
+  requireUser,
+  type TrackInput,
+  validateSaveTarget,
+} from "./security";
 
 /** Called after sign-in. Creates the profile; the first user ever becomes admin. */
 export const ensureProfile = mutation({
   args: {},
   handler: async (ctx) => {
     const user = await requireUser(ctx);
+    await enforceRateLimit(ctx, `profile:${user.id}`, 20, 60_000);
     const existing = await getProfile(ctx, user.id);
     if (existing) return existing;
     const anyProfile = await ctx.db.query("profiles").first();
@@ -81,12 +76,15 @@ export const createPlaylist = mutation({
   args: { name: v.string(), accent: v.string() },
   handler: async (ctx, { name, accent }) => {
     const user = await requireUser(ctx);
-    const trimmed = name.trim().slice(0, 40);
+    const profile = await getProfile(ctx, user.id);
+    ensureActiveProfile(profile);
+    await enforceRateLimit(ctx, `playlist:create:${user.id}`, 20, 10 * 60_000);
+    const trimmed = cleanText(name, 40);
     if (!trimmed) throw new Error("Playlist needs a name");
     const id = await ctx.db.insert("playlists", {
       userId: user.id,
       name: trimmed,
-      accent,
+      accent: cleanAccent(accent),
     });
     return id;
   },
@@ -96,6 +94,9 @@ export const deletePlaylist = mutation({
   args: { playlistId: v.id("playlists") },
   handler: async (ctx, { playlistId }) => {
     const user = await requireUser(ctx);
+    const profile = await getProfile(ctx, user.id);
+    ensureActiveProfile(profile);
+    await enforceRateLimit(ctx, `playlist:delete:${user.id}`, 30, 10 * 60_000);
     const playlist = await ctx.db.get(playlistId);
     if (!playlist || playlist.userId !== user.id) throw new Error("Not your playlist");
     const songs = await ctx.db
@@ -104,7 +105,6 @@ export const deletePlaylist = mutation({
       .collect();
     for (const s of songs) await ctx.db.delete(s._id);
     await ctx.db.delete(playlistId);
-    const profile = await getProfile(ctx, user.id);
     if (profile?.saveTarget === `pl:${playlistId}`) {
       await ctx.db.patch(profile._id, { saveTarget: "liked" });
     }
@@ -115,9 +115,15 @@ export const removeSong = mutation({
   args: { trackId: v.string() },
   handler: async (ctx, { trackId }) => {
     const user = await requireUser(ctx);
+    const profile = await getProfile(ctx, user.id);
+    ensureActiveProfile(profile);
+    await enforceRateLimit(ctx, `library:remove:${user.id}`, 120, 60_000);
+    const safeTrackId = cleanText(trackId, 120);
     const songs = await ctx.db
       .query("librarySongs")
-      .withIndex("by_user_track", (q) => q.eq("userId", user.id).eq("trackId", trackId))
+      .withIndex("by_user_track", (q) =>
+        q.eq("userId", user.id).eq("trackId", safeTrackId),
+      )
       .collect();
     for (const s of songs) await ctx.db.delete(s._id);
   },
@@ -135,7 +141,8 @@ async function saveToTarget(
     .first();
   if (existing) return;
   if (target.startsWith("pl:")) {
-    const playlistId = target.slice(3) as Id<"playlists">;
+    const playlistId = ctx.db.normalizeId("playlists", target.slice(3));
+    if (!playlistId) return;
     const playlist = await ctx.db.get(playlistId);
     if (!playlist || playlist.userId !== userId) return;
     await ctx.db.insert("librarySongs", {
@@ -161,28 +168,33 @@ export const recordSwipe = mutation({
   handler: async (ctx, { track, action }) => {
     const user = await requireUser(ctx);
     const profile = await getProfile(ctx, user.id);
-    if (profile?.suspended) throw new Error("Account suspended");
+    ensureActiveProfile(profile);
+    await enforceRateLimit(ctx, `swipe:${user.id}`, 180, 60_000);
+    const safeTrack = cleanTrack(track);
     await ctx.db.insert("swipes", {
       userId: user.id,
       action,
-      trackId: track.trackId,
-      title: track.title,
-      artist: track.artist,
-      genre: track.genre,
-      artwork: track.artwork,
+      trackId: safeTrack.trackId,
+      title: safeTrack.title,
+      artist: safeTrack.artist,
+      genre: safeTrack.genre,
+      artwork: safeTrack.artwork,
     });
     if (action === "save") {
-      await saveToTarget(ctx, user.id, profile?.saveTarget ?? "liked", track);
+      await saveToTarget(ctx, user.id, profile?.saveTarget ?? "liked", safeTrack);
     }
     if (action === "never") {
       const existing = await ctx.db
         .query("neverArtists")
         .withIndex("by_user_artist", (q) =>
-          q.eq("userId", user.id).eq("artist", track.artist),
+          q.eq("userId", user.id).eq("artist", safeTrack.artist),
         )
         .unique();
       if (!existing) {
-        await ctx.db.insert("neverArtists", { userId: user.id, artist: track.artist });
+        await ctx.db.insert("neverArtists", {
+          userId: user.id,
+          artist: safeTrack.artist,
+        });
       }
     }
   },
@@ -197,23 +209,34 @@ export const revertSwipe = mutation({
   },
   handler: async (ctx, { trackId, artist, action }) => {
     const user = await requireUser(ctx);
+    const profile = await getProfile(ctx, user.id);
+    ensureActiveProfile(profile);
+    await enforceRateLimit(ctx, `swipe:revert:${user.id}`, 120, 60_000);
+    const safeTrackId = cleanText(trackId, 120);
+    const safeArtist = cleanText(artist, 160);
     const swipes = await ctx.db
       .query("swipes")
-      .withIndex("by_user_track", (q) => q.eq("userId", user.id).eq("trackId", trackId))
+      .withIndex("by_user_track", (q) =>
+        q.eq("userId", user.id).eq("trackId", safeTrackId),
+      )
       .collect();
     const latest = swipes.filter((s) => s.action === action).pop();
     if (latest) await ctx.db.delete(latest._id);
     if (action === "save") {
       const songs = await ctx.db
         .query("librarySongs")
-        .withIndex("by_user_track", (q) => q.eq("userId", user.id).eq("trackId", trackId))
+        .withIndex("by_user_track", (q) =>
+          q.eq("userId", user.id).eq("trackId", safeTrackId),
+        )
         .collect();
       for (const s of songs) await ctx.db.delete(s._id);
     }
     if (action === "never") {
       const entry = await ctx.db
         .query("neverArtists")
-        .withIndex("by_user_artist", (q) => q.eq("userId", user.id).eq("artist", artist))
+        .withIndex("by_user_artist", (q) =>
+          q.eq("userId", user.id).eq("artist", safeArtist),
+        )
         .unique();
       if (entry) await ctx.db.delete(entry._id);
     }
@@ -225,6 +248,9 @@ export const setSaveTarget = mutation({
   handler: async (ctx, { target }) => {
     const user = await requireUser(ctx);
     const profile = await getProfile(ctx, user.id);
-    if (profile) await ctx.db.patch(profile._id, { saveTarget: target });
+    ensureActiveProfile(profile);
+    await enforceRateLimit(ctx, `profile:save-target:${user.id}`, 120, 60_000);
+    const safeTarget = await validateSaveTarget(ctx, user.id, target);
+    if (profile) await ctx.db.patch(profile._id, { saveTarget: safeTarget });
   },
 });

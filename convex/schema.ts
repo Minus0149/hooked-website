@@ -85,4 +85,12 @@ export default defineSchema({
     ...trackFields,
     hidden: v.optional(v.boolean()),
   }).index("by_trackId", ["trackId"]),
+
+  rateLimits: defineTable({
+    key: v.string(),
+    count: v.number(),
+    windowStart: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_windowStart", ["windowStart"]),
 });

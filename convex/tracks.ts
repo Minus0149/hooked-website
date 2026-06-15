@@ -1,7 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { authComponent } from "./auth";
 import { trackFields } from "./schema";
+import {
+  cleanText,
+  cleanTrack,
+  enforceRateLimit,
+  requirePermission,
+} from "./security";
 
 /** Public feed catalog — hidden tracks are excluded for everyone. */
 export const list = query({
@@ -16,14 +21,17 @@ export const list = query({
 export const seed = mutation({
   args: { tracks: v.array(v.object(trackFields)) },
   handler: async (ctx, { tracks }) => {
+    const { user } = await requirePermission(ctx, "catalog.curate");
+    await enforceRateLimit(ctx, `tracks:seed:${user.id}`, 3, 60 * 60_000);
     let inserted = 0;
     for (const track of tracks) {
+      const safeTrack = cleanTrack(track);
       const existing = await ctx.db
         .query("tracks")
-        .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))
+        .withIndex("by_trackId", (q) => q.eq("trackId", safeTrack.trackId))
         .unique();
       if (!existing) {
-        await ctx.db.insert("tracks", track);
+        await ctx.db.insert("tracks", safeTrack);
         inserted++;
       }
     }
@@ -34,18 +42,12 @@ export const seed = mutation({
 export const setHidden = mutation({
   args: { trackId: v.string(), hidden: v.boolean() },
   handler: async (ctx, { trackId, hidden }) => {
-    const user = await authComponent.getAuthUser(ctx);
-    if (!user) throw new Error("Not signed in");
-    const profile = await ctx.db
-      .query("profiles")
-      .withIndex("by_userId", (q) => q.eq("userId", String(user._id)))
-      .unique();
-    const canCurate =
-      profile?.isAdmin || (profile?.permissions ?? []).includes("catalog.curate");
-    if (!canCurate) throw new Error("Requires catalog.curate permission");
+    const { user } = await requirePermission(ctx, "catalog.curate");
+    await enforceRateLimit(ctx, `tracks:hide:${user.id}`, 120, 60_000);
+    const safeTrackId = cleanText(trackId, 120);
     const track = await ctx.db
       .query("tracks")
-      .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
+      .withIndex("by_trackId", (q) => q.eq("trackId", safeTrackId))
       .unique();
     if (track) await ctx.db.patch(track._id, { hidden });
   },
