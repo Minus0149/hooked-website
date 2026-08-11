@@ -86,6 +86,25 @@ export default defineSchema({
     hidden: v.optional(v.boolean()),
   }).index("by_trackId", ["trackId"]),
 
+  // beta testers captured by the landing site's form. lives here rather than on
+  // the landing host because a serverless filesystem loses them between requests.
+  betaSignups: defineTable({
+    name: v.string(),
+    email: v.string(),
+    device: v.string(),
+    androidVersion: v.string(),
+    listensOn: v.array(v.string()),
+    genres: v.array(v.string()),
+    hours: v.string(),
+    lastSkipped: v.string(),
+    notes: v.string(),
+    submittedAt: v.string(),
+    userAgent: v.optional(v.string()),
+    invited: v.optional(v.boolean()),
+  })
+    .index("by_email", ["email"])
+    .index("by_invited", ["invited"]),
+
   rateLimits: defineTable({
     key: v.string(),
     count: v.number(),
