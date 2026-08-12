@@ -113,6 +113,14 @@ export function SettingsScreen({
           </span>
           <span className="settings-row-value">open</span>
         </button>
+        <a className="settings-row" href="#/creator" style={{ textDecoration: "none" }}>
+          <span className="settings-row-icon" style={{ color: "var(--more)" }}>♫</span>
+          <span className="settings-row-label">
+            Creator dashboard
+            <small>put your own music in the deck</small>
+          </span>
+          <span className="settings-row-value">open</span>
+        </a>
         {isAdmin && (
           <a className="settings-row" href="#/admin" style={{ textDecoration: "none" }}>
             <span className="settings-row-icon" style={{ color: "var(--accent)" }}>

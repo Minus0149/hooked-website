@@ -15,6 +15,7 @@ import { VolumeRail } from "./components/VolumeControl";
 import { ProfileScreen } from "./components/ProfileScreen";
 import { AccessGate, AccessPending } from "./components/AccessGate";
 import { AdminDashboard } from "./components/AdminDashboard";
+import { CreatorDashboard } from "./components/CreatorDashboard";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { NewPlaylistSheet } from "./components/NewPlaylistSheet";
@@ -513,6 +514,9 @@ export default function App() {
 
   if (route.startsWith("#/admin")) {
     return <AdminDashboard />;
+  }
+  if (route.startsWith("#/creator")) {
+    return <CreatorDashboard />;
   }
 
   return (
