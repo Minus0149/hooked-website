@@ -131,6 +131,7 @@ async function openRun(
 ) {
   const run = await ctx.db.get(importId);
   if (!run || !run.token || run.token !== token) return null;
+  if (run.status !== "matching") return null; // already settled
   return run;
 }
 
