@@ -190,6 +190,34 @@ export const decide = mutation({
   },
 });
 
+/**
+ * Drop a request entirely. Rejecting keeps a record on purpose, so this is for
+ * the rows that shouldn't be counted at all — spam on a public form, and test
+ * submissions. They'd otherwise sit in the funnel forever, making the approval
+ * rate look worse than it is.
+ *
+ * Refuses to delete a request that has already become an account, so this can't
+ * be used to quietly cut someone's access off.
+ */
+export const remove = mutation({
+  args: { id: v.id("accessRequests") },
+  handler: async (ctx, { id }) => {
+    const { user } = await requirePermission(ctx, "users.manage");
+    await enforceRateLimit(ctx, `access:remove:${user.id}`, 60, 60 * 60_000);
+    const row = await ctx.db.get(id);
+    if (!row) return;
+    const existing = (await ctx.db.query("profiles").collect()).some(
+      (p) => p.email.toLowerCase() === row.email.toLowerCase(),
+    );
+    if (existing) {
+      throw new Error(
+        "That email already has an account — reject it instead, or delete the user from Users.",
+      );
+    }
+    await ctx.db.delete(id);
+  },
+});
+
 /** Tick someone off once their Play Store invite has actually gone out. */
 export const markInvited = mutation({
   args: { id: v.id("accessRequests"), invited: v.boolean() },

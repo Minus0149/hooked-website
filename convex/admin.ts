@@ -366,7 +366,12 @@ export const analytics = query({
         wau,
         mau,
         stickiness: mau > 0 ? dau / mau : 0, // DAU/MAU — the habit number
-        swipesPerActive: dau > 0 ? series[series.length - 1].swipes / dau : 0,
+        // both sides of this come from today's bucket; `dau` above is a rolling
+        // 24 hours, which would quietly mix two different windows
+        swipesPerActive: (() => {
+          const today = series[series.length - 1];
+          return today && today.dau > 0 ? today.swipes / today.dau : 0;
+        })(),
       },
       retention: {
         d1: d1Eligible > 0 ? d1Back / d1Eligible : 0,

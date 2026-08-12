@@ -52,6 +52,7 @@ export function AdminDashboard() {
   const decideCreator = useMutation(api.creators.decideCreator);
   const decide = useMutation(api.access.decide);
   const markInvited = useMutation(api.access.markInvited);
+  const removeRequest = useMutation(api.access.remove);
   const setHidden = useMutation(api.tracks.setHidden);
   const setPermission = useMutation(api.admin.setPermission);
   const setAdmin = useMutation(api.admin.setAdmin);
@@ -162,6 +163,10 @@ export function AdminDashboard() {
             onInvited={(id, invited) =>
               void markInvited({ id: id as never, invited }).catch((e: Error) => window.alert(e.message))
             }
+            onRemove={(id, email) => {
+              if (!window.confirm(`Remove the request from ${email}? This deletes the row.`)) return;
+              void removeRequest({ id: id as never }).catch((e: Error) => window.alert(e.message));
+            }}
           />
         )}
         {activeTab === "users" && userData && (
@@ -1182,6 +1187,7 @@ function RequestsPanel({
   data,
   onDecide,
   onInvited,
+  onRemove,
 }: {
   data: {
     total: number; pending: number; approved: number; rejected: number;
@@ -1189,6 +1195,7 @@ function RequestsPanel({
   };
   onDecide: (id: string, status: RequestStatus) => void;
   onInvited: (id: string, invited: boolean) => void;
+  onRemove: (id: string, email: string) => void;
 }) {
   const [filter, setFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
   const rows = data.requests.filter((r) => filter === "all" || r.status === filter);
@@ -1250,6 +1257,13 @@ function RequestsPanel({
                   {r.invited ? "un-invite" : "mark invited"}
                 </button>
               )}
+              <button
+                className="aq-btn no"
+                title="Delete the row — for spam and test submissions"
+                onClick={() => onRemove(r._id, r.email)}
+              >
+                remove
+              </button>
             </div>
           </div>
         ))

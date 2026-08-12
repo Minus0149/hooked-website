@@ -93,3 +93,44 @@ npx convex import --table tracks tracks-seed.jsonl
 ```
 
 Do not use `convexdash.hookedcue.com` as the app Convex URL or auth site URL. The dashboard is only for managing the deployment.
+
+## Still to do by hand (as of 2026-08-13)
+
+Three things that can't be done from this repo, in the order they matter.
+
+### 1. The landing site's webhook pair
+
+Until these are set, a signup on hookedcue.com is written to a local JSONL file
+on the landing container instead of reaching the approval queue — so it looks
+like it worked and nobody ever sees it.
+
+Dokploy → organisation **Farman testing** → project **Farman-Personal** →
+service **Landingpage** → Environment. Add, keeping the existing five lines:
+
+```
+BETA_WEBHOOK_URL=https://cnx.hookedcue.com/beta
+BETA_WEBHOOK_SECRET=<the same value as BETA_INGEST_SECRET on Convex>
+```
+
+Save, then Deploy. Confirm with `node verify-access.mjs --secret <the secret>`,
+which submits a real row and checks it lands in the queue.
+
+### 2. Two headers that a static build can't set
+
+`app.hookedcue.com` is a static bundle and the host ignores `public/_headers`.
+The content policy now travels in a meta tag in `index.html`, which the browser
+enforces identically — but two directives are header-only by spec and are still
+missing in production:
+
+- `Strict-Transport-Security: max-age=31536000`
+- `Content-Security-Policy: frame-ancestors 'none'` (a frame-buster script in
+  `index.html` stands in for it, which is weaker: it runs after the page loads)
+
+Add them as a Cloudflare **Transform Rule → Modify Response Header** on
+`app.hookedcue.com`. Check with `curl -sI https://app.hookedcue.com/`.
+
+### 3. Credentials that have been pasted into a chat window
+
+The Convex self-hosted admin key and `BETTER_AUTH_SECRET` should both be
+rotated. Rotating the auth secret signs everyone out, which is fine — there are
+few enough accounts for that not to matter yet, and it will matter later.
