@@ -56,6 +56,36 @@ npx convex env set BETTER_AUTH_SECRET "<random-32-byte-secret>"
 npx convex deploy
 ```
 
+## Access control (added 2026-08-12)
+
+The app is invite-only. Signing in is not enough — `library.ensureProfile`
+refuses to create a profile unless the email has an **approved** row in
+`accessRequests`, so an unapproved account has no data and no access. Requests
+arrive from two places and land in one queue: the in-app wall after the free
+swipes, and the landing site's `/beta` form via the HTTP route.
+
+Two more env vars are needed on the Convex deployment:
+
+```powershell
+# who gets the admin dashboard. replaces the old "first account ever becomes
+# admin" rule, which on an empty production database handed the dashboard to
+# whichever stranger signed up first.
+npx convex env set ADMIN_EMAILS "you@example.com"
+
+# shared secret for the landing site's /beta ingest route
+npx convex env set BETA_INGEST_SECRET "<random 32 bytes>"
+```
+
+Then set the matching pair on the landing deployment:
+
+```
+BETA_WEBHOOK_URL=https://cnx.hookedcue.com/beta
+BETA_WEBHOOK_SECRET=<the same random 32 bytes>
+```
+
+Existing accounts are unaffected — `ensureProfile` returns early for anyone who
+already has a profile, so switching this on cannot lock out current users.
+
 If the production database is empty after the deploy, import the seed tracks:
 
 ```powershell

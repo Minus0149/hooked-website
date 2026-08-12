@@ -2001,3 +2001,68 @@ button {
   text-align: center;
 }
 .gate-close:hover { color: var(--text); }
+
+/* ---------- access gate: apply, not sign up ---------- */
+.access-form { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.access-form .auth-input { width: 100%; }
+.access-label {
+  margin: 6px 0 0; font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted);
+}
+.access-pills { display: flex; flex-wrap: wrap; gap: 7px; }
+.access-pill {
+  font-size: 12.5px; color: var(--muted); background: rgba(8,8,12,.5);
+  border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px;
+  cursor: pointer; transition: color .2s, border-color .2s, background .2s;
+}
+.access-pill:hover:not(:disabled) { color: var(--text); border-color: #3a3a46; }
+.access-pill.on {
+  color: #0b0b10; background: var(--save); border-color: var(--save); font-weight: 600;
+}
+.access-pill:disabled { opacity: .35; cursor: not-allowed; }
+.access-pill:focus-visible { outline: 2px solid var(--accent, #ff3d71); outline-offset: 2px; }
+.access-notes { resize: vertical; min-height: 56px; line-height: 1.5; }
+.access-error { color: #ff8080; font-size: 12.5px; margin: 2px 0 0; }
+.access-done { text-align: center; display: flex; flex-direction: column; gap: 10px; }
+.access-dot {
+  display: block; width: 11px; height: 11px; border-radius: 999px; margin: 2px auto 6px;
+  background: var(--save); animation: accesspulse 1.7s ease-in-out infinite;
+}
+@keyframes accesspulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,229,160,.45); }
+  50% { opacity: .6; box-shadow: 0 0 0 8px rgba(0,229,160,0); }
+}
+
+/* ---------- admin: the access queue ---------- */
+.aq-filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 14px; }
+.aq-filter {
+  font-size: 12.5px; color: var(--muted); background: rgba(8,8,12,.5);
+  border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; cursor: pointer;
+}
+.aq-filter.on { color: var(--text); border-color: var(--accent, #ff3d71); }
+.aq-row {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 13px 0; border-bottom: 1px solid var(--line);
+}
+.aq-main { flex: 1; min-width: 0; }
+.aq-email { font-weight: 600; word-break: break-all; }
+.aq-meta { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.6; }
+.aq-tag {
+  display: inline-block; font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 4px; border: 1px solid var(--line); margin-right: 6px;
+}
+.aq-tag.pending { color: var(--more); border-color: rgba(255,182,39,.45); }
+.aq-tag.approved { color: var(--save); border-color: rgba(0,229,160,.45); }
+.aq-tag.rejected { color: var(--never); border-color: rgba(255,82,82,.45); }
+.aq-actions { display: flex; gap: 7px; flex: none; }
+.aq-btn {
+  font-size: 12px; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: rgba(8,8,12,.5); color: var(--muted);
+  transition: color .2s, border-color .2s;
+}
+.aq-btn.yes:hover { color: var(--save); border-color: rgba(0,229,160,.5); }
+.aq-btn.no:hover { color: var(--never); border-color: rgba(255,82,82,.5); }
+.aq-empty { color: var(--muted); font-size: 13.5px; padding: 20px 0; }
+@media (max-width: 560px) {
+  .aq-row { flex-direction: column; gap: 9px; }
+}

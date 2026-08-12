@@ -20,7 +20,7 @@ const PERM_LABEL: Record<string, string> = {
   "catalog.curate": "curate catalog",
 };
 
-type Tab = "overview" | "users" | "catalog" | "feed";
+type Tab = "overview" | "requests" | "users" | "catalog" | "feed";
 
 function timeAgo(ts: number | null): string {
   if (!ts) return "—";
@@ -37,6 +37,9 @@ export function AdminDashboard() {
   const stats = useQuery(api.admin.stats);
   const userData = useQuery(api.admin.users);
   const catalog = useQuery(api.admin.catalog);
+  const requests = useQuery(api.access.list);
+  const decide = useMutation(api.access.decide);
+  const markInvited = useMutation(api.access.markInvited);
   const setHidden = useMutation(api.tracks.setHidden);
   const setPermission = useMutation(api.admin.setPermission);
   const setAdmin = useMutation(api.admin.setAdmin);
@@ -44,11 +47,15 @@ export function AdminDashboard() {
   const tabs = useMemo(() => {
     const t: { id: Tab; label: string; icon: string }[] = [];
     if (stats !== null) t.push({ id: "overview", label: "Overview", icon: "◈" });
+    if (requests !== null) {
+      const pending = requests?.pending ?? 0;
+      t.push({ id: "requests", label: pending ? `Requests (${pending})` : "Requests", icon: "✦" });
+    }
     if (userData !== null) t.push({ id: "users", label: "Users", icon: "◉" });
     if (catalog !== null) t.push({ id: "catalog", label: "Catalog", icon: "♪" });
     if (stats !== null) t.push({ id: "feed", label: "Live feed", icon: "≋" });
     return t;
-  }, [stats, userData, catalog]);
+  }, [stats, userData, catalog, requests]);
 
   const [tab, setTab] = useState<Tab>("overview");
   const activeTab = tabs.some((t) => t.id === tab) ? tab : (tabs[0]?.id ?? "overview");
@@ -118,6 +125,17 @@ export function AdminDashboard() {
         transition={{ duration: 0.25 }}
       >
         {activeTab === "overview" && stats && <Overview stats={stats} />}
+        {activeTab === "requests" && requests && (
+          <RequestsPanel
+            data={requests}
+            onDecide={(id, status) =>
+              void decide({ id: id as never, status }).catch((e: Error) => window.alert(e.message))
+            }
+            onInvited={(id, invited) =>
+              void markInvited({ id: id as never, invited }).catch((e: Error) => window.alert(e.message))
+            }
+          />
+        )}
         {activeTab === "users" && userData && (
           <UsersPanel
             data={userData}
@@ -692,6 +710,103 @@ function FeedPanel({
           </div>
         ))}
       </section>
+    </>
+  );
+}
+
+type RequestStatus = "pending" | "approved" | "rejected";
+type AccessRow = {
+  _id: string;
+  email: string;
+  name: string;
+  source: "app" | "landing";
+  status: RequestStatus;
+  device?: string;
+  genres?: string[];
+  notes?: string;
+  submittedAt: string;
+  decidedAt?: string;
+  decidedBy?: string;
+  invited?: boolean;
+};
+
+/** The approval queue. Approving an email is what lets that account be created. */
+function RequestsPanel({
+  data,
+  onDecide,
+  onInvited,
+}: {
+  data: {
+    total: number; pending: number; approved: number; rejected: number;
+    fromApp: number; fromLanding: number; requests: AccessRow[];
+  };
+  onDecide: (id: string, status: RequestStatus) => void;
+  onInvited: (id: string, invited: boolean) => void;
+}) {
+  const [filter, setFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
+  const rows = data.requests.filter((r) => filter === "all" || r.status === filter);
+
+  return (
+    <>
+      <header className="admin-head">
+        <h2>Access requests</h2>
+        <p>
+          {data.pending} waiting · {data.approved} approved · {data.rejected} rejected ·{" "}
+          {data.fromApp} from the app, {data.fromLanding} from the site
+        </p>
+      </header>
+
+      <div className="aq-filters">
+        {(["pending", "approved", "rejected", "all"] as const).map((f) => (
+          <button
+            key={f}
+            className={`aq-filter ${filter === f ? "on" : ""}`}
+            onClick={() => setFilter(f)}
+          >
+            {f}
+            {f !== "all" && ` (${f === "pending" ? data.pending : f === "approved" ? data.approved : data.rejected})`}
+          </button>
+        ))}
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="aq-empty">Nothing {filter === "all" ? "here" : `marked ${filter}`} yet.</p>
+      ) : (
+        rows.map((r) => (
+          <div className="aq-row" key={r._id}>
+            <div className="aq-main">
+              <div className="aq-email">{r.email}</div>
+              <div className="aq-meta">
+                <span className={`aq-tag ${r.status}`}>{r.status}</span>
+                <span className="aq-tag">{r.source}</span>
+                {r.invited && <span className="aq-tag approved">invited</span>}
+                {r.name} · {new Date(r.submittedAt).toLocaleDateString()}
+                {r.device ? ` · ${r.device}` : ""}
+                {r.genres?.length ? ` · ${r.genres.join(", ")}` : ""}
+                {r.notes ? ` · “${r.notes}”` : ""}
+                {r.decidedBy ? ` · decided by ${r.decidedBy}` : ""}
+              </div>
+            </div>
+            <div className="aq-actions">
+              {r.status !== "approved" && (
+                <button className="aq-btn yes" onClick={() => onDecide(r._id, "approved")}>
+                  approve
+                </button>
+              )}
+              {r.status !== "rejected" && (
+                <button className="aq-btn no" onClick={() => onDecide(r._id, "rejected")}>
+                  reject
+                </button>
+              )}
+              {r.status === "approved" && (
+                <button className="aq-btn" onClick={() => onInvited(r._id, !r.invited)}>
+                  {r.invited ? "un-invite" : "mark invited"}
+                </button>
+              )}
+            </div>
+          </div>
+        ))
+      )}
     </>
   );
 }

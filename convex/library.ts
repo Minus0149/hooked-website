@@ -14,7 +14,15 @@ import {
   validateSaveTarget,
 } from "./security";
 
-/** Called after sign-in. Creates the profile; the first user ever becomes admin. */
+/**
+ * Called after sign-in. Creates the profile — and this is the real access gate.
+ *
+ * Signing in isn't enough: unless the email has an approved access request, no
+ * profile is created and every downstream query returns nothing. The check lives
+ * here rather than in the UI so it can't be clicked past. Accounts that already
+ * have a profile return early and are never re-checked, so turning this on can't
+ * lock out anyone who is already in.
+ */
 export const ensureProfile = mutation({
   args: {},
   handler: async (ctx) => {
@@ -22,12 +30,43 @@ export const ensureProfile = mutation({
     await enforceRateLimit(ctx, `profile:${user.id}`, 20, 60_000);
     const existing = await getProfile(ctx, user.id);
     if (existing) return existing;
-    const anyProfile = await ctx.db.query("profiles").first();
+
+    const email = (user.email ?? "").toLowerCase();
+
+    // Admins come from an explicit allowlist. The old rule was "first account
+    // ever becomes admin", which on an empty production database handed the
+    // dashboard to whichever stranger signed up first.
+    // Set with: npx convex env set ADMIN_EMAILS "you@example.com,other@example.com"
+    const admins = (process.env.ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean);
+    const isAdmin = email.length > 0 && admins.includes(email);
+
+    if (!isAdmin) {
+      const request = email
+        ? await ctx.db
+            .query("accessRequests")
+            .withIndex("by_email", (q) => q.eq("email", email))
+            .unique()
+        : null;
+      if (request?.status !== "approved") {
+        // the client turns these into the pending / rejected / apply screens
+        throw new Error(
+          request?.status === "rejected"
+            ? "ACCESS_REJECTED"
+            : request
+              ? "ACCESS_PENDING"
+              : "ACCESS_NOT_REQUESTED",
+        );
+      }
+    }
+
     const id = await ctx.db.insert("profiles", {
       userId: user.id,
       email: user.email ?? "",
       name: user.name ?? undefined,
-      isAdmin: anyProfile === null, // first account becomes the admin
+      isAdmin,
       permissions: [],
       saveTarget: "liked",
     });

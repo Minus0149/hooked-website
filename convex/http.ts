@@ -13,7 +13,8 @@ authComponent.registerRoutes(http, createAuth, {
 });
 
 /**
- * Beta signup ingest for the landing site.
+ * Beta signup ingest for the landing site. Writes into the same
+ * accessRequests queue the in-app wall uses, so the admin reviews one list.
  *
  * The landing server posts here from its own API route, never the browser, so
  * this is guarded by a shared secret rather than by origin — an unauthenticated
@@ -41,7 +42,7 @@ http.route({
       Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 
     try {
-      const result = await ctx.runMutation(internal.beta.record, {
+      const result = await ctx.runMutation(internal.access.record, {
         name: str(body.name),
         email: str(body.email),
         device: str(body.device),

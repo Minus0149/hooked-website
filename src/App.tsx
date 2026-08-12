@@ -12,7 +12,8 @@ import { HomeScreen } from "./components/HomeScreen";
 import { Onboarding } from "./components/Onboarding";
 import { SaveTargetSheet } from "./components/SaveTargetSheet";
 import { VolumeRail } from "./components/VolumeControl";
-import { ProfileScreen, AuthForm } from "./components/ProfileScreen";
+import { ProfileScreen } from "./components/ProfileScreen";
+import { AccessGate, AccessPending } from "./components/AccessGate";
 import { AdminDashboard } from "./components/AdminDashboard";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
@@ -115,8 +116,23 @@ function Shell() {
   const deletePlaylistMutation = useMutation(api.library.deletePlaylist);
   const removeSongMutation = useMutation(api.library.removeSong);
 
+  // ensureProfile is the access gate: it refuses to create a profile until the
+  // email has been approved, so a rejected/pending sign-in has to be surfaced
+  // rather than swallowed.
+  const [accessBlock, setAccessBlock] = useState<null | "pending" | "rejected" | "none">(null);
   useEffect(() => {
-    if (signedIn) void ensureProfile({}).catch(() => undefined);
+    if (!signedIn) {
+      setAccessBlock(null);
+      return;
+    }
+    void ensureProfile({})
+      .then(() => setAccessBlock(null))
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("ACCESS_REJECTED")) setAccessBlock("rejected");
+        else if (msg.includes("ACCESS_PENDING")) setAccessBlock("pending");
+        else if (msg.includes("ACCESS_NOT_REQUESTED")) setAccessBlock("none");
+      });
   }, [signedIn, ensureProfile]);
 
   // ----- taste-first login gate -----
@@ -418,6 +434,8 @@ function Shell() {
           )}
         </AnimatePresence>
 
+        {accessBlock && <AccessPending reason={accessBlock} />}
+
         <AnimatePresence>
           {gate && !signedIn && (
             <motion.div
@@ -433,15 +451,7 @@ function Shell() {
                 exit={{ opacity: 0, y: 30, scale: 0.97 }}
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
               >
-                <p className="gate-kicker">
-                  {gate === "save" ? "that one's a keeper" : "hooked already? thought so."}
-                </p>
-                <p className="gate-copy">
-                  {gate === "save"
-                    ? "create a free account and every save follows you everywhere — phone, browser, forever."
-                    : `that was your ${FREE_SWIPES} free tastes. make an account and the deck never stops.`}
-                </p>
-                <AuthForm />
+                <AccessGate freeSwipes={FREE_SWIPES} />
                 <button className="gate-close" onClick={() => setGate(null)}>
                   not now — just looking
                 </button>

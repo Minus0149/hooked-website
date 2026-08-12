@@ -86,24 +86,33 @@ export default defineSchema({
     hidden: v.optional(v.boolean()),
   }).index("by_trackId", ["trackId"]),
 
-  // beta testers captured by the landing site's form. lives here rather than on
-  // the landing host because a serverless filesystem loses them between requests.
-  betaSignups: defineTable({
-    name: v.string(),
+  // Every request for access, from either surface: the landing site's beta form
+  // ("landing") and the in-app wall after the free swipes run out ("app").
+  // One table on purpose — the admin reviews a single queue, and approval here
+  // is what lets an account be created at all (see library.ensureProfile).
+  accessRequests: defineTable({
     email: v.string(),
-    device: v.string(),
-    androidVersion: v.string(),
-    listensOn: v.array(v.string()),
-    genres: v.array(v.string()),
-    hours: v.string(),
-    lastSkipped: v.string(),
-    notes: v.string(),
+    name: v.string(),
+    source: v.union(v.literal("app"), v.literal("landing")),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
+    // what they told us — all optional, the app form asks for far less than the landing one
+    device: v.optional(v.string()),
+    androidVersion: v.optional(v.string()),
+    listensOn: v.optional(v.array(v.string())),
+    genres: v.optional(v.array(v.string())),
+    hours: v.optional(v.string()),
+    lastSkipped: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    // trail
     submittedAt: v.string(),
     userAgent: v.optional(v.string()),
+    decidedAt: v.optional(v.string()),
+    decidedBy: v.optional(v.string()),
     invited: v.optional(v.boolean()),
   })
     .index("by_email", ["email"])
-    .index("by_invited", ["invited"]),
+    .index("by_status", ["status"])
+    .index("by_source", ["source"]),
 
   rateLimits: defineTable({
     key: v.string(),
