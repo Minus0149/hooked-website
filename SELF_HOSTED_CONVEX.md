@@ -67,10 +67,10 @@ swipes, and the landing site's `/beta` form via the HTTP route.
 Two more env vars are needed on the Convex deployment:
 
 ```powershell
-# who gets the admin dashboard. replaces the old "first account ever becomes
+# Who gets the admin dashboard. Replaces the old "first account ever becomes
 # admin" rule, which on an empty production database handed the dashboard to
-# whichever stranger signed up first.
-npx convex env set ADMIN_EMAILS "you@example.com"
+# whichever stranger signed up first. Must match the sign-in email exactly.
+npx convex env set ADMIN_EMAILS "minus4399@gmail.com"
 
 # shared secret for the landing site's /beta ingest route
 npx convex env set BETA_INGEST_SECRET "<random 32 bytes>"
