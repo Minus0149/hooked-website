@@ -1,3 +1,11 @@
+/** A window into a track's audio. A preview supports one; full audio supports several. */
+export interface HookWindow {
+  id: string;
+  startMs: number;
+  durationMs: number;
+  label?: string;
+}
+
 export interface Track {
   id: string;
   title: string;
@@ -8,6 +16,10 @@ export interface Track {
   durationMs: number;
   genre: string;
   accent: string;
+  /** full uploaded audio, when the rights holder gave us the whole track */
+  audioUrl?: string;
+  /** ordered hooks. Empty or absent means "play the preview from the top". */
+  hooks?: HookWindow[];
 }
 
 export type SwipeAction = "skip" | "save" | "more" | "never";

@@ -203,8 +203,10 @@ export const recordSwipe = mutation({
   args: {
     track: v.object(trackFields),
     action: swipeAction,
+    /** which hook was playing — the whole point of the per-hook counters */
+    hookId: v.optional(v.id("hooks")),
   },
-  handler: async (ctx, { track, action }) => {
+  handler: async (ctx, { track, action, hookId }) => {
     const user = await requireUser(ctx);
     const profile = await getProfile(ctx, user.id);
     ensureActiveProfile(profile);
@@ -221,6 +223,20 @@ export const recordSwipe = mutation({
     });
     if (action === "save") {
       await saveToTarget(ctx, user.id, profile?.saveTarget ?? "liked", safeTrack);
+    }
+
+    // credit the hook that was actually on screen. A "more" counts as interest
+    // without a save; "never" is about the artist, not the hook, so it only
+    // counts as a play.
+    if (hookId) {
+      const hook = await ctx.db.get(hookId);
+      if (hook && hook.trackId === safeTrack.trackId) {
+        await ctx.db.patch(hookId, {
+          plays: hook.plays + 1,
+          saves: hook.saves + (action === "save" || action === "more" ? 1 : 0),
+          skips: hook.skips + (action === "skip" ? 1 : 0),
+        });
+      }
     }
     if (action === "never") {
       const existing = await ctx.db

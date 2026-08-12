@@ -28,6 +28,10 @@ interface Props {
   onToggle: () => void;
   onSeek: (fraction: number) => void;
   onSwipe: (dir: SwipeDir) => void;
+  hookIndex: number;
+  hookCount: number;
+  hookLabel?: string;
+  onNextHook: () => void;
   // return false to refuse the swipe (login gate) — card snaps back, no FX
   gateSwipe?: (dir: SwipeDir) => boolean;
 }
@@ -79,6 +83,37 @@ const cardVariants = {
 /* ---------- swipe FX overlays ---------- */
 
 type FX = { type: "more" | "never"; key: number };
+
+/**
+ * Segmented progress, one bar per hook — the Stories convention, because
+ * everyone already knows what it means.
+ *
+ * Deliberately not swipeable: up/down/left/right are all spoken for, so moving
+ * between hooks is time (auto-advance) and tap, never a gesture.
+ */
+function HookDots({
+  count,
+  index,
+  progress,
+}: {
+  count: number;
+  index: number;
+  progress: number;
+}) {
+  if (count <= 1) return null;
+  return (
+    <div className="hookdots" aria-hidden="true">
+      {Array.from({ length: count }, (_, i) => (
+        <span className="hookdot" key={i}>
+          <span
+            className="hookdot-fill"
+            style={{ transform: `scaleX(${i < index ? 1 : i === index ? progress : 0})` }}
+          />
+        </span>
+      ))}
+    </div>
+  );
+}
 
 /** Draggable/clickable scrub bar along the card's bottom edge. */
 function ScrubBar({
@@ -206,6 +241,10 @@ function TopCard({
   track,
   playing,
   progress,
+  hookIndex,
+  hookCount,
+  hookLabel,
+  onNextHook,
   exitCustom,
   onSeek,
   onSwipe,
@@ -213,6 +252,10 @@ function TopCard({
   track: Track;
   playing: boolean;
   progress: number;
+  hookIndex: number;
+  hookCount: number;
+  hookLabel?: string;
+  onNextHook: () => void;
   exitCustom: ExitCustom;
   onSeek: (fraction: number) => void;
   onSwipe: (dir: SwipeDir, release?: SaveRelease) => void;
@@ -253,6 +296,17 @@ function TopCard({
     >
       <img className="card-art" src={track.artwork} alt={track.album} draggable={false} />
       <div className="card-scrim" />
+      <HookDots count={hookCount} index={hookIndex} progress={progress} />
+      {hookCount > 1 && (
+        <button
+          type="button"
+          className="hooktap"
+          onClick={onNextHook}
+          aria-label={`next hook (${hookIndex + 1} of ${hookCount})`}
+        >
+          {hookLabel && <span className="hooktap-label">{hookLabel}</span>}
+        </button>
+      )}
 
       <motion.div className="stamp stamp-up" style={{ opacity: upOpacity }}>
         skip ↑
@@ -292,6 +346,10 @@ export function SwipeDeck({
   onToggle,
   onSeek,
   onSwipe,
+  hookIndex,
+  hookCount,
+  hookLabel,
+  onNextHook,
   gateSwipe,
 }: Props) {
   const [onDeck, next, nextNext] = tracks;
@@ -406,6 +464,10 @@ export function SwipeDeck({
               track={onDeck}
               playing={playing}
               progress={progress}
+              hookIndex={hookIndex}
+              hookCount={hookCount}
+              hookLabel={hookLabel}
+              onNextHook={onNextHook}
               exitCustom={exitCustom}
               onSeek={onSeek}
               onSwipe={handleSwipe}

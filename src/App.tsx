@@ -67,7 +67,14 @@ const toServer = (t: Track): ServerTrack => ({
   accent: t.accent,
 });
 
-const toLocal = (t: ServerTrack): Track => ({
+type ServerTrackWithHooks = ServerTrack & {
+  audioUrl?: string | null;
+  hooks?: { id: string; startMs: number; durationMs: number; label?: string }[];
+};
+
+const toLocal = (t: ServerTrackWithHooks): Track => ({
+  audioUrl: t.audioUrl ?? undefined,
+  hooks: t.hooks,
   id: t.trackId,
   title: t.title,
   artist: t.artist,
@@ -205,7 +212,10 @@ function Shell() {
   const inDiscover = view === "discover" && onboarded;
   const autoAdvanceRef = useRef(state.autoAdvance);
   autoAdvanceRef.current = state.autoAdvance;
-  const { playing, progress, remaining, volume, toggle, seek, setVolume } = usePlayer(
+  const {
+    playing, progress, remaining, volume, toggle, seek, setVolume,
+    hookIndex, hookCount, hook, nextHook,
+  } = usePlayer(
     inDiscover ? onDeck : null,
     inDiscover ? next : null,
     inDiscover,
@@ -228,11 +238,23 @@ function Shell() {
       const action = DIR_TO_ACTION[dir];
       swipe(action);
       if (signedIn && track) {
-        void recordSwipe({ track: toServer(track), action }).catch(() => undefined);
+        const playingHookId = hookRef.current?.id;
+        void recordSwipe({
+          track: toServer(track),
+          action,
+          // "whole" is the synthetic window for tracks nobody marked up
+          hookId:
+            playingHookId && playingHookId !== "whole"
+              ? (playingHookId as never)
+              : undefined,
+        }).catch(() => undefined);
       }
     },
     [swipe, showToast, onDeck, signedIn, recordSwipe],
   );
+
+  const hookRef = useRef(hook);
+  hookRef.current = hook;
 
   const handleBack = useCallback(() => {
     if (!previous) return;
@@ -379,6 +401,10 @@ function Shell() {
                 onToggle={toggle}
                 onSeek={seek}
                 onSwipe={handleSwipe}
+                hookIndex={hookIndex}
+                hookCount={hookCount}
+                hookLabel={hook?.label}
+                onNextHook={nextHook}
                 gateSwipe={gateSwipe}
               />
             </>

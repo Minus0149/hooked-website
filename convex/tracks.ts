@@ -8,12 +8,44 @@ import {
   requirePermission,
 } from "./security";
 
-/** Public feed catalog — hidden tracks are excluded for everyone. */
+/**
+ * Public feed catalog — hidden tracks are excluded for everyone.
+ *
+ * Each track carries its hooks, ordered best-first: the window with the highest
+ * save rate leads, so the catalogue tunes itself as the counters fill in. Ties
+ * and untested hooks fall back to the creator's own order.
+ */
 export const list = query({
   args: {},
   handler: async (ctx) => {
     const all = await ctx.db.query("tracks").collect();
-    return all.filter((t) => t.hidden !== true);
+    const visible = all.filter((t) => t.hidden !== true);
+    return await Promise.all(
+      visible.map(async (track) => {
+        const hooks = (
+          await ctx.db
+            .query("hooks")
+            .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))
+            .collect()
+        ).filter((h) => h.active);
+
+        // enough plays to mean something, otherwise the creator's order stands
+        const rate = (h: { plays: number; saves: number }) =>
+          h.plays >= 20 ? h.saves / h.plays : -1;
+        hooks.sort((a, b) => rate(b) - rate(a) || a.order - b.order);
+
+        return {
+          ...track,
+          audioUrl: track.audioStorageId ? await ctx.storage.getUrl(track.audioStorageId) : null,
+          hooks: hooks.map((h) => ({
+            id: h._id,
+            startMs: h.startMs,
+            durationMs: h.durationMs,
+            label: h.label,
+          })),
+        };
+      }),
+    );
   },
 });
 
