@@ -2,6 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      The host serving this build ignores public/_headers, so the policy is
+      declared here instead — a meta CSP is enforced by the browser exactly like
+      the header. What it cannot carry is frame-ancestors and HSTS, which are
+      header-only by spec; those still need the Cloudflare transform rule
+      documented in SELF_HOSTED_CONVEX.md. X-Frame-Options is covered below.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; media-src https: blob:; connect-src 'self' https://convex.hookedcue.com https://cnx.hookedcue.com wss://convex.hookedcue.com wss://cnx.hookedcue.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
+    />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="description" content="hooked. is a swipe-based music discovery app for finding new songs from 30-second previews. Skip, save, ask for more like this, or block artists with four gestures." />
     <meta name="keywords" content="music discovery app, swipe music app, discover new songs, song recommendations, 30 second song previews, find new music" />
@@ -52,6 +64,18 @@
           "@type": "Offer",
           "price": "0",
           "priceCurrency": "USD"
+        }
+      }
+    </script>
+    <script>
+      // Stand-in for frame-ancestors, which a meta CSP can't express. Nothing
+      // embeds this app — the landing page links out to it — so being framed
+      // means someone else put it there, and the session cookie is in play.
+      if (window.top !== window.self) {
+        try {
+          window.top.location = window.self.location;
+        } catch {
+          document.documentElement.style.display = "none";
         }
       }
     </script>
