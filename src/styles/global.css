@@ -2150,6 +2150,10 @@ button {
 .creator-dot { flex: 1; height: 3px; border-radius: 3px; background: var(--line); }
 .creator-dot.on { background: var(--save); }
 
+.creator-leading {
+  margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.6;
+}
+.creator-leading b { color: var(--save); font-weight: 600; }
 .creator-hooks { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .creator-hook {
   display: flex; gap: 12px; align-items: center; flex-wrap: wrap;

@@ -498,6 +498,19 @@ function TrackCard({ track }: { track: Track }) {
   const ceilingMs = hasFullAudio ? (track.audioDurationMs ?? track.durationMs ?? 30_000) : 30_000;
   const canAddMore = hasFullAudio || track.hooks.length === 0;
 
+  // Mirrors the ordering in tracks.list: enough plays to mean something, best
+  // save rate wins, otherwise the creator's own order stands.
+  const leadingHookId =
+    track.hooks.length > 1
+      ? [...track.hooks]
+          .filter((h) => h.active)
+          .sort(
+            (a, b) =>
+              (b.plays >= 20 ? b.saves / b.plays : -1) -
+                (a.plays >= 20 ? a.saves / a.plays : -1) || a.order - b.order,
+          )[0]?._id
+      : null;
+
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -583,6 +596,18 @@ function TrackCard({ track }: { track: Track }) {
             <span key={h._id} className={h.active ? "creator-dot on" : "creator-dot"} />
           ))}
         </div>
+      )}
+
+      {leadingHookId && (
+        <p className="creator-leading">
+          The deck plays the best-performing hook first once it has 20 plays to
+          judge by — right now that's{" "}
+          <b>
+            {track.hooks.find((h) => h._id === leadingHookId)?.label ||
+              `hook ${(track.hooks.findIndex((h) => h._id === leadingHookId) ?? 0) + 1}`}
+          </b>
+          .
+        </p>
       )}
 
       <div className="creator-hooks">
