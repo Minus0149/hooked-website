@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { motion } from "motion/react";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { authClient } from "../lib/auth-client";
 import { useStore } from "../state/store";
 import { IconBack, IconCheck, IconFolder, IconHeart, IconUser } from "./icons";
@@ -22,6 +25,24 @@ export function SettingsScreen({
 }) {
   const { state } = useStore();
   const session = authClient.useSession();
+  const deleteAccount = useMutation(api.library.deleteMyAccount);
+  const [deleting, setDeleting] = useState(false);
+
+  // Google Play requires an in-app route to delete an account and its data.
+  const removeAccount = async () => {
+    if (!window.confirm("Delete your account and everything in it? This can't be undone.")) return;
+    if (!window.confirm("Last check — your library, playlists and swipe history all go. Continue?")) return;
+    setDeleting(true);
+    try {
+      await deleteAccount({ confirm: "DELETE" });
+      await authClient.signOut();
+      localStorage.removeItem("hooked.library.v2");
+      window.location.reload();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Could not delete the account");
+      setDeleting(false);
+    }
+  };
 
   const targetLabel =
     state.saveTarget === "liked"
@@ -130,6 +151,20 @@ export function SettingsScreen({
             <small>relearn the four gestures</small>
           </span>
         </button>
+        <a
+          className="settings-row"
+          href="https://hookedcue.com/privacy"
+          target="_blank"
+          rel="noreferrer"
+          style={{ textDecoration: "none" }}
+        >
+          <span className="settings-row-icon">§</span>
+          <span className="settings-row-label">
+            Privacy &amp; terms
+            <small>what we store, and how to get it deleted</small>
+          </span>
+          <span className="settings-row-value">open</span>
+        </a>
         <button
           className="settings-row"
           onClick={() => {
@@ -145,6 +180,15 @@ export function SettingsScreen({
             <small>cloud library is untouched</small>
           </span>
         </button>
+        {session.data && (
+          <button className="settings-row" onClick={removeAccount} disabled={deleting}>
+            <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>
+            <span className="settings-row-label" style={{ color: "var(--never)" }}>
+              {deleting ? "Deleting…" : "Delete my account"}
+              <small>removes your library, playlists and history for good</small>
+            </span>
+          </button>
+        )}
       </motion.div>
     </div>
   );

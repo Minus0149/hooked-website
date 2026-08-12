@@ -2066,3 +2066,5 @@ button {
 @media (max-width: 560px) {
   .aq-row { flex-direction: column; gap: 9px; }
 }
+
+.access-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }

@@ -293,3 +293,53 @@ export const setSaveTarget = mutation({
     if (profile) await ctx.db.patch(profile._id, { saveTarget: safeTarget });
   },
 });
+
+/**
+ * Self-service account deletion.
+ *
+ * Google Play requires an in-app path to delete an account and its data, plus a
+ * publicly reachable URL describing it — hookedcue.com/data-deletion. This is
+ * that path. It removes everything keyed to the user and the access request, so
+ * the email is genuinely free to apply again afterwards.
+ *
+ * The Better Auth credential row is cleared by signing out and is orphaned
+ * without a profile; ensureProfile will refuse to recreate one unless the email
+ * is approved again.
+ */
+export const deleteMyAccount = mutation({
+  args: { confirm: v.literal("DELETE") },
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    await enforceRateLimit(ctx, `delete-account:${user.id}`, 3, 60 * 60_000);
+    const profile = await getProfile(ctx, user.id);
+    if (!profile) throw new Error("No account to delete");
+    if (profile.isAdmin) {
+      throw new Error("Admins can't delete themselves — hand the role over first");
+    }
+
+    const userId = profile.userId;
+    const [swipes, songs, never, playlists] = await Promise.all([
+      ctx.db.query("swipes").withIndex("by_userId", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("librarySongs").withIndex("by_user_kind", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("neverArtists").withIndex("by_user_artist", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("playlists").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+    ]);
+    for (const doc of [...swipes, ...songs, ...never, ...playlists]) {
+      await ctx.db.delete(doc._id);
+    }
+
+    // drop the access request too, so the address isn't left sitting in the
+    // queue after the person has asked to be forgotten
+    const email = (profile.email ?? "").toLowerCase();
+    if (email) {
+      const request = await ctx.db
+        .query("accessRequests")
+        .withIndex("by_email", (q) => q.eq("email", email))
+        .unique();
+      if (request) await ctx.db.delete(request._id);
+    }
+
+    await ctx.db.delete(profile._id);
+    return { deleted: true };
+  },
+});

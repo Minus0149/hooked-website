@@ -98,40 +98,41 @@ async function upsertRequest(
   return { status: "pending", duplicate: false };
 }
 
-/** The in-app wall posts here. Public and unauthenticated, so it's rate limited by email. */
-export const apply = mutation({
+/**
+ * The in-app wall submits here, via the /access/apply HTTP route.
+ *
+ * Internal rather than public on purpose: a public mutation arrives over the
+ * websocket client where there is no client IP to limit on, so the only ceiling
+ * would be per-email — and emails are free. Routing through an HTTP action lets
+ * us see cf-connecting-ip and limit the actual caller.
+ */
+export const submit = internalMutation({
   args: {
+    ip: v.string(),
     email: v.string(),
     name: v.string(),
     device: v.optional(v.string()),
     listensOn: v.optional(v.array(v.string())),
     genres: v.optional(v.array(v.string())),
     notes: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, { ip, ...args }) => {
+    // per-IP first: the ceiling that actually costs an attacker something
+    await enforceRateLimit(ctx, `access:ip:${ip}`, 8, 60 * 60_000);
     const key = cleanText(args.email, MAX.email).toLowerCase() || "anon";
-    await enforceRateLimit(ctx, `access:${key}`, 5, 10 * 60_000);
+    await enforceRateLimit(ctx, `access:email:${key}`, 5, 10 * 60_000);
+    // and a floor under the whole queue, so a botnet spread across many IPs
+    // can't fill the table one "valid" row at a time
+    await enforceRateLimit(ctx, "access:global", 300, 60 * 60_000);
     return await upsertRequest(ctx, { ...args, source: "app" });
-  },
-});
-
-/** Lets the UI say "you're already in the queue" instead of making them guess. */
-export const statusFor = query({
-  args: { email: v.string() },
-  handler: async (ctx, { email }) => {
-    const clean = cleanText(email, MAX.email).toLowerCase();
-    if (!EMAIL_RE.test(clean)) return { status: "none" as const };
-    const row = await ctx.db
-      .query("accessRequests")
-      .withIndex("by_email", (q) => q.eq("email", clean))
-      .unique();
-    return { status: (row?.status ?? "none") as "none" | "pending" | "approved" | "rejected" };
   },
 });
 
 /** Called by the /beta HTTP route for landing-site submissions. */
 export const record = internalMutation({
   args: {
+    ip: v.optional(v.string()),
     email: v.string(),
     name: v.string(),
     device: v.optional(v.string()),
@@ -143,7 +144,12 @@ export const record = internalMutation({
     notes: v.optional(v.string()),
     userAgent: v.optional(v.string()),
   },
-  handler: async (ctx, args) => await upsertRequest(ctx, { ...args, source: "landing" }),
+  handler: async (ctx, { ip, ...args }) => {
+    // the landing server is trusted, but the shared secret could leak
+    if (ip) await enforceRateLimit(ctx, `access:ip:${ip}`, 30, 60 * 60_000);
+    await enforceRateLimit(ctx, "access:global", 300, 60 * 60_000);
+    return await upsertRequest(ctx, { ...args, source: "landing" });
+  },
 });
 
 /** The admin queue. Behind the existing users.view permission — no new access path. */

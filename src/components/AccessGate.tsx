@@ -1,9 +1,11 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { motion } from "motion/react";
-import { useMutation } from "convex/react";
 import { authClient } from "../lib/auth-client";
-import { api } from "../../convex/_generated/api";
 import { AuthForm } from "./ProfileScreen";
+
+// the apply endpoint is an HTTP route, not a mutation, so the server can see
+// the caller's IP and rate limit on it — a websocket mutation can't
+const SITE_URL = import.meta.env.VITE_CONVEX_SITE_URL ?? "https://cnx.hookedcue.com";
 
 const GENRES = [
   "afrobeats", "psych pop", "bollywood", "house", "soul",
@@ -22,7 +24,6 @@ type Stage = "form" | "sent" | "already" | "signin";
  * accounts that can't do anything.
  */
 export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
-  const apply = useMutation(api.access.apply);
   const [stage, setStage] = useState<Stage>("form");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -32,6 +33,12 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [existing, setExisting] = useState<string>("pending");
+  const [trap, setTrap] = useState("");
+  // stamped on mount, not during render — Date.now() in a render body is impure
+  const startedAt = useRef(0);
+  useEffect(() => {
+    startedAt.current = Date.now();
+  }, []);
 
   const toggleGenre = (g: string) =>
     setGenres((list) =>
@@ -48,16 +55,32 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
     setError(null);
     setBusy(true);
     try {
-      const res = await apply({
-        name: name.trim(),
-        email: email.trim(),
-        device: device.trim() || undefined,
-        notes: notes.trim() || undefined,
-        genres: genres.length ? genres : undefined,
+      const res = await fetch(`${SITE_URL}/access/apply`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          device: device.trim() || undefined,
+          notes: notes.trim() || undefined,
+          genres: genres.length ? genres : undefined,
+          website: trap,
+          startedAt: startedAt.current,
+        }),
       });
-      if (res.duplicate) {
-        setExisting(res.status);
-        setStage(res.status === "approved" ? "signin" : "already");
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        duplicate?: boolean;
+        status?: string;
+        message?: string;
+      };
+      if (!res.ok || !data.ok) {
+        setError(data.message ?? "that didn't go through. try again?");
+        return;
+      }
+      if (data.duplicate) {
+        setExisting(data.status ?? "pending");
+        setStage(data.status === "approved" ? "signin" : "already");
       } else {
         setStage("sent");
       }
@@ -165,6 +188,20 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
         rows={2}
         maxLength={500}
       />
+
+      {/* honeypot — never shown, never announced, only bots fill it */}
+      <div className="access-hp" aria-hidden="true">
+        <label htmlFor="access-website">website</label>
+        <input
+          id="access-website"
+          name="website"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          value={trap}
+          onChange={(e) => setTrap(e.target.value)}
+        />
+      </div>
 
       {error && <p className="access-error">{error}</p>}
 
