@@ -11,6 +11,7 @@
 import type * as access from "../access.js";
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
+import type * as creators from "../creators.js";
 import type * as http from "../http.js";
 import type * as library from "../library.js";
 import type * as security from "../security.js";
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   access: typeof access;
   admin: typeof admin;
   auth: typeof auth;
+  creators: typeof creators;
   http: typeof http;
   library: typeof library;
   security: typeof security;

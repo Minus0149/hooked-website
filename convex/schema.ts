@@ -84,7 +84,78 @@ export default defineSchema({
   tracks: defineTable({
     ...trackFields,
     hidden: v.optional(v.boolean()),
-  }).index("by_trackId", ["trackId"]),
+    // set when an artist owns this track rather than it being curated/imported
+    ownerUserId: v.optional(v.string()),
+    // full audio, uploaded by the rights holder. This is the only source that
+    // supports several hooks per song — an iTunes/Deezer preview is a single
+    // ~30s window, so there is nothing else to cut from.
+    audioStorageId: v.optional(v.id("_storage")),
+    audioDurationMs: v.optional(v.number()),
+    origin: v.optional(
+      v.union(v.literal("curated"), v.literal("artist"), v.literal("import")),
+    ),
+  })
+    .index("by_trackId", ["trackId"])
+    .index("by_owner", ["ownerUserId"]),
+
+  /**
+   * A hook is a window into a track's audio. Imported tracks get exactly one
+   * (the whole preview); uploaded tracks can have several, so the same song gets
+   * more than one shot at landing.
+   */
+  hooks: defineTable({
+    trackId: v.string(),
+    startMs: v.number(),
+    durationMs: v.number(),
+    label: v.optional(v.string()),
+    order: v.number(),
+    active: v.boolean(),
+    createdBy: v.string(),
+    source: v.union(v.literal("curated"), v.literal("artist")),
+    // denormalised so "which hook actually lands" is answerable without
+    // scanning the whole swipes table
+    plays: v.number(),
+    saves: v.number(),
+    skips: v.number(),
+  })
+    .index("by_trackId", ["trackId"])
+    .index("by_active", ["active"]),
+
+  /** Artists who want to publish their own music. Approved by an admin. */
+  creators: defineTable({
+    userId: v.string(),
+    email: v.string(),
+    artistName: v.string(),
+    bio: v.optional(v.string()),
+    links: v.optional(v.array(v.string())),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
+    appliedAt: v.string(),
+    decidedAt: v.optional(v.string()),
+    decidedBy: v.optional(v.string()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_status", ["status"]),
+
+  /** A playlist import run, so a half-finished match can be resumed or audited. */
+  imports: defineTable({
+    userId: v.string(),
+    source: v.union(
+      v.literal("spotify"),
+      v.literal("apple"),
+      v.literal("itunes"),
+      v.literal("manual"),
+    ),
+    playlistName: v.string(),
+    status: v.union(
+      v.literal("matching"),
+      v.literal("done"),
+      v.literal("failed"),
+    ),
+    total: v.number(),
+    matched: v.number(),
+    createdAt: v.string(),
+    note: v.optional(v.string()),
+  }).index("by_userId", ["userId"]),
 
   // Every request for access, from either surface: the landing site's beta form
   // ("landing") and the in-app wall after the free swipes run out ("app").
