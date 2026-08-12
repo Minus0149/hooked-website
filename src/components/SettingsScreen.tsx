@@ -3,6 +3,8 @@ import { authClient } from "../lib/auth-client";
 import { useStore } from "../state/store";
 import { IconBack, IconCheck, IconFolder, IconHeart, IconUser } from "./icons";
 
+const BETA_URL = import.meta.env.VITE_BETA_URL ?? "https://hookedcue.com/beta";
+
 export function SettingsScreen({
   isAdmin,
   onBack,
@@ -104,6 +106,23 @@ export function SettingsScreen({
         )}
 
         <p className="settings-group">app</p>
+        {/* the browser build is step 1 of the beta funnel — someone who has got
+            this far has already swiped, which is exactly when the android ask
+            is easiest to say yes to */}
+        <a
+          className="settings-row"
+          href={BETA_URL}
+          target="_blank"
+          rel="noreferrer"
+          style={{ textDecoration: "none" }}
+        >
+          <span className="settings-row-icon" style={{ color: "var(--save)" }}>↓</span>
+          <span className="settings-row-label">
+            Get it on your phone
+            <small>join the android closed test</small>
+          </span>
+          <span className="settings-row-value">open</span>
+        </a>
         <button className="settings-row" onClick={onReplayTutorial}>
           <span className="settings-row-icon">↻</span>
           <span className="settings-row-label">
