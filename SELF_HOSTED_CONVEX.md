@@ -94,6 +94,30 @@ npx convex import --table tracks tracks-seed.jsonl
 
 Do not use `convexdash.hookedcue.com` as the app Convex URL or auth site URL. The dashboard is only for managing the deployment.
 
+## Why sign-in appeared to work but no profile was ever created
+
+Worth writing down, because the symptom points nowhere near the cause: you sign
+in, the session is real, and the app behaves as if you're a stranger. No error
+in the browser.
+
+`@convex-dev/better-auth` derives both the token issuer *and* the URL Convex
+fetches signing keys from out of `CONVEX_SITE_URL`. On this deployment that
+variable is the **dashboard** domain and ends in a slash, so Convex was asking
+
+```
+https://convexdash.hookedcue.com//api/auth/convex/jwks   -> 404
+```
+
+The dashboard doesn't serve HTTP actions — `cnx.hookedcue.com` does. So every
+token minted correctly and then failed validation, `ctx.auth.getUserIdentity()`
+came back empty, and `ensureProfile` ran as nobody. `convex/auth.config.ts` now
+overrides just the fetch URL, using `BETTER_AUTH_URL`.
+
+To check the whole chain without a browser: sign up a throwaway over
+`/api/auth/sign-up/email`, exchange the session for a JWT at
+`/api/auth/convex/token`, then call `auth:getCurrentUser` against
+`/api/query` with that JWT. If the identity comes back, the chain is sound.
+
 ## Still to do by hand (as of 2026-08-13)
 
 Three things that can't be done from this repo, in the order they matter.
