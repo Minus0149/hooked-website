@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
@@ -14,8 +14,14 @@ import { SaveTargetSheet } from "./components/SaveTargetSheet";
 import { VolumeRail } from "./components/VolumeControl";
 import { ProfileScreen } from "./components/ProfileScreen";
 import { AccessGate, AccessPending } from "./components/AccessGate";
-import { AdminDashboard } from "./components/AdminDashboard";
-import { CreatorDashboard } from "./components/CreatorDashboard";
+// Staff-only screens. Split out so a listener never downloads the dashboards —
+// between them they're a third of the bundle and nobody on the deck opens them.
+const AdminDashboard = lazy(() =>
+  import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })),
+);
+const CreatorDashboard = lazy(() =>
+  import("./components/CreatorDashboard").then((m) => ({ default: m.CreatorDashboard })),
+);
 import { LibraryScreen } from "./components/LibraryScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { NewPlaylistSheet } from "./components/NewPlaylistSheet";
@@ -538,11 +544,15 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  if (route.startsWith("#/admin")) {
-    return <AdminDashboard />;
-  }
-  if (route.startsWith("#/creator")) {
-    return <CreatorDashboard />;
+  if (route.startsWith("#/admin") || route.startsWith("#/creator")) {
+    const Screen = route.startsWith("#/admin") ? AdminDashboard : CreatorDashboard;
+    return (
+      <Suspense
+        fallback={<div className="admin admin-v2"><p className="admin-empty">Loading…</p></div>}
+      >
+        <Screen />
+      </Suspense>
+    );
   }
 
   return (

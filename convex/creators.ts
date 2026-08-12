@@ -25,6 +25,8 @@ const MAX_LINKS = 4;
 const MAX_HOOKS_PER_TRACK = 6;
 const MIN_HOOK_MS = 5_000;
 const MAX_HOOK_MS = 45_000;
+/** What an iTunes/Deezer preview actually gives you, whatever the song's length. */
+const PREVIEW_MS = 30_000;
 
 async function getCreator(ctx: QueryCtx | MutationCtx, userId: string) {
   return ctx.db
@@ -249,8 +251,11 @@ export const upsertHook = mutation({
       throw new Error("A hook runs between 5 and 45 seconds");
     }
 
-    // A preview is one fixed window — you can only cut inside what you have.
-    const ceiling = track.audioDurationMs ?? track.durationMs ?? 30_000;
+    // A preview is one fixed ~30s window — the song's own length is the wrong
+    // ceiling for it, because only 30 seconds of that song is playable here.
+    const ceiling = track.audioStorageId
+      ? (track.audioDurationMs ?? track.durationMs ?? PREVIEW_MS)
+      : PREVIEW_MS;
     if (ceiling > 0 && startMs + durationMs > ceiling + 1_000) {
       throw new Error("That hook runs past the end of the audio");
     }

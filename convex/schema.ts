@@ -155,6 +155,11 @@ export default defineSchema({
     matched: v.number(),
     createdAt: v.string(),
     note: v.optional(v.string()),
+    // Handed out when the run opens and required to write to it. The matching
+    // step runs in an action, which reaches the outside world and so cannot
+    // rely on the caller's identity travelling with it — this is what proves
+    // the writes belong to the run that was authorised. Cleared on completion.
+    token: v.optional(v.string()),
   }).index("by_userId", ["userId"]),
 
   // Every request for access, from either surface: the landing site's beta form

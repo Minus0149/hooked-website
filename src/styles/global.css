@@ -2067,7 +2067,58 @@ button {
   .aq-row { flex-direction: column; gap: 9px; }
 }
 
+.aq-link {
+  display: inline-block; margin-right: 10px; color: var(--accent, #ff3d71);
+  font-size: 11.5px; text-decoration: underline; text-underline-offset: 3px;
+}
+
 .access-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+/* ---------- analytics ---------- */
+.admin-trend { margin-top: 12px; }
+.admin-trend svg { width: 100%; height: 180px; display: block; overflow: visible; }
+.admin-trend rect { transition: fill .2s; }
+.admin-trend rect:hover { fill: rgba(255,255,255,.32); }
+.admin-trend-legend {
+  display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px;
+  font-size: 11.5px; color: var(--muted); align-items: center;
+}
+.admin-trend-legend i {
+  display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+  margin-right: 6px; vertical-align: -1px;
+}
+
+.admin-funnel-step { margin-bottom: 14px; }
+.admin-funnel-head {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 12.5px; margin-bottom: 5px;
+}
+.admin-funnel-head > span:first-child { flex: 1; color: var(--muted); }
+.admin-funnel-head strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.admin-funnel-track {
+  height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden;
+}
+.admin-funnel-track > div {
+  height: 100%; border-radius: 999px; background: var(--accent, #ff3d71);
+  transition: width .5s cubic-bezier(.2,.8,.2,1);
+}
+.admin-funnel-note { display: block; font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+.admin-health {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px; margin-top: 12px;
+}
+.admin-health-cell {
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.admin-health-cell strong { font-size: 22px; font-variant-numeric: tabular-nums; }
+.admin-health-cell span {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+}
+.admin-health-cell em { font-size: 11px; font-style: normal; color: var(--muted); opacity: .7; line-height: 1.5; }
+.admin-health-cell.bad { border-color: color-mix(in srgb, var(--never) 45%, var(--line)); }
+.admin-health-cell.bad strong { color: var(--never); }
 
 /* ---------- creator dashboard ---------- */
 .creator-wrap { max-width: 900px; }
@@ -2126,6 +2177,48 @@ button {
 @media (max-width: 560px) {
   .creator-track-head { flex-wrap: wrap; }
   .creator-hook { flex-direction: column; align-items: stretch; }
+}
+
+/* ---------- playlist import ---------- */
+.creator-import {
+  border: 1px solid var(--line); border-radius: 18px; padding: 18px;
+  margin-bottom: 18px; background: rgba(19,19,27,.5);
+}
+.creator-import-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 8px;
+}
+.creator-import-head h3 { font-family: var(--font-display); font-size: 15px; margin: 0; }
+.creator-import p { line-height: 1.7; }
+.creator-import code {
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px;
+  background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px;
+}
+.creator-paste {
+  width: 100%; margin: 12px 0 10px; font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px; line-height: 1.6; resize: vertical; min-height: 120px;
+}
+.creator-import-row { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
+.creator-import-row .auth-input { flex: 1 1 180px; padding: 10px 12px; font-size: 13px; }
+.creator-check {
+  display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted);
+  white-space: nowrap; cursor: pointer;
+}
+.creator-parse { margin-top: 12px; }
+.creator-preview {
+  list-style: none; margin: 8px 0 0; padding: 0;
+  font-size: 12.5px; color: var(--muted); line-height: 1.9;
+}
+.creator-preview li { padding-left: 14px; position: relative; }
+.creator-preview li::before {
+  content: "›"; position: absolute; left: 0; opacity: .5;
+}
+.creator-report {
+  margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px;
+}
+.creator-report > p:first-child { font-size: 14px; margin-bottom: 6px; }
+@media (max-width: 560px) {
+  .creator-import-row { flex-direction: column; align-items: stretch; }
 }
 
 /* ---------- multi-hook: Stories-style segmented dots ---------- */
