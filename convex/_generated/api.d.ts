@@ -12,6 +12,7 @@ import type * as access from "../access.js";
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as creators from "../creators.js";
+import type * as hooks from "../hooks.js";
 import type * as http from "../http.js";
 import type * as imports from "../imports.js";
 import type * as library from "../library.js";
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   creators: typeof creators;
   http: typeof http;
+  hooks: typeof hooks;
   imports: typeof imports;
   library: typeof library;
   matching: typeof matching;

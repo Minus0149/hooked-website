@@ -27,11 +27,17 @@ export function usePlayer(
   nextTrack: Track | null,
   enabled: boolean,
   onEnded: () => void,
+  /** called with the source that failed, so a broken track can be reported */
+  onAudioError?: (src: string) => void,
 ) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const preloadRef = useRef<HTMLAudioElement | null>(null);
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
+  const onErrorRef = useRef(onAudioError);
+  onErrorRef.current = onAudioError;
+  const trackRef = useRef<Track | null>(track);
+  trackRef.current = track;
 
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0); // 0..1 through the current hook
@@ -117,15 +123,31 @@ export function usePlayer(
       if (into >= lenS) advanceRef.current(true);
     };
     const onDone = () => advanceRef.current(true);
+    /**
+     * Dead audio must not park the deck.
+     *
+     * Preview URLs rotate and expire — with a curated hundred that never
+     * happened, with a thousand off the charts it will. A card whose audio
+     * 404s fires `error` and then nothing: no timeupdate, no ended, so the
+     * auto-advance never runs and the deck simply stops with a silent card the
+     * listener has to swipe by hand. Treat it as the song being over.
+     */
+    const onError = () => {
+      setPlaying(false);
+      onErrorRef.current?.(sourceOf(trackRef.current!) ?? "");
+      onEndedRef.current();
+    };
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("ended", onDone);
+    audio.addEventListener("error", onError);
     audio.addEventListener("play", onPlay);
     audio.addEventListener("pause", onPause);
     return () => {
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("ended", onDone);
+      audio.removeEventListener("error", onError);
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
     };

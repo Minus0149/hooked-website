@@ -54,6 +54,7 @@ export function AdminDashboard() {
   const markInvited = useMutation(api.access.markInvited);
   const removeRequest = useMutation(api.access.remove);
   const setHidden = useMutation(api.tracks.setHidden);
+  const backfillHooks = useMutation(api.hooks.backfill);
   const setPermission = useMutation(api.admin.setPermission);
   const setAdmin = useMutation(api.admin.setAdmin);
 
@@ -191,6 +192,17 @@ export function AdminDashboard() {
           <CatalogPanel
             catalog={catalog}
             onToggle={(trackId, hidden) => void setHidden({ trackId, hidden })}
+            onBackfill={() =>
+              backfillHooks({})
+                .then((r) =>
+                  window.alert(
+                    r.tracksFilled === 0
+                      ? "Every track already has a hook."
+                      : `Gave ${r.tracksFilled} track${r.tracksFilled === 1 ? "" : "s"} ${r.hooksCreated} hooks between them.`,
+                  ),
+                )
+                .catch((e: Error) => window.alert(e.message))
+            }
           />
         )}
         {activeTab === "feed" && stats && <FeedPanel recent={stats.recent} />}
@@ -1018,9 +1030,11 @@ function useCatalogType() {
 function CatalogPanel({
   catalog,
   onToggle,
+  onBackfill,
 }: {
   catalog: CatalogData;
   onToggle: (trackId: string, hidden: boolean) => void;
+  onBackfill: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [genre, setGenre] = useState("all");
@@ -1057,6 +1071,9 @@ function CatalogPanel({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <button className="admin-perm" onClick={onBackfill} title="Give three windows to any track that has none">
+          fix hookless tracks
+        </button>
         <select
           className="admin-select"
           value={genre}

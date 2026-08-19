@@ -16,6 +16,7 @@ export function SettingsScreen({
   onReplayTutorial,
   onAutoAdvance,
   onReplay,
+  onUnbury,
 }: {
   isAdmin: boolean;
   onBack: () => void;
@@ -24,6 +25,7 @@ export function SettingsScreen({
   onReplayTutorial: () => void;
   onAutoAdvance: (value: boolean) => void;
   onReplay: (container: string, allow: boolean) => void;
+  onUnbury: (trackId: string) => void;
 }) {
   const { state } = useStore();
   const session = authClient.useSession();
@@ -141,11 +143,33 @@ export function SettingsScreen({
           );
         })}
         {state.neverTracks.length > 0 && (
-          <p className="settings-note">
-            {state.neverTracks.length} song
-            {state.neverTracks.length === 1 ? "" : "s"} buried with a left swipe.
-            Those never come back.
-          </p>
+          <>
+            <p className="settings-note">
+              {state.neverTracks.length} song
+              {state.neverTracks.length === 1 ? "" : "s"} buried with a left
+              swipe. They never come back on their own — dig one out if you
+              changed your mind.
+            </p>
+            {state.neverTracks.map((id) => {
+              const t = state.catalog.find((c) => c.id === id);
+              return (
+                <button
+                  key={id}
+                  className="settings-row"
+                  onClick={() => onUnbury(id)}
+                >
+                  <span className="settings-row-icon" style={{ color: "var(--never)" }}>
+                    ✕
+                  </span>
+                  <span className="settings-row-label">
+                    {t ? t.title : "a song no longer in the catalogue"}
+                    <small>{t ? t.artist : id}</small>
+                  </span>
+                  <span className="settings-row-value">dig out</span>
+                </button>
+              );
+            })}
+          </>
         )}
 
         <p className="settings-group">account</p>

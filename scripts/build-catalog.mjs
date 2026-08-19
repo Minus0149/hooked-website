@@ -51,6 +51,14 @@ const ACCENTS = [
 const HOOK_COUNT = 3;
 const MIN_HOOK_MS = 6000;
 
+/**
+ * 22.05kHz, not the 8kHz loudness alone needs. Everything above 4kHz — the
+ * crack of a snare, a hi-hat — is what makes a transient findable, and 8kHz
+ * throws all of it away.
+ */
+const SR = 22050;
+const HOP = 256;
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(...a);
 
@@ -154,7 +162,7 @@ function decode(audio) {
   return new Promise((resolve) => {
     const ff = spawn("ffmpeg", [
       "-v", "error", "-i", "pipe:0",
-      "-ac", "1", "-ar", "8000", "-f", "s16le", "-",
+      "-ac", "1", "-ar", String(SR), "-f", "s16le", "-",
     ]);
     const chunks = [];
     let settled = false;
@@ -178,8 +186,77 @@ function decode(audio) {
 }
 
 /**
- * Decode the preview to mono 8kHz PCM and measure loudness per second.
- * About 200ms of ffmpeg per song, and nothing touches disk.
+ * Where a hook is allowed to begin.
+ *
+ * A window that opens mid-syllable sounds like a glitch even when the ten
+ * seconds after it are the best in the song, so each planned start is nudged
+ * to the nearest transient — a drum hit, a vocal entry, the top of a bar.
+ *
+ * This is deliberately *not* beat tracking. Estimating tempo from a 30-second
+ * preview kept landing a third out (129 against a true 89), and snapping to a
+ * wrong grid is worse than not snapping at all. An onset is observed rather
+ * than inferred, so it cannot be an octave or a triplet off.
+ *
+ * The three bands matter: a hi-hat barely moves broadband energy, and it was
+ * invisible at the 8kHz used for loudness. High frequencies carry most of the
+ * transient, hence the extra weight.
+ */
+function onsetEnvelope(pcm) {
+  const frames = Math.floor(pcm.length / HOP);
+  const low = new Float32Array(frames);
+  const mid = new Float32Array(frames);
+  const high = new Float32Array(frames);
+  let lp = 0;
+  let lp2 = 0;
+  for (let f = 0; f < frames; f++) {
+    let l = 0;
+    let m = 0;
+    let h = 0;
+    for (let i = f * HOP; i < (f + 1) * HOP; i++) {
+      const x = pcm[i] / 32768;
+      lp += 0.05 * (x - lp); // roughly below 200Hz
+      lp2 += 0.35 * (x - lp2); // roughly below 2kHz
+      l += lp * lp;
+      m += (lp2 - lp) * (lp2 - lp);
+      h += (x - lp2) * (x - lp2);
+    }
+    low[f] = Math.sqrt(l / HOP);
+    mid[f] = Math.sqrt(m / HOP);
+    high[f] = Math.sqrt(h / HOP);
+  }
+  const env = new Float32Array(frames);
+  for (let f = 1; f < frames; f++) {
+    env[f] =
+      Math.max(0, low[f] - low[f - 1]) +
+      Math.max(0, mid[f] - mid[f - 1]) +
+      1.5 * Math.max(0, high[f] - high[f - 1]);
+  }
+  let max = 0;
+  for (const v of env) max = Math.max(max, v);
+  if (max > 0) for (let i = 0; i < frames; i++) env[i] /= max;
+  return env;
+}
+
+/** The strongest onset near `targetMs`, preferring ones that barely move. */
+function snapToOnset(env, targetMs, windowMs = 1200) {
+  const fps = SR / HOP;
+  const centre = Math.round((targetMs / 1000) * fps);
+  const reach = Math.round((windowMs / 1000) * fps);
+  let best = -1;
+  let bestScore = 0;
+  for (let i = Math.max(1, centre - reach); i < Math.min(env.length, centre + reach); i++) {
+    const score = env[i] * (1 - 0.6 * (Math.abs(i - centre) / reach));
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  }
+  return best < 0 ? targetMs : Math.round((best / fps) * 1000);
+}
+
+/**
+ * Decode the preview once and measure both things it has to tell us: loudness
+ * per second, which ranks the windows, and transients, which position them.
  */
 async function energyProfile(previewUrl) {
   const res = await get(previewUrl, 25000);
@@ -194,14 +271,18 @@ async function energyProfile(previewUrl) {
     stdout.byteOffset,
     Math.floor(stdout.length / 2),
   );
-  const seconds = Math.floor(pcm.length / 8000);
+  const seconds = Math.floor(pcm.length / SR);
   const rms = [];
   for (let s = 0; s < seconds; s++) {
     let sum = 0;
-    for (let i = s * 8000; i < (s + 1) * 8000; i++) sum += pcm[i] * pcm[i];
-    rms.push(Math.sqrt(sum / 8000));
+    for (let i = s * SR; i < (s + 1) * SR; i++) sum += pcm[i] * pcm[i];
+    rms.push(Math.sqrt(sum / SR));
   }
-  return { rms, durationMs: Math.round((pcm.length / 8000) * 1000) };
+  return {
+    rms,
+    onsets: onsetEnvelope(pcm),
+    durationMs: Math.round((pcm.length / SR) * 1000),
+  };
 }
 
 /**
@@ -255,6 +336,21 @@ function planHooks(profile, fallbackMs) {
       const to = Math.min(profile.rms.length, Math.ceil((w.startMs + w.durationMs) / 1000));
       const slice = profile.rms.slice(from, to);
       w.score = slice.length ? slice.reduce((a, b) => a + b, 0) / slice.length : 0;
+    }
+  }
+
+  // put each start on a transient rather than an arbitrary tick of the clock
+  if (profile?.onsets) {
+    for (const w of windows) {
+      const snapped = snapToOnset(profile.onsets, w.startMs);
+      // never let a nudge push a window past the end of the audio
+      if (snapped >= 0 && snapped + w.durationMs <= raw) w.startMs = snapped;
+    }
+    windows.sort((a, b) => a.startMs - b.startMs);
+    // a nudge can overlap the neighbour it moved toward; give the later one back
+    for (let i = 1; i < windows.length; i++) {
+      const prevEnd = windows[i - 1].startMs + windows[i - 1].durationMs;
+      if (windows[i].startMs < prevEnd) windows[i].startMs = prevEnd;
     }
   }
 

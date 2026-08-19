@@ -104,6 +104,7 @@ function Shell() {
     removeSong,
     setAutoAdvance,
     setReplay,
+    unbury,
     hydrateRemote,
     applyCatalog,
   } = useStore();
@@ -189,6 +190,15 @@ function Shell() {
       }
     },
     [setReplay, signedIn, setReplayMutation],
+  );
+
+  const unburyMutation = useMutation(api.library.unburyTrack);
+  const handleUnbury = useCallback(
+    (trackId: string) => {
+      unbury(trackId);
+      if (signedIn) void unburyMutation({ trackId }).catch(() => undefined);
+    },
+    [unbury, signedIn, unburyMutation],
   );
 
   const hydratedFor = useRef<string | null>(null);
@@ -447,6 +457,7 @@ function Shell() {
               onOpenSaveTarget={() => setSheetOpen(true)}
               onAutoAdvance={setAutoAdvance}
               onReplay={handleReplay}
+              onUnbury={handleUnbury}
               onReplayTutorial={() => {
                 localStorage.removeItem(ONBOARD_KEY);
                 setOnboarded(false);

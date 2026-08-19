@@ -55,6 +55,7 @@ type Action =
   | { type: "SET_SAVE_TARGET"; target: SaveTarget }
   | { type: "SET_AUTO_ADVANCE"; value: boolean }
   | { type: "SET_REPLAY"; container: string; allow: boolean }
+  | { type: "UNBURY"; trackId: string }
   | { type: "CREATE_PLAYLIST"; playlist: Playlist }
   | { type: "DELETE_PLAYLIST"; id: string }
   | { type: "REMOVE_SONG"; trackId: string }
@@ -366,6 +367,12 @@ function reducer(state: AppState, action: Action): AppState {
         })),
       };
 
+    case "UNBURY":
+      return {
+        ...state,
+        neverTracks: state.neverTracks.filter((id) => id !== action.trackId),
+      };
+
     case "SET_REPLAY": {
       const allow = new Set(state.replayContainers);
       if (action.allow) allow.add(action.container);
@@ -479,6 +486,7 @@ interface StoreValue {
   removeSong: (trackId: string) => void;
   setAutoAdvance: (value: boolean) => void;
   setReplay: (container: string, allow: boolean) => void;
+  unbury: (trackId: string) => void;
   hydrateRemote: (payload: {
     liked: Track[];
     discoveries: Track[];
@@ -521,6 +529,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setAutoAdvance: (value: boolean) => dispatch({ type: "SET_AUTO_ADVANCE", value }),
       setReplay: (container: string, allow: boolean) =>
         dispatch({ type: "SET_REPLAY", container, allow }),
+      unbury: (trackId: string) => dispatch({ type: "UNBURY", trackId }),
       hydrateRemote: (payload: {
         liked: Track[];
         discoveries: Track[];
