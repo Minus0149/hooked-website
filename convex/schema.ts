@@ -46,6 +46,14 @@ export default defineSchema({
     permissions: v.optional(v.array(v.string())),
     suspended: v.optional(v.boolean()), // suspended users can't write swipes
     saveTarget,
+    /**
+     * Containers whose songs are allowed back into the deck: "liked",
+     * "discoveries" or "pl:<id>". Saving something normally takes it out of
+     * rotation — you already have it — but a playlist someone treats as a
+     * rotation rather than an archive should keep coming round, and only they
+     * know which is which.
+     */
+    replayContainers: v.optional(v.array(v.string())),
   }).index("by_userId", ["userId"]),
 
   playlists: defineTable({
@@ -80,6 +88,19 @@ export default defineSchema({
     userId: v.string(),
     artist: v.string(),
   }).index("by_user_artist", ["userId", "artist"]),
+
+  /**
+   * Songs a listener has personally buried.
+   *
+   * Blocking the artist was never quite the same promise: "never play this
+   * again" is about the song, and a listener can dislike one track by someone
+   * they otherwise want more of. Nothing re-deals a track listed here, not even
+   * the fallback the deck reaches for when it runs low on fresh material.
+   */
+  neverTracks: defineTable({
+    userId: v.string(),
+    trackId: v.string(),
+  }).index("by_user_track", ["userId", "trackId"]),
 
   tracks: defineTable({
     ...trackFields,

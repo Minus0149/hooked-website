@@ -103,6 +103,7 @@ function Shell() {
     deletePlaylist,
     removeSong,
     setAutoAdvance,
+    setReplay,
     hydrateRemote,
     applyCatalog,
   } = useStore();
@@ -178,6 +179,18 @@ function Shell() {
   // keyed by user id, NOT by query nullability: a transient null frame from
   // the reactive query (token refresh etc.) must not re-trigger hydration —
   // a mid-session re-hydrate rebuilds the queue under the user's fingers
+  const setReplayMutation = useMutation(api.library.setReplayContainer);
+  /** Local first so the toggle is instant; the server is the record of truth. */
+  const handleReplay = useCallback(
+    (container: string, allow: boolean) => {
+      setReplay(container, allow);
+      if (signedIn) {
+        void setReplayMutation({ container, allow }).catch(() => undefined);
+      }
+    },
+    [setReplay, signedIn, setReplayMutation],
+  );
+
   const hydratedFor = useRef<string | null>(null);
   const sessionUid = session.data?.user?.id ?? null;
   useEffect(() => {
@@ -197,6 +210,8 @@ function Shell() {
           tracks: p.songs.map(toLocal),
         })),
         neverArtists: library.neverArtists,
+        neverTracks: library.neverTracks ?? [],
+        replayContainers: library.replayContainers ?? [],
         saveTarget: library.saveTarget as SaveTarget,
       });
     }
@@ -431,6 +446,7 @@ function Shell() {
               onOpenProfile={() => setView("profile")}
               onOpenSaveTarget={() => setSheetOpen(true)}
               onAutoAdvance={setAutoAdvance}
+              onReplay={handleReplay}
               onReplayTutorial={() => {
                 localStorage.removeItem(ONBOARD_KEY);
                 setOnboarded(false);

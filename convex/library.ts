@@ -89,6 +89,10 @@ export const getLibrary = query({
       .query("neverArtists")
       .withIndex("by_user_artist", (q) => q.eq("userId", userId))
       .collect();
+    const buried = await ctx.db
+      .query("neverTracks")
+      .withIndex("by_user_track", (q) => q.eq("userId", userId))
+      .collect();
     const playlists = await ctx.db
       .query("playlists")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -103,6 +107,8 @@ export const getLibrary = query({
         songs: songs.filter((s) => s.playlistId === p._id),
       })),
       neverArtists: never.map((n) => n.artist),
+      neverTracks: buried.map((n) => n.trackId),
+      replayContainers: profile?.replayContainers ?? [],
       saveTarget: profile?.saveTarget ?? "liked",
       isAdmin: profile?.isAdmin ?? false,
       permissions: profile?.permissions ?? [],
@@ -258,6 +264,21 @@ export const recordSwipe = mutation({
       }
     }
     if (action === "never") {
+      // the song itself, permanently — the artist block below is a separate,
+      // broader promise and a listener may lift it later
+      const buriedAlready = await ctx.db
+        .query("neverTracks")
+        .withIndex("by_user_track", (q) =>
+          q.eq("userId", user.id).eq("trackId", safeTrack.trackId),
+        )
+        .unique();
+      if (!buriedAlready) {
+        await ctx.db.insert("neverTracks", {
+          userId: user.id,
+          trackId: safeTrack.trackId,
+        });
+      }
+
       const existing = await ctx.db
         .query("neverArtists")
         .withIndex("by_user_artist", (q) =>
@@ -314,6 +335,49 @@ export const revertSwipe = mutation({
         .unique();
       if (entry) await ctx.db.delete(entry._id);
     }
+  },
+});
+
+/**
+ * Let a container's songs back into the deck, or take them out again.
+ *
+ * `container` is "liked", "discoveries" or "pl:<playlistId>". The default for
+ * everything is out — saving a song is normally a reason to stop showing it.
+ */
+export const setReplayContainer = mutation({
+  args: { container: v.string(), allow: v.boolean() },
+  handler: async (ctx, { container, allow }) => {
+    const user = await requireUser(ctx);
+    const profile = await getProfile(ctx, user.id);
+    if (!profile) throw new Error("No profile");
+    ensureActiveProfile(profile);
+    await enforceRateLimit(ctx, `replay:${user.id}`, 120, 60_000);
+
+    // validate rather than trusting the string: a playlist id has to be one of
+    // this user's, so a stray value can't quietly disable their filtering
+    const target = await validateSaveTarget(ctx, user.id, cleanText(container, 80));
+
+    const current = new Set(profile.replayContainers ?? []);
+    if (allow) current.add(target);
+    else current.delete(target);
+    await ctx.db.patch(profile._id, { replayContainers: [...current] });
+    return [...current];
+  },
+});
+
+/** Lift a song out of the buried list, so it can come round again. */
+export const unburyTrack = mutation({
+  args: { trackId: v.string() },
+  handler: async (ctx, { trackId }) => {
+    const user = await requireUser(ctx);
+    await enforceRateLimit(ctx, `unbury:${user.id}`, 120, 60_000);
+    const row = await ctx.db
+      .query("neverTracks")
+      .withIndex("by_user_track", (q) =>
+        q.eq("userId", user.id).eq("trackId", cleanText(trackId, 120)),
+      )
+      .unique();
+    if (row) await ctx.db.delete(row._id);
   },
 });
 
