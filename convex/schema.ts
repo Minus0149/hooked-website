@@ -112,14 +112,35 @@ export default defineSchema({
     active: v.boolean(),
     createdBy: v.string(),
     source: v.union(v.literal("curated"), v.literal("artist")),
-    // denormalised so "which hook actually lands" is answerable without
-    // scanning the whole swipes table
+    // Where this hook currently sits in the running order, recomputed on a
+    // schedule from hookStats. It lives here rather than being derived at read
+    // time so that tracks.list depends only on rows that almost never change.
+    rank: v.optional(v.number()),
+  })
+    .index("by_trackId", ["trackId"])
+    .index("by_active", ["active"]),
+
+  /**
+   * Play counters, deliberately kept out of `hooks`.
+   *
+   * Every swipe credits the hook that was on screen. While those counters sat
+   * on the hook row itself, one person swiping rewrote a row that tracks.list
+   * reads — which invalidated the whole catalogue query for every connected
+   * client, who then re-read every track and every hook. At 118 songs that was
+   * survivable; at a thousand it is thousands of documents re-read per swipe.
+   *
+   * Splitting them means hook rows stay still, tracks.list stays cached, and
+   * the write cost of a swipe is one small document.
+   */
+  hookStats: defineTable({
+    hookId: v.id("hooks"),
+    trackId: v.string(),
     plays: v.number(),
     saves: v.number(),
     skips: v.number(),
   })
-    .index("by_trackId", ["trackId"])
-    .index("by_active", ["active"]),
+    .index("by_hookId", ["hookId"])
+    .index("by_trackId", ["trackId"]),
 
   /** Artists who want to publish their own music. Approved by an admin. */
   creators: defineTable({

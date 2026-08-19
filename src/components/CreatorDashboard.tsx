@@ -30,6 +30,9 @@ type Hook = {
   label?: string;
   order: number;
   active: boolean;
+  // written by the hourly ranking job; absent until a hook has earned one
+  rank?: number;
+  // joined from hookStats - they are not stored on the hook itself
   plays: number;
   saves: number;
   skips: number;
@@ -500,17 +503,14 @@ function TrackCard({ track }: { track: Track }) {
   // that runs past the end of the audio, so the only cap here is the count.
   const canAddMore = track.hooks.length < (hasFullAudio ? 6 : 3);
 
-  // Mirrors the ordering in tracks.list: enough plays to mean something, best
-  // save rate wins, otherwise the creator's own order stands.
+  // Mirrors the ordering in tracks.list, which reads the rank the hourly job
+  // writes rather than recomputing from live counters.
   const leadingHookId =
     track.hooks.length > 1
       ? [...track.hooks]
           .filter((h) => h.active)
-          .sort(
-            (a, b) =>
-              (b.plays >= 20 ? b.saves / b.plays : -1) -
-                (a.plays >= 20 ? a.saves / a.plays : -1) || a.order - b.order,
-          )[0]?._id
+          .sort((a, b) => (a.rank ?? a.order) - (b.rank ?? b.order) || a.order - b.order)[0]
+          ?._id
       : null;
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -602,8 +602,8 @@ function TrackCard({ track }: { track: Track }) {
 
       {leadingHookId && (
         <p className="creator-leading">
-          The deck plays the best-performing hook first once it has 20 plays to
-          judge by — right now that's{" "}
+          The deck leads with whichever hook earns it, 20 plays minimum,
+          worked out once an hour. Right now that's{" "}
           <b>
             {track.hooks.find((h) => h._id === leadingHookId)?.label ||
               `hook ${(track.hooks.findIndex((h) => h._id === leadingHookId) ?? 0) + 1}`}

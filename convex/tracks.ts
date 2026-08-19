@@ -12,8 +12,12 @@ import {
  * Public feed catalog — hidden tracks are excluded for everyone.
  *
  * Each track carries its hooks, ordered best-first: the window with the highest
- * save rate leads, so the catalogue tunes itself as the counters fill in. Ties
- * and untested hooks fall back to the creator's own order.
+ * save rate leads, so the catalogue tunes itself as listeners answer. Ties and
+ * untested hooks fall back to the creator's own order.
+ *
+ * Nothing this query reads is written by a swipe. That's deliberate — it is
+ * every client's most expensive query, and it should only recompute when the
+ * catalogue genuinely changes.
  */
 export const list = query({
   args: {},
@@ -29,10 +33,11 @@ export const list = query({
             .collect()
         ).filter((h) => h.active);
 
-        // enough plays to mean something, otherwise the creator's order stands
-        const rate = (h: { plays: number; saves: number }) =>
-          h.plays >= 20 ? h.saves / h.plays : -1;
-        hooks.sort((a, b) => rate(b) - rate(a) || a.order - b.order);
+        // `rank` is recomputed on a schedule from hookStats (see crons.ts);
+        // until a hook has earned one, the creator's own order stands. Reading
+        // a stored number rather than live counters is what keeps this query
+        // cacheable — see the note on the hookStats table.
+        hooks.sort((a, b) => (a.rank ?? a.order) - (b.rank ?? b.order) || a.order - b.order);
 
         return {
           ...track,

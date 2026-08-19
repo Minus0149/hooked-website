@@ -121,10 +121,26 @@ export const dashboard = query({
           .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))
           .collect();
         hooks.sort((a, b) => a.order - b.order);
+        // counters live in hookStats now; the dashboard still wants them, so
+        // they're joined here rather than denormalised back onto the hook
+        const withStats = await Promise.all(
+          hooks.map(async (hook) => {
+            const stats = await ctx.db
+              .query("hookStats")
+              .withIndex("by_hookId", (q) => q.eq("hookId", hook._id))
+              .unique();
+            return {
+              ...hook,
+              plays: stats?.plays ?? 0,
+              saves: stats?.saves ?? 0,
+              skips: stats?.skips ?? 0,
+            };
+          }),
+        );
         return {
           ...track,
           audioUrl: track.audioStorageId ? await ctx.storage.getUrl(track.audioStorageId) : null,
-          hooks,
+          hooks: withStats,
         };
       }),
     );
@@ -295,9 +311,6 @@ export const upsertHook = mutation({
       active: args.active ?? true,
       createdBy: user.id,
       source: curator ? "curated" : "artist",
-      plays: 0,
-      saves: 0,
-      skips: 0,
     });
     return { hookId };
   },

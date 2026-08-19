@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { internalMutation, mutation } from "./_generated/server";
 import { enforceRateLimit, requirePermission } from "./security";
 
 /**
@@ -84,9 +84,6 @@ export const backfill = mutation({
           active: true,
           createdBy: "system:backfill",
           source: "curated",
-          plays: 0,
-          saves: 0,
-          skips: 0,
         });
         created++;
       }
@@ -94,5 +91,65 @@ export const backfill = mutation({
     }
 
     return { tracksFilled: filled, hooksCreated: created, remaining: tracks.length - filled };
+  },
+});
+
+/**
+ * Turn play counts into a running order.
+ *
+ * Called on a schedule rather than on every swipe. A swipe writes one small
+ * hookStats row; this is the only thing that touches the hook rows the
+ * catalogue query reads, so the expensive invalidation happens hourly instead
+ * of thousands of times an hour.
+ *
+ * A hook needs real evidence before it is allowed to jump the queue — below
+ * that, the order its creator chose stands.
+ */
+const ENOUGH_PLAYS = 20;
+
+export const rerank = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const stats = await ctx.db.query("hookStats").collect();
+    if (stats.length === 0) return { tracks: 0, changed: 0 };
+
+    const byTrack = new Map<string, typeof stats>();
+    for (const s of stats) {
+      const list = byTrack.get(s.trackId) ?? [];
+      list.push(s);
+      byTrack.set(s.trackId, list);
+    }
+
+    let changed = 0;
+    for (const [trackId, rows] of byTrack) {
+      const hooks = await ctx.db
+        .query("hooks")
+        .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
+        .collect();
+      if (hooks.length < 2) continue;
+
+      const rateOf = new Map(
+        rows.map((r) => [
+          String(r.hookId),
+          r.plays >= ENOUGH_PLAYS ? r.saves / r.plays : -1,
+        ]),
+      );
+
+      const ordered = [...hooks].sort((a, b) => {
+        const ra = rateOf.get(String(a._id)) ?? -1;
+        const rb = rateOf.get(String(b._id)) ?? -1;
+        return rb - ra || a.order - b.order;
+      });
+
+      for (const [rank, hook] of ordered.entries()) {
+        // only write when it actually moved, so an unchanged catalogue costs
+        // nothing and leaves the query cache alone
+        if (hook.rank !== rank) {
+          await ctx.db.patch(hook._id, { rank });
+          changed++;
+        }
+      }
+    }
+    return { tracks: byTrack.size, changed };
   },
 });

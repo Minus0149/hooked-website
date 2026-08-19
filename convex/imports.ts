@@ -218,9 +218,6 @@ export const finishImport = internalMutation({
           active: true,
           createdBy: run.userId,
           source: curator ? "curated" : "artist",
-          plays: 0,
-          saves: 0,
-          skips: 0,
         });
       }
       added++;

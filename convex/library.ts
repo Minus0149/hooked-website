@@ -231,11 +231,30 @@ export const recordSwipe = mutation({
     if (hookId) {
       const hook = await ctx.db.get(hookId);
       if (hook && hook.trackId === safeTrack.trackId) {
-        await ctx.db.patch(hookId, {
-          plays: hook.plays + 1,
-          saves: hook.saves + (action === "save" || action === "more" ? 1 : 0),
-          skips: hook.skips + (action === "skip" ? 1 : 0),
-        });
+        // hookStats, not the hook itself — the hook row is read by every
+        // client's catalogue query, and writing to it here would invalidate
+        // that query on every swipe anyone makes
+        const stats = await ctx.db
+          .query("hookStats")
+          .withIndex("by_hookId", (q) => q.eq("hookId", hookId))
+          .unique();
+        const saved = action === "save" || action === "more" ? 1 : 0;
+        const skipped = action === "skip" ? 1 : 0;
+        if (stats) {
+          await ctx.db.patch(stats._id, {
+            plays: stats.plays + 1,
+            saves: stats.saves + saved,
+            skips: stats.skips + skipped,
+          });
+        } else {
+          await ctx.db.insert("hookStats", {
+            hookId,
+            trackId: hook.trackId,
+            plays: 1,
+            saves: saved,
+            skips: skipped,
+          });
+        }
       }
     }
     if (action === "never") {

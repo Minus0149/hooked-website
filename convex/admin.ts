@@ -154,12 +154,13 @@ export const analytics = query({
     const today = dayOf(now);
     const from = today - (span - 1);
 
-    const [swipes, profiles, tracks, hooks, requests, creators, library] =
+    const [swipes, profiles, tracks, hooks, hookStats, requests, creators, library] =
       await Promise.all([
         ctx.db.query("swipes").collect(),
         ctx.db.query("profiles").collect(),
         ctx.db.query("tracks").collect(),
         ctx.db.query("hooks").collect(),
+        ctx.db.query("hookStats").collect(),
         ctx.db.query("accessRequests").collect(),
         ctx.db.query("creators").collect(),
         ctx.db.query("librarySongs").collect(),
@@ -312,12 +313,16 @@ export const analytics = query({
     }
 
     // ---- does a second hook ever beat the first? ------------------------
+    const statOf = new Map(hookStats.map((s) => [String(s.hookId), s]));
+    const counts = (id: string) => statOf.get(id) ?? { plays: 0, saves: 0, skips: 0 };
+
     const byPosition = new Map<number, { plays: number; saves: number; hooks: number }>();
     for (const h of hooks) {
       if (!h.active) continue;
+      const c = counts(String(h._id));
       const slot = byPosition.get(h.order) ?? { plays: 0, saves: 0, hooks: 0 };
-      slot.plays += h.plays;
-      slot.saves += h.saves;
+      slot.plays += c.plays;
+      slot.saves += c.saves;
       slot.hooks++;
       byPosition.set(h.order, slot);
     }
@@ -334,20 +339,23 @@ export const analytics = query({
 
     const titleFor = new Map(tracks.map((t) => [t.trackId, t]));
     const scored = hooks
-      .filter((h) => h.active && h.plays >= 10)
-      .map((h) => ({
-        hookId: h._id,
-        trackId: h.trackId,
-        title: titleFor.get(h.trackId)?.title ?? h.trackId,
-        artist: titleFor.get(h.trackId)?.artist ?? "",
-        artwork: titleFor.get(h.trackId)?.artwork ?? "",
-        label: h.label,
-        order: h.order,
-        startMs: h.startMs,
-        plays: h.plays,
-        saves: h.saves,
-        rate: h.saves / h.plays,
-      }))
+      .filter((h) => h.active && counts(String(h._id)).plays >= 10)
+      .map((h) => {
+        const c = counts(String(h._id));
+        return {
+          hookId: h._id,
+          trackId: h.trackId,
+          title: titleFor.get(h.trackId)?.title ?? h.trackId,
+          artist: titleFor.get(h.trackId)?.artist ?? "",
+          artwork: titleFor.get(h.trackId)?.artwork ?? "",
+          label: h.label,
+          order: h.order,
+          startMs: h.startMs,
+          plays: c.plays,
+          saves: c.saves,
+          rate: c.saves / c.plays,
+        };
+      })
       .sort((a, b) => b.rate - a.rate);
 
     // ---- creators -------------------------------------------------------

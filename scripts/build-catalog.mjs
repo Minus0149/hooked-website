@@ -321,9 +321,6 @@ for (const entry of withHooks.filter(Boolean)) {
       active: true,
       createdBy: "system:catalog",
       source: "curated",
-      plays: 0,
-      saves: 0,
-      skips: 0,
     });
   });
 }
