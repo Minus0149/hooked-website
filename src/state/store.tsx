@@ -9,7 +9,13 @@ import {
 import type { Playlist, SaveTarget, SwipeAction, Track } from "../types";
 import catalogJson from "../data/catalog.json";
 
-const CATALOG = catalogJson as Track[];
+/**
+ * Songs shipped inside the bundle. They are the offline fallback and the very
+ * first deck a new visitor sees — the real catalogue lives in Convex and
+ * replaces this the moment tracks.list answers, which is also the only way
+ * hooks, creator uploads and imports ever reach the deck.
+ */
+const BAKED = catalogJson as Track[];
 const PERSIST_KEY = "hooked.library.v2";
 
 export interface HistoryEntry {
@@ -33,6 +39,9 @@ export interface AppState {
   // server-allowed track ids (admin can hide tracks); null until known —
   // refills must respect this or hidden tracks get re-dealt
   allowedIds: string[] | null;
+  // every track the deck may deal, carrying its hooks. Starts as the baked
+  // list and is replaced by the server's.
+  catalog: Track[];
 }
 
 type Action =
@@ -54,9 +63,10 @@ type Action =
       saveTarget: SaveTarget;
     }
   | {
-      // server catalog arrived: drop tracks an admin has hidden
+      // the server catalogue arrived: it replaces the baked one wholesale,
+      // which is what brings hooks and creator tracks into the deck
       type: "APPLY_CATALOG";
-      ids: string[];
+      tracks: Track[];
     };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -89,12 +99,12 @@ function loadPersisted() {
   }
 }
 
-function buildQueue(exclude: Set<string>, neverArtists: string[]): Track[] {
-  const fresh = CATALOG.filter(
+function buildQueue(catalog: Track[], exclude: Set<string>, neverArtists: string[]): Track[] {
+  const fresh = catalog.filter(
     (t) => !exclude.has(t.id) && !neverArtists.includes(t.artist),
   );
   // If the user has heard everything, loop the catalog rather than dead-ending
-  const pool = fresh.length > 4 ? fresh : CATALOG.filter((t) => !neverArtists.includes(t.artist));
+  const pool = fresh.length > 4 ? fresh : catalog.filter((t) => !neverArtists.includes(t.artist));
   return shuffle(pool);
 }
 
@@ -149,7 +159,8 @@ function initState(): AppState {
   const neverArtists = saved?.neverArtists ?? [];
   const inLibrary = libraryIds({ liked, discoveries, playlists });
   return {
-    queue: spreadAlbums(buildQueue(inLibrary, neverArtists)),
+    catalog: BAKED,
+    queue: spreadAlbums(buildQueue(BAKED, inLibrary, neverArtists)),
     history: [],
     liked,
     discoveries,
@@ -226,7 +237,7 @@ function reducer(state: AppState, action: Action): AppState {
           ...state.history.slice(-12).map((h) => h.track.id),
         ]);
         // refills must skip admin-hidden tracks too
-        const pickable = CATALOG.filter((t) => !allowed || allowed.has(t.id));
+        const pickable = state.catalog.filter((t) => !allowed || allowed.has(t.id));
         const fresh = pickable.filter(
           (t) =>
             !inLibrary.has(t.id) &&
@@ -317,7 +328,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "JUMP_TO": {
       const target =
         state.queue.find((t) => t.id === action.trackId) ??
-        CATALOG.find((t) => t.id === action.trackId);
+        state.catalog.find((t) => t.id === action.trackId);
       if (!target) return state;
       return {
         ...state,
@@ -344,7 +355,7 @@ function reducer(state: AppState, action: Action): AppState {
       if (queue.length < 3) {
         const queued = new Set(queue.map((t) => t.id));
         const allowed = state.allowedIds ? new Set(state.allowedIds) : null;
-        const pickable = CATALOG.filter((t) => !allowed || allowed.has(t.id));
+        const pickable = state.catalog.filter((t) => !allowed || allowed.has(t.id));
         const fresh = pickable.filter(
           (t) =>
             !inLibrary.has(t.id) &&
@@ -369,21 +380,32 @@ function reducer(state: AppState, action: Action): AppState {
     }
 
     case "APPLY_CATALOG": {
-      const allowed = new Set(action.ids);
-      const queue = state.queue.filter((t) => allowed.has(t.id));
-      // idempotent: if nothing was hidden, return the SAME state object
-      // (apart from recording allowedIds once) — a fresh object every
-      // dispatch fed the render loop
-      const sameQueue = queue.length === state.queue.length || queue.length === 0;
+      const ids = action.tracks.map((t) => t.id);
+      // Idempotent: tracks.list is reactive and re-fires on every hook counter
+      // update, so returning a fresh object each time would feed the render
+      // loop. Same ids in the same order means nothing to do.
       const sameIds =
         state.allowedIds !== null &&
-        state.allowedIds.length === action.ids.length &&
-        state.allowedIds.every((id, i) => id === action.ids[i]);
-      if (sameQueue && sameIds) return state;
+        state.allowedIds.length === ids.length &&
+        state.allowedIds.every((id, i) => id === ids[i]);
+      if (sameIds) return state;
+
+      // Keep the card the user is looking at if the server still carries it,
+      // but rebuild everything behind it from the new catalogue. Filtering the
+      // old queue instead would empty the deck whenever the server list isn't
+      // a superset of the baked one.
+      const head = state.queue[0];
+      const allowed = new Set(ids);
+      const keepHead = head && allowed.has(head.id) ? head : null;
+      const exclude = libraryIds(state);
+      if (keepHead) exclude.add(keepHead.id);
+
+      const rest = buildQueue(action.tracks, exclude, state.neverArtists);
       return {
         ...state,
-        allowedIds: action.ids,
-        queue: sameQueue ? state.queue : queue,
+        catalog: action.tracks,
+        allowedIds: ids,
+        queue: spreadAlbums(uniqueById(keepHead ? [keepHead, ...rest] : rest)),
       };
     }
   }
@@ -406,7 +428,7 @@ interface StoreValue {
     neverArtists: string[];
     saveTarget: SaveTarget;
   }) => void;
-  applyCatalog: (ids: string[]) => void;
+  applyCatalog: (tracks: Track[]) => void;
   catalog: Track[];
 }
 
@@ -444,13 +466,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         neverArtists: string[];
         saveTarget: SaveTarget;
       }) => dispatch({ type: "HYDRATE_REMOTE", ...payload }),
-      applyCatalog: (ids: string[]) => dispatch({ type: "APPLY_CATALOG", ids }),
+      applyCatalog: (tracks: Track[]) => dispatch({ type: "APPLY_CATALOG", tracks }),
     }),
     [],
   );
 
   const value = useMemo<StoreValue>(
-    () => ({ state, ...actions, catalog: CATALOG }),
+    () => ({ state, ...actions, catalog: state.catalog }),
     [state, actions],
   );
 

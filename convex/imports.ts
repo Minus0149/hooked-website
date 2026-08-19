@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { action, internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
+import { planWindows } from "./hooks";
 import {
   MIN_CONFIDENCE,
   searchDeezer,
@@ -205,19 +206,23 @@ export const finishImport = internalMutation({
         ownerUserId: curator ? undefined : run.userId,
         origin: "import",
       });
-      await ctx.db.insert("hooks", {
-        trackId,
-        startMs: 0,
-        durationMs: PREVIEW_MS,
-        label: "preview",
-        order: 0,
-        active: true,
-        createdBy: run.userId,
-        source: curator ? "curated" : "artist",
-        plays: 0,
-        saves: 0,
-        skips: 0,
-      });
+      // Three windows, not one block. An imported song has nobody to mark it
+      // by hand, and a single 30-second hook gives a listener one chance to
+      // catch it; the deck reorders these by save rate once they have plays.
+      for (const [order, w] of planWindows(PREVIEW_MS).entries()) {
+        await ctx.db.insert("hooks", {
+          trackId,
+          startMs: w.startMs,
+          durationMs: w.durationMs,
+          order,
+          active: true,
+          createdBy: run.userId,
+          source: curator ? "curated" : "artist",
+          plays: 0,
+          saves: 0,
+          skips: 0,
+        });
+      }
       added++;
     }
 

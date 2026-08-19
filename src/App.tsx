@@ -204,7 +204,10 @@ function Shell() {
 
   useEffect(() => {
     if (serverTracks && serverTracks.length > 0) {
-      applyCatalog(serverTracks.map((t) => t.trackId));
+      // Full tracks, not just ids. Passing ids only meant the deck kept
+      // dealing the bundled copies, so hooks, creator uploads and imported
+      // songs never reached a card.
+      applyCatalog(serverTracks.map(toLocal));
     }
   }, [serverTracks, applyCatalog]);
 

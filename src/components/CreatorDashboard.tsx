@@ -496,7 +496,9 @@ function TrackCard({ track }: { track: Track }) {
   // Without an upload, only the 30s preview is playable — the song's own length
   // would draw the hook bar against time nobody can hear.
   const ceilingMs = hasFullAudio ? (track.audioDurationMs ?? track.durationMs ?? 30_000) : 30_000;
-  const canAddMore = hasFullAudio || track.hooks.length === 0;
+  // A preview holds three 10s windows comfortably; the server rejects anything
+  // that runs past the end of the audio, so the only cap here is the count.
+  const canAddMore = track.hooks.length < (hasFullAudio ? 6 : 3);
 
   // Mirrors the ordering in tracks.list: enough plays to mean something, best
   // save rate wins, otherwise the creator's own order stands.
@@ -573,9 +575,9 @@ function TrackCard({ track }: { track: Track }) {
           <span>{track.artist}{track.genre ? ` · ${track.genre}` : ""}</span>
           <span className="creator-audio-state">
             {hasFullAudio
-              ? `full audio · ${clock(ceilingMs)} · unlimited hooks`
+              ? `full audio · ${clock(ceilingMs)} · up to 6 hooks`
               : track.previewUrl
-                ? "30s preview only · one hook"
+                ? `30s preview · ${track.hooks.length}/3 hooks`
                 : "no audio yet"}
           </span>
         </div>
@@ -664,8 +666,9 @@ function TrackCard({ track }: { track: Track }) {
         </div>
       ) : (
         <p className="creator-note">
-          This track only has a 30-second preview, which is a single window. Upload the
-          full audio to mark more than one hook.
+          {hasFullAudio
+            ? "Six hooks is plenty for one song."
+            : "That's every window a 30-second preview holds. Upload the full track to cut hooks from anywhere in the song."}
         </p>
       )}
 

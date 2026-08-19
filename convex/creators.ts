@@ -281,11 +281,10 @@ export const upsertHook = mutation({
     if (existing.length >= MAX_HOOKS_PER_TRACK) {
       throw new Error(`${MAX_HOOKS_PER_TRACK} hooks is plenty for one song`);
     }
-    if (!track.audioStorageId && existing.length >= 1) {
-      throw new Error(
-        "This track only has a 30-second preview, which is a single window — upload the full audio to mark more than one hook",
-      );
-    }
+    // A preview used to be treated as one indivisible window. It isn't: 30
+    // seconds holds three distinct 10-second parts, which is what the deck now
+    // deals by default. The ceiling check above is the real limit — hooks have
+    // to fit inside the audio that exists, and for a preview that's 30s.
 
     const hookId = await ctx.db.insert("hooks", {
       trackId: track.trackId,
