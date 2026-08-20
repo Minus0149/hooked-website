@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "../lib/auth-client";
+import { ReplayRules } from "./settings/ReplayRules";
 import { useStore } from "../state/store";
 import { IconBack, IconCheck, IconFolder, IconHeart, IconUser } from "./icons";
 
@@ -104,73 +105,7 @@ export function SettingsScreen({
           </span>
         </button>
 
-        <p className="settings-group">what comes back</p>
-        <p className="settings-note">
-          Saving a song normally takes it out of the deck — you already have it.
-          Turn a list back on if you treat it as a rotation rather than an
-          archive. Songs you swiped left on stay gone either way.
-        </p>
-        {[
-          { id: "liked", name: "Liked songs", count: state.liked.length },
-          { id: "discoveries", name: "Discoveries", count: state.discoveries.length },
-          ...state.playlists.map((p) => ({
-            id: `pl:${p.id}`,
-            name: p.name,
-            count: p.tracks.length,
-          })),
-        ].map((container) => {
-          const on = state.replayContainers.includes(container.id);
-          return (
-            <button
-              key={container.id}
-              className="settings-row"
-              onClick={() => onReplay(container.id, !on)}
-            >
-              <span className="settings-row-icon" style={{ color: "var(--save)" }}>
-                ↻
-              </span>
-              <span className="settings-row-label">
-                {container.name}
-                <small>
-                  {container.count} song{container.count === 1 ? "" : "s"} ·{" "}
-                  {on ? "can come round again" : "kept out of the deck"}
-                </small>
-              </span>
-              <span className={`toggle ${on ? "on" : ""}`}>
-                <span className="toggle-knob" />
-              </span>
-            </button>
-          );
-        })}
-        {state.neverTracks.length > 0 && (
-          <>
-            <p className="settings-note">
-              {state.neverTracks.length} song
-              {state.neverTracks.length === 1 ? "" : "s"} buried with a left
-              swipe. They never come back on their own — dig one out if you
-              changed your mind.
-            </p>
-            {state.neverTracks.map((id) => {
-              const t = state.catalog.find((c) => c.id === id);
-              return (
-                <button
-                  key={id}
-                  className="settings-row"
-                  onClick={() => onUnbury(id)}
-                >
-                  <span className="settings-row-icon" style={{ color: "var(--never)" }}>
-                    ✕
-                  </span>
-                  <span className="settings-row-label">
-                    {t ? t.title : "a song no longer in the catalogue"}
-                    <small>{t ? t.artist : id}</small>
-                  </span>
-                  <span className="settings-row-value">dig out</span>
-                </button>
-              );
-            })}
-          </>
-        )}
+        <ReplayRules state={state} onReplay={onReplay} onUnbury={onUnbury} />
 
         <p className="settings-group">account</p>
         <button className="settings-row" onClick={onOpenProfile}>

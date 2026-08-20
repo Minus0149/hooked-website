@@ -21,6 +21,18 @@ CLIPS = os.path.join(OUT_DIR, "clips")
 RAW = os.path.join(OUT_DIR, "raw")
 URL = "http://localhost:4321/"
 VIEW = {"width": 430, "height": 932}
+# Playwright's video recorder and the CDP screencast both capture at CSS pixels
+# — 430x932 here — whatever DPI the context is set to, and scaling that up to
+# 1080x1920 is what made the first takes blocky. A screenshot honours
+# deviceScaleFactor, so 3x captures 1290x2796 and delivery is a downscale.
+#
+# The trade is rate: ~16fps at 3x, ~8fps at 5x. So motion is slow and
+# deliberate rather than fast and stuttering. 4K is deliberately not attempted:
+# Instagram re-encodes Reels to 1080x1920, so it would be discarded, and the
+# frame rate needed to reach it judders.
+DSF = 3
+FPS = 30
+JPEG_QUALITY = 94
 
 problems = []
 # seconds of browser boot to cut off the front of each clip
@@ -40,33 +52,52 @@ class Scene:
         self.dir = os.path.join(RAW, name)
 
     async def __aenter__(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
         os.makedirs(self.dir, exist_ok=True)
         self.browser = await self.pw.chromium.launch(
             channel="msedge", args=["--autoplay-policy=no-user-gesture-required"]
         )
         self.ctx = await self.browser.new_context(
             viewport=VIEW,
-            device_scale_factor=2,
+            device_scale_factor=DSF,
             is_mobile=True,
             has_touch=True,
             reduced_motion="no-preference",
-            record_video_dir=self.dir,
-            record_video_size=VIEW,
         )
         self.pg = await self.ctx.new_page()
-        # Recording starts the moment the context exists, so the browser
-        # launching and the app booting land at the head of every clip as dead
-        # air — 21 seconds of it in the first take. Note when the app is
-        # actually ready and trim exactly that much off the front.
-        self.started = time.monotonic()
-        self.lead_in = 0.0
+        # capture starts only once the app is up, so there is no boot dead air
+        self.grabbing = False
         return self
 
     async def __aexit__(self, *exc):
+        await self.stop()
         await self.ctx.close()
         await self.browser.close()
-        LEAD_IN[self.name] = self.lead_in
-        log(f"   (trimming {self.lead_in:.1f}s of boot from the head)")
+
+    async def _grab(self):
+        """Screenshot as fast as the browser will allow, in the background."""
+        i = 0
+        while self.grabbing:
+            try:
+                shot = await self.pg.screenshot(type="jpeg", quality=JPEG_QUALITY)
+            except Exception:
+                break  # page closing under us
+            with open(os.path.join(self.dir, f"{i:05d}.jpg"), "wb") as f:
+                f.write(shot)
+            i += 1
+
+    async def start(self):
+        self.grabbing = True
+        self.task = asyncio.ensure_future(self._grab())
+
+    async def stop(self):
+        if not self.grabbing:
+            return
+        self.grabbing = False
+        try:
+            await asyncio.wait_for(self.task, timeout=6)
+        except Exception:
+            pass
 
     async def open(self, fresh=True):
         if fresh:
@@ -81,8 +112,8 @@ class Scene:
             )
         await self.pg.goto(URL, wait_until="networkidle")
         await self.pg.wait_for_timeout(1400)
-        # keep a beat of the first screen, not twenty seconds of it
-        self.lead_in = max(0.0, time.monotonic() - self.started - 1.0)
+        await self.start()
+        await self.pg.wait_for_timeout(900)
 
     async def click(self, selector, expect=None, label=None, wait=900):
         """Click, then prove the screen moved. Raises rather than pretending."""
@@ -115,9 +146,9 @@ class Scene:
         before = await self.pg.locator(".card-title").first.inner_text()
         await self.pg.mouse.move(cx, cy)
         await self.pg.mouse.down()
-        for i in range(1, 23):
-            await self.pg.mouse.move(cx + dx * i / 22, cy + dy * i / 22)
-            await self.pg.wait_for_timeout(9)
+        for i in range(1, 27):
+            await self.pg.mouse.move(cx + dx * i / 26, cy + dy * i / 26)
+            await self.pg.wait_for_timeout(45)
         await self.pg.mouse.up()
         await self.pg.wait_for_timeout(settle)
         # the gate is the usual reason a swipe appears to do nothing
@@ -189,9 +220,9 @@ async def gate(pw):
         cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
         await s.pg.mouse.move(cx, cy)
         await s.pg.mouse.down()
-        for i in range(1, 23):
-            await s.pg.mouse.move(cx, cy + 260 * i / 22)
-            await s.pg.wait_for_timeout(9)
+        for i in range(1, 27):
+            await s.pg.mouse.move(cx, cy + 260 * i / 26)
+            await s.pg.wait_for_timeout(45)
         await s.pg.mouse.up()
         try:
             await s.pg.locator(".gate-overlay").first.wait_for(state="visible", timeout=6000)
@@ -232,20 +263,22 @@ async def settings(pw):
 
 
 def encode(scene, name):
-    """Scale to a 1080x1920 canvas. Fit to height — 1080 wide overflows."""
+    """Assemble the captured frames and downscale 1290x2796 -> 1080x1920."""
     d = os.path.join(RAW, scene)
-    vids = [f for f in os.listdir(d) if f.endswith(".webm")] if os.path.isdir(d) else []
-    if not vids:
-        problems.append(f"{scene}: nothing recorded")
+    shots = sorted(f for f in os.listdir(d) if f.endswith(".jpg")) if os.path.isdir(d) else []
+    if len(shots) < 8:
+        problems.append(f"{scene}: only {len(shots)} frames captured")
         return None
-    src = os.path.join(d, sorted(vids)[-1])
     os.makedirs(CLIPS, exist_ok=True)
     out = os.path.join(CLIPS, name + ".mp4")
-    trim = LEAD_IN.get(scene, 0.0)
     r = subprocess.run(
-        ["ffmpeg", "-y", "-ss", f"{trim:.2f}", "-i", src, "-vf",
-         "scale=-2:1920:flags=lanczos,pad=1080:1920:(ow-iw)/2:0:color=#08080C",
-         "-r", "30", "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+        ["ffmpeg", "-y", "-framerate", "16", "-i", os.path.join(d, "%05d.jpg"),
+         # fit to HEIGHT: the phone is 430:932, narrower than 9:16, so scaling
+         # to 1080 wide overflows 1920 and the pad filter rejects it
+         "-vf", f"fps={FPS},scale=-2:1920:flags=lanczos,"
+                "pad=1080:1920:(ow-iw)/2:0:color=#08080C",
+         # visually lossless for flat UI colour
+         "-c:v", "libx264", "-preset", "slow", "-crf", "16",
          "-pix_fmt", "yuv420p", "-movflags", "+faststart", out],
         capture_output=True, text=True,
     )
@@ -253,7 +286,7 @@ def encode(scene, name):
         problems.append(f"{scene}: ffmpeg failed")
         log("   ffmpeg:", r.stderr[-300:])
         return None
-    log(f"   {name}.mp4  {os.path.getsize(out)//1024} KB")
+    log(f"   {name}.mp4  {os.path.getsize(out)//1024} KB  ({len(shots)} frames)")
     return out
 
 

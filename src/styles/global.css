@@ -2312,3 +2312,57 @@ button {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
+
+/* ---------- replay rules: your own lists, recognisable at a glance ---------- */
+.rr-list { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 14px; }
+.rr-item {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  text-align: left;
+  transition: border-color 0.2s, background 0.2s;
+}
+.rr-item.on {
+  border-color: color-mix(in srgb, var(--rr-accent, var(--accent)) 55%, var(--line));
+  background: color-mix(in srgb, var(--rr-accent, var(--accent)) 9%, transparent);
+}
+.rr-cover {
+  width: 48px; height: 48px; border-radius: 11px; overflow: hidden;
+  display: grid; flex: none;
+}
+.rr-cover-one { grid-template-columns: 1fr; }
+.rr-cover-quad { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.rr-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rr-cover-empty { border: 1px dashed var(--line); }
+.rr-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rr-meta strong {
+  font-size: 14px; color: var(--text); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rr-meta small { font-size: 11.5px; color: var(--muted); }
+.rr-state { display: flex; align-items: center; gap: 10px; flex: none; }
+/* the state in words, because a lone switch never says which way is which */
+.rr-state em {
+  font-style: normal; font-size: 11px; letter-spacing: 0.04em;
+  color: var(--muted); text-transform: lowercase;
+}
+.rr-item.on .rr-state em { color: var(--rr-accent, var(--accent)); }
+@media (max-width: 380px) {
+  .rr-state em { display: none; }
+}
+
+/* panels gained a heading row so a panel can own its own buttons */
+.panel-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; margin-bottom: 10px;
+}
+.panel-head h3 { margin: 0; }
+.panel-actions { display: flex; gap: 7px; flex: none; }
+.admin-empty-line { padding: 6px 0; }
+.admin-stat.is-bad { border-color: color-mix(in srgb, var(--never) 45%, var(--line)); }
