@@ -570,9 +570,14 @@ function Shell() {
       </div>
       <VolumeRail volume={volume} onVolume={setVolume} visible={inDiscover} />
       </div>
-      <p className="stage-caption">
-        drag the card · arrow keys work too · space to pause
-      </p>
+      {/* a hint about the deck, so it belongs only on the deck — it was
+          rendering at the app root and sitting over home, the library and
+          settings, where it means nothing and overlaps real rows */}
+      {inDiscover && (
+        <p className="stage-caption">
+          drag the card · arrow keys work too · space to pause
+        </p>
+      )}
     </div>
   );
 }

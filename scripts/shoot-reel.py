@@ -13,7 +13,7 @@ Two things worth knowing about this machine:
     That's the offline path working as designed and it films fine, but it does
     mean the signed-in screens (admin, creator) can't be shot yet.
 """
-import asyncio, os, shutil, subprocess, sys, time
+import asyncio, json, os, shutil, subprocess, sys, time, urllib.request
 from playwright.async_api import async_playwright, TimeoutError as PWTimeout
 
 OUT_DIR = r"F:\Videos\Insta\2nd Reel (Hooked)"
@@ -74,6 +74,20 @@ class Scene:
         await self.ctx.close()
         await self.browser.close()
 
+    async def _watch(self):
+        """Poll what is playing, so the soundtrack can be rebuilt in sync."""
+        while self.grabbing:
+            try:
+                state = await self.pg.evaluate(
+                    """() => (window.__played || [])
+                         .filter((a) => a.src && !a.paused && !a.ended)
+                         .map((a) => ({ src: a.src, t: a.currentTime }))[0] || null"""
+                )
+            except Exception:
+                break
+            self.audio.append((time.monotonic() - self.t0, state))
+            await asyncio.sleep(0.2)
+
     async def _grab(self):
         """Screenshot as fast as the browser will allow, in the background."""
         i = 0
@@ -88,16 +102,25 @@ class Scene:
 
     async def start(self):
         self.grabbing = True
+        self.t0 = time.monotonic()
+        self.audio = []
         self.task = asyncio.ensure_future(self._grab())
+        self.watch = asyncio.ensure_future(self._watch())
 
     async def stop(self):
         if not self.grabbing:
             return
         self.grabbing = False
-        try:
-            await asyncio.wait_for(self.task, timeout=6)
-        except Exception:
-            pass
+        for t in (self.task, getattr(self, "watch", None)):
+            if t is None:
+                continue
+            try:
+                await asyncio.wait_for(t, timeout=6)
+            except Exception:
+                pass
+        # hand the playback log to the encoder
+        with open(os.path.join(self.dir, "audio.json"), "w", encoding="utf-8") as f:
+            json.dump(self.audio, f)
 
     async def open(self, fresh=True):
         if fresh:
@@ -110,6 +133,27 @@ class Scene:
                 "localStorage.removeItem('hooked.library.v2');"
                 "localStorage.removeItem('hooked.anonSwipes.v1');"
             )
+        # Keep a handle on every Audio the player builds.
+        #
+        # The soundtrack is rebuilt from the same preview files afterwards
+        # rather than captured off the sound card: loopback would mean routing
+        # this machine's default output through VB-Cable, and its audio runs
+        # through a Voicemeeter setup used for real work. Reconstruction is
+        # also simply better — no other app's notifications, no resampling,
+        # and the exact position the player was at.
+        await self.pg.add_init_script("""
+            (() => {
+              const Real = window.Audio;
+              window.__played = [];
+              const Wrapped = function (...args) {
+                const el = new Real(...args);
+                window.__played.push(el);
+                return el;
+              };
+              Wrapped.prototype = Real.prototype;
+              window.Audio = Wrapped;
+            })();
+        """)
         await self.pg.goto(URL, wait_until="networkidle")
         await self.pg.wait_for_timeout(1400)
         await self.start()
@@ -146,9 +190,11 @@ class Scene:
         before = await self.pg.locator(".card-title").first.inner_text()
         await self.pg.mouse.move(cx, cy)
         await self.pg.mouse.down()
-        for i in range(1, 27):
-            await self.pg.mouse.move(cx + dx * i / 26, cy + dy * i / 26)
-            await self.pg.wait_for_timeout(45)
+        # a flick, not a drag — a real swipe is fast and the video should look
+        # like one, even though 16fps only catches a few frames of it
+        for i in range(1, 11):
+            await self.pg.mouse.move(cx + dx * i / 10, cy + dy * i / 10)
+            await self.pg.wait_for_timeout(14)
         await self.pg.mouse.up()
         await self.pg.wait_for_timeout(settle)
         # the gate is the usual reason a swipe appears to do nothing
@@ -220,9 +266,9 @@ async def gate(pw):
         cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
         await s.pg.mouse.move(cx, cy)
         await s.pg.mouse.down()
-        for i in range(1, 27):
-            await s.pg.mouse.move(cx, cy + 260 * i / 26)
-            await s.pg.wait_for_timeout(45)
+        for i in range(1, 11):
+            await s.pg.mouse.move(cx, cy + 260 * i / 10)
+            await s.pg.wait_for_timeout(14)
         await s.pg.mouse.up()
         try:
             await s.pg.locator(".gate-overlay").first.wait_for(state="visible", timeout=6000)
@@ -262,6 +308,74 @@ async def settings(pw):
         await s.pg.wait_for_timeout(2800)
 
 
+def build_audio(scene):
+    """Rebuild what was playing, from the same preview files.
+
+    The watcher sampled (video time, src, position-in-track) five times a
+    second. Contiguous samples of one src become one segment: take that slice
+    of the preview and lay it at the video time it started. Gaps stay silent,
+    which is honest — nothing was playing there either.
+    """
+    d = os.path.join(RAW, scene)
+    log_path = os.path.join(d, "audio.json")
+    if not os.path.exists(log_path):
+        return None
+    with open(log_path, encoding="utf-8") as f:
+        samples = json.load(f)
+
+    segments = []
+    for at, state in samples:
+        if not state:
+            continue
+        src, pos = state["src"], state["t"]
+        last = segments[-1] if segments else None
+        # same file and time still moving forward -> the same segment
+        if last and last["src"] == src and pos >= last["pos"] - 0.5:
+            last["end"] = at
+            last["pos"] = pos
+        else:
+            segments.append({"src": src, "start": at, "end": at, "from": pos, "pos": pos})
+    segments = [s for s in segments if s["end"] - s["start"] > 0.6]
+    if not segments:
+        return None
+
+    cache = os.path.join(RAW, "_previews")
+    os.makedirs(cache, exist_ok=True)
+    parts, filters, labels = [], [], []
+    for i, seg in enumerate(segments):
+        name = str(abs(hash(seg["src"]))) + ".m4a"
+        path = os.path.join(cache, name)
+        if not os.path.exists(path):
+            try:
+                urllib.request.urlretrieve(seg["src"], path)
+            except Exception:
+                continue
+        dur = seg["end"] - seg["start"]
+        parts += ["-ss", f"{max(seg['from'] - 0.15, 0):.2f}", "-t", f"{dur:.2f}", "-i", path]
+        # a short fade each end so a cut never clicks
+        filters.append(
+            f"[{len(labels)}:a]afade=t=in:st=0:d=0.25,"
+            f"afade=t=out:st={max(dur - 0.35, 0):.2f}:d=0.35,"
+            f"adelay={int(seg['start'] * 1000)}|{int(seg['start'] * 1000)}[a{len(labels)}]"
+        )
+        labels.append(f"[a{len(labels)}]")
+    if not labels:
+        return None
+
+    out = os.path.join(d, "audio.m4a")
+    chain = ";".join(filters) + ";" + "".join(labels) + f"amix=inputs={len(labels)}:dropout_transition=0:normalize=0[out]"
+    r = subprocess.run(
+        ["ffmpeg", "-y", *parts, "-filter_complex", chain, "-map", "[out]",
+         "-c:a", "aac", "-b:a", "192k", out],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        log("   audio:", r.stderr[-300:])
+        return None
+    log(f"   audio: {len(segments)} segment(s)")
+    return out
+
+
 def encode(scene, name):
     """Assemble the captured frames and downscale 1290x2796 -> 1080x1920."""
     d = os.path.join(RAW, scene)
@@ -271,15 +385,18 @@ def encode(scene, name):
         return None
     os.makedirs(CLIPS, exist_ok=True)
     out = os.path.join(CLIPS, name + ".mp4")
+    audio = build_audio(scene)
+    extra = ["-i", audio] if audio else []
+    tail = (["-c:a", "aac", "-b:a", "192k", "-shortest"] if audio else ["-an"])
     r = subprocess.run(
-        ["ffmpeg", "-y", "-framerate", "16", "-i", os.path.join(d, "%05d.jpg"),
+        ["ffmpeg", "-y", "-framerate", "16", "-i", os.path.join(d, "%05d.jpg"), *extra,
          # fit to HEIGHT: the phone is 430:932, narrower than 9:16, so scaling
          # to 1080 wide overflows 1920 and the pad filter rejects it
          "-vf", f"fps={FPS},scale=-2:1920:flags=lanczos,"
                 "pad=1080:1920:(ow-iw)/2:0:color=#08080C",
          # visually lossless for flat UI colour
          "-c:v", "libx264", "-preset", "slow", "-crf", "16",
-         "-pix_fmt", "yuv420p", "-movflags", "+faststart", out],
+         "-pix_fmt", "yuv420p", *tail, "-movflags", "+faststart", out],
         capture_output=True, text=True,
     )
     if r.returncode != 0:
