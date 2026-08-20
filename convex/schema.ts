@@ -54,6 +54,18 @@ export default defineSchema({
      * know which is which.
      */
     replayContainers: v.optional(v.array(v.string())),
+    /**
+     * What they answered before the first card: languages, genre buckets and
+     * how far off the charts they want taking. Tilts the deck, never filters
+     * it — see tasteScore in src/data/taste.ts.
+     */
+    taste: v.optional(
+      v.object({
+        languages: v.array(v.string()),
+        genres: v.array(v.string()),
+        adventure: v.string(),
+      }),
+    ),
   }).index("by_userId", ["userId"]),
 
   playlists: defineTable({
@@ -115,6 +127,12 @@ export default defineSchema({
     origin: v.optional(
       v.union(v.literal("curated"), v.literal("artist"), v.literal("import")),
     ),
+    /**
+     * iTunes storefronts this track charted in. The only language signal the
+     * chart feeds carry — Apple files a whole Bollywood chart under
+     * "worldwide", so genre cannot stand in for it.
+     */
+    markets: v.optional(v.array(v.string())),
   })
     .index("by_trackId", ["trackId"])
     .index("by_owner", ["ownerUserId"]),

@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { Playlist, SaveTarget, SwipeAction, Track } from "../types";
 import catalogJson from "../data/catalog.json";
+import { EMPTY_TASTE, tasteScore, type TastePrefs } from "../data/taste";
 
 /**
  * Songs shipped inside the bundle. They are the offline fallback and the very
@@ -46,6 +47,8 @@ export interface AppState {
   neverTracks: string[];
   // containers whose songs may come round again ("liked" | "discoveries" | "pl:<id>")
   replayContainers: string[];
+  // what they told us before the first card
+  taste: TastePrefs;
 }
 
 type Action =
@@ -56,6 +59,7 @@ type Action =
   | { type: "SET_AUTO_ADVANCE"; value: boolean }
   | { type: "SET_REPLAY"; container: string; allow: boolean }
   | { type: "UNBURY"; trackId: string }
+  | { type: "SET_TASTE"; taste: TastePrefs }
   | { type: "CREATE_PLAYLIST"; playlist: Playlist }
   | { type: "DELETE_PLAYLIST"; id: string }
   | { type: "REMOVE_SONG"; trackId: string }
@@ -68,6 +72,7 @@ type Action =
       neverArtists: string[];
       neverTracks: string[];
       replayContainers: string[];
+      taste: TastePrefs | null;
       saveTarget: SaveTarget;
     }
   | {
@@ -99,6 +104,7 @@ function loadPersisted() {
         | "neverArtists"
         | "neverTracks"
         | "replayContainers"
+        | "taste"
         | "saveTarget"
         | "boostGenres"
         | "autoAdvance"
@@ -109,13 +115,36 @@ function loadPersisted() {
   }
 }
 
-function buildQueue(catalog: Track[], exclude: Set<string>, neverArtists: string[]): Track[] {
+function buildQueue(
+  catalog: Track[],
+  exclude: Set<string>,
+  neverArtists: string[],
+  taste?: TastePrefs,
+): Track[] {
   const fresh = catalog.filter(
     (t) => !exclude.has(t.id) && !neverArtists.includes(t.artist),
   );
   // If the user has heard everything, loop the catalog rather than dead-ending
   const pool = fresh.length > 4 ? fresh : catalog.filter((t) => !neverArtists.includes(t.artist));
-  return shuffle(pool);
+  return taste ? tasteSort(pool, taste) : shuffle(pool);
+}
+
+/**
+ * Shuffle, then let taste pull matches forward.
+ *
+ * Not a sort by score: that would front-load every Hindi hip-hop track in the
+ * catalogue and the deck would feel like a playlist someone else made. Shuffling
+ * first and biasing second keeps it unpredictable while still opening with
+ * things they said they wanted.
+ */
+function tasteSort(tracks: Track[], taste: TastePrefs): Track[] {
+  const scored = shuffle(tracks).map((t, i) => ({
+    t,
+    // index keeps the shuffle meaningful; score is worth a few places, not all
+    key: i - tasteScore(t, taste) * 12,
+  }));
+  scored.sort((a, b) => a.key - b.key);
+  return scored.map((s) => s.t);
 }
 
 function libraryIds(state: Pick<AppState, "liked" | "discoveries" | "playlists">) {
@@ -197,6 +226,7 @@ function initState(): AppState {
     catalog: BAKED,
     neverTracks: saved?.neverTracks ?? [],
     replayContainers: saved?.replayContainers ?? [],
+    taste: saved?.taste ?? EMPTY_TASTE,
     queue: spreadAlbums(buildQueue(BAKED, inLibrary, neverArtists)),
     history: [],
     liked,
@@ -367,6 +397,22 @@ function reducer(state: AppState, action: Action): AppState {
         })),
       };
 
+    case "SET_TASTE":
+      // reshuffle immediately: answering three questions and seeing the same
+      // deck would make the questions look decorative
+      return {
+        ...state,
+        taste: action.taste,
+        queue: spreadAlbums(
+          buildQueue(
+            state.catalog,
+            blockedIds(state),
+            state.neverArtists,
+            action.taste,
+          ),
+        ),
+      };
+
     case "UNBURY":
       return {
         ...state,
@@ -437,6 +483,8 @@ function reducer(state: AppState, action: Action): AppState {
         neverArtists: action.neverArtists,
         neverTracks: action.neverTracks,
         replayContainers: action.replayContainers,
+        // a signed-in profile's answers win over whatever this device had
+        taste: action.taste ?? state.taste,
         saveTarget: action.saveTarget,
         queue: spreadAlbums(uniqueById(queue)),
         // keep history: clearing it killed the ↩ button at every sign-in
@@ -486,6 +534,7 @@ interface StoreValue {
   removeSong: (trackId: string) => void;
   setAutoAdvance: (value: boolean) => void;
   setReplay: (container: string, allow: boolean) => void;
+  setTaste: (taste: TastePrefs) => void;
   unbury: (trackId: string) => void;
   hydrateRemote: (payload: {
     liked: Track[];
@@ -494,6 +543,7 @@ interface StoreValue {
     neverArtists: string[];
     neverTracks: string[];
     replayContainers: string[];
+    taste: TastePrefs | null;
     saveTarget: SaveTarget;
   }) => void;
   applyCatalog: (tracks: Track[]) => void;
@@ -506,12 +556,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, initState);
 
   useEffect(() => {
-    const { liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, saveTarget, boostGenres, autoAdvance } = state;
+    const { liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, saveTarget, boostGenres, autoAdvance } = state;
     localStorage.setItem(
       PERSIST_KEY,
-      JSON.stringify({ liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, saveTarget, boostGenres, autoAdvance }),
+      JSON.stringify({ liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, saveTarget, boostGenres, autoAdvance }),
     );
-  }, [state.liked, state.discoveries, state.playlists, state.neverArtists, state.neverTracks, state.replayContainers, state.saveTarget, state.boostGenres, state.autoAdvance]);
+  }, [state.liked, state.discoveries, state.playlists, state.neverArtists, state.neverTracks, state.replayContainers, state.taste, state.saveTarget, state.boostGenres, state.autoAdvance]);
 
   // CRITICAL: actions are memoized once (dispatch is stable). They must NOT
   // be recreated per state change — effects depend on these functions, and
@@ -530,6 +580,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setReplay: (container: string, allow: boolean) =>
         dispatch({ type: "SET_REPLAY", container, allow }),
       unbury: (trackId: string) => dispatch({ type: "UNBURY", trackId }),
+      setTaste: (taste: TastePrefs) => dispatch({ type: "SET_TASTE", taste }),
       hydrateRemote: (payload: {
         liked: Track[];
         discoveries: Track[];
@@ -537,6 +588,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         neverArtists: string[];
         neverTracks: string[];
         replayContainers: string[];
+        taste: TastePrefs | null;
         saveTarget: SaveTarget;
       }) => dispatch({ type: "HYDRATE_REMOTE", ...payload }),
       applyCatalog: (tracks: Track[]) => dispatch({ type: "APPLY_CATALOG", tracks }),

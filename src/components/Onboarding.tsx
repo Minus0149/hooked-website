@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   AnimatePresence,
   motion,
@@ -6,6 +6,13 @@ import {
   useTransform,
 } from "motion/react";
 import type { SwipeDir, Track } from "../types";
+import {
+  ADVENTURE,
+  EMPTY_TASTE,
+  availableTasteOptions,
+  type Adventure,
+  type TastePrefs,
+} from "../data/taste";
 import { resolveDir } from "./SwipeDeck";
 import { IconArrow } from "./icons";
 
@@ -126,17 +133,43 @@ function DemoCard({
   );
 }
 
+/**
+ * Three questions, then the gesture tour.
+ *
+ * The questions come first because a cold deck is the worst version of this
+ * app — swipe-to-learn needs a dozen swipes before it knows anything, and most
+ * people leave before that. Every one is skippable: an empty answer tilts
+ * nothing and the deck behaves exactly as it did before.
+ */
+const TASTE_STEPS = 3;
+const LAST_STEP = TASTE_STEPS + GESTURE_STEPS.length + 1; // welcome + taste + gestures + done
+
 export function Onboarding({
   demoTracks,
+  demoCatalog,
   onFinish,
 }: {
   demoTracks: Track[];
-  onFinish: () => void;
+  /** the live deck, so the questions only offer what it can serve */
+  demoCatalog: Track[];
+  onFinish: (taste: TastePrefs) => void;
 }) {
-  // step 0 = welcome, 1-4 = gestures, 5 = done
+  // 0 = welcome, 1-3 = taste, 4-7 = gestures, 8 = done
   const [step, setStep] = useState(0);
-  const gestureIndex = step - 1;
+  const [taste, setTaste] = useState<TastePrefs>(EMPTY_TASTE);
+  const gestureIndex = step - TASTE_STEPS - 1;
   const gs = GESTURE_STEPS[gestureIndex];
+
+  const toggle = (key: "languages" | "genres", id: string) =>
+    setTaste((t) => ({
+      ...t,
+      [key]: t[key].includes(id) ? t[key].filter((x) => x !== id) : [...t[key], id],
+    }));
+
+  const finish = () => onFinish(taste);
+
+  // only offer what today's catalogue can actually play
+  const options = useMemo(() => availableTasteOptions(demoCatalog), [demoCatalog]);
 
   return (
     <motion.div
@@ -166,6 +199,93 @@ export function Onboarding({
             <span className="eq" style={{ height: 22 }}>
               <span /><span /><span /><span />
             </span>
+          </motion.div>
+        )}
+
+        {step === 1 && (
+          <motion.div
+            key="lang"
+            className="ob-step-wrap"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -18 }}
+          >
+            <h1 className="ob-headline">
+              what do you listen <em>in?</em>
+            </h1>
+            <p className="ob-copy">
+              Pick as many as you like. This matters more than genre — being fed
+              songs in a language you don't speak gets old fast.
+            </p>
+            <div className="ob-chips">
+              {options.languages.map((l) => (
+                <button
+                  key={l.id}
+                  className={`ob-chip ${taste.languages.includes(l.id) ? "on" : ""}`}
+                  onClick={() => toggle("languages", l.id)}
+                  aria-pressed={taste.languages.includes(l.id)}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {step === 2 && (
+          <motion.div
+            key="genre"
+            className="ob-step-wrap"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -18 }}
+          >
+            <h1 className="ob-headline">
+              and what <em>sounds?</em>
+            </h1>
+            <p className="ob-copy">
+              A rough steer, not a filter — everything else still shows up, just
+              further down the deck.
+            </p>
+            <div className="ob-chips">
+              {options.genres.map((g) => (
+                <button
+                  key={g.id}
+                  className={`ob-chip ${taste.genres.includes(g.id) ? "on" : ""}`}
+                  onClick={() => toggle("genres", g.id)}
+                  aria-pressed={taste.genres.includes(g.id)}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {step === 3 && (
+          <motion.div
+            key="adventure"
+            className="ob-step-wrap"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -18 }}
+          >
+            <h1 className="ob-headline">
+              how far <em>off the map?</em>
+            </h1>
+            <div className="ob-choices">
+              {ADVENTURE.map((a) => (
+                <button
+                  key={a.id}
+                  className={`ob-choice ${taste.adventure === a.id ? "on" : ""}`}
+                  onClick={() => setTaste((t) => ({ ...t, adventure: a.id as Adventure }))}
+                  aria-pressed={taste.adventure === a.id}
+                >
+                  <strong>{a.label}</strong>
+                  <small>{a.copy}</small>
+                </button>
+              ))}
+            </div>
           </motion.div>
         )}
 
@@ -205,7 +325,7 @@ export function Onboarding({
           </motion.div>
         )}
 
-        {step === 5 && (
+        {step === LAST_STEP && (
           <motion.div
             key="done"
             className="ob-step-wrap"
@@ -225,28 +345,37 @@ export function Onboarding({
       </AnimatePresence>
 
       <div className="ob-dots">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
+        {Array.from({ length: LAST_STEP + 1 }, (_, i) => (
           <span key={i} className={`ob-dot ${i <= step ? "on" : ""}`} />
         ))}
       </div>
 
       {step === 0 && (
         <button className="ob-primary" onClick={() => setStep(1)}>
-          Show me how
+          Let's start
         </button>
       )}
-      {step === 5 && (
-        <button className="ob-primary" onClick={onFinish}>
+      {step >= 1 && step <= TASTE_STEPS && (
+        <button className="ob-primary" onClick={() => setStep(step + 1)}>
+          {/* never blocked on an answer — an empty one simply tilts nothing */}
+          {(step === 1 && taste.languages.length === 0) ||
+          (step === 2 && taste.genres.length === 0)
+            ? "Skip this"
+            : "Next"}
+        </button>
+      )}
+      {step === LAST_STEP && (
+        <button className="ob-primary" onClick={finish}>
           Start discovering
         </button>
       )}
-      {step > 0 && step < 5 && (
+      {step > TASTE_STEPS && step < LAST_STEP && (
         <button className="ob-primary" style={{ opacity: 0.25 }} disabled>
           Swipe the card to continue
         </button>
       )}
-      {step < 5 && (
-        <button className="ob-skip" onClick={onFinish}>
+      {step < LAST_STEP && (
+        <button className="ob-skip" onClick={finish}>
           Skip the tour
         </button>
       )}

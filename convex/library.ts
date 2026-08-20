@@ -109,6 +109,7 @@ export const getLibrary = query({
       neverArtists: never.map((n) => n.artist),
       neverTracks: buried.map((n) => n.trackId),
       replayContainers: profile?.replayContainers ?? [],
+      taste: profile?.taste ?? null,
       saveTarget: profile?.saveTarget ?? "liked",
       isAdmin: profile?.isAdmin ?? false,
       permissions: profile?.permissions ?? [],
@@ -378,6 +379,30 @@ export const unburyTrack = mutation({
       )
       .unique();
     if (row) await ctx.db.delete(row._id);
+  },
+});
+
+/** Store what the onboarding questions collected. */
+export const setTaste = mutation({
+  args: {
+    languages: v.array(v.string()),
+    genres: v.array(v.string()),
+    adventure: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const profile = await getProfile(ctx, user.id);
+    if (!profile) throw new Error("No profile");
+    ensureActiveProfile(profile);
+    await enforceRateLimit(ctx, `taste:${user.id}`, 30, 60_000);
+    await ctx.db.patch(profile._id, {
+      taste: {
+        // bounded: these are ids from a fixed list, not free text
+        languages: args.languages.slice(0, 12).map((x) => cleanText(x, 8)),
+        genres: args.genres.slice(0, 16).map((x) => cleanText(x, 16)),
+        adventure: cleanText(args.adventure, 8),
+      },
+    });
   },
 });
 

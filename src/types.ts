@@ -20,6 +20,8 @@ export interface Track {
   audioUrl?: string;
   /** ordered hooks. Empty or absent means "play the preview from the top". */
   hooks?: HookWindow[];
+  /** iTunes storefronts this charted in — the language signal */
+  markets?: string[];
 }
 
 export type SwipeAction = "skip" | "save" | "more" | "never";

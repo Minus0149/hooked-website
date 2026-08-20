@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "motion/react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
+import { coerceTaste } from "./data/taste";
 import { authClient } from "./lib/auth-client";
 import { StoreProvider, useStore } from "./state/store";
 import { usePlayer } from "./audio/usePlayer";
@@ -76,11 +77,13 @@ const toServer = (t: Track): ServerTrack => ({
 type ServerTrackWithHooks = ServerTrack & {
   audioUrl?: string | null;
   hooks?: { id: string; startMs: number; durationMs: number; label?: string }[];
+  markets?: string[];
 };
 
 const toLocal = (t: ServerTrackWithHooks): Track => ({
   audioUrl: t.audioUrl ?? undefined,
   hooks: t.hooks,
+  markets: t.markets,
   id: t.trackId,
   title: t.title,
   artist: t.artist,
@@ -105,6 +108,7 @@ function Shell() {
     setAutoAdvance,
     setReplay,
     unbury,
+    setTaste,
     hydrateRemote,
     applyCatalog,
   } = useStore();
@@ -193,6 +197,7 @@ function Shell() {
   );
 
   const unburyMutation = useMutation(api.library.unburyTrack);
+  const setTasteMutation = useMutation(api.library.setTaste);
   const handleUnbury = useCallback(
     (trackId: string) => {
       unbury(trackId);
@@ -222,6 +227,7 @@ function Shell() {
         neverArtists: library.neverArtists,
         neverTracks: library.neverTracks ?? [],
         replayContainers: library.replayContainers ?? [],
+        taste: coerceTaste(library.taste),
         saveTarget: library.saveTarget as SaveTarget,
       });
     }
@@ -548,8 +554,13 @@ function Shell() {
           {!onboarded && (
             <Onboarding
               demoTracks={state.queue.slice(3, 8)}
-              onFinish={() => {
+              demoCatalog={state.catalog}
+              onFinish={(taste) => {
                 localStorage.setItem(ONBOARD_KEY, "1");
+                // apply locally first so the very first deck is already tilted;
+                // the server copy is for the next device they sign in on
+                setTaste(taste);
+                if (signedIn) void setTasteMutation(taste).catch(() => undefined);
                 setOnboarded(true);
                 setView("discover"); // this tap unlocks audio autoplay
               }}

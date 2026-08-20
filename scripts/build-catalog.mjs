@@ -95,15 +95,21 @@ async function chartIds() {
   for (const country of COUNTRIES) {
     for (const genre of GENRES) {
       const g = genre === 0 ? "" : "genre=" + genre + "/";
-      feeds.push(
-        "https://itunes.apple.com/" + country + "/rss/topsongs/limit=100/" + g + "json",
-      );
+      feeds.push({
+        country,
+        url: "https://itunes.apple.com/" + country + "/rss/topsongs/limit=100/" + g + "json",
+      });
     }
   }
   log("fetching " + feeds.length + " chart feeds...");
 
   const ids = new Map(); // id -> how many charts it shows up in
-  const answered = await pool(feeds, 8, async (url) => {
+  // Which storefronts a song charts in is the only language signal these feeds
+  // carry. Apple's genre taxonomy is mostly Western — an entire Bollywood chart
+  // comes back as "worldwide" — so charting in `in` is what tells us a track is
+  // likely Hindi, and `sa`/`ae` Arabic.
+  const markets = new Map();
+  const answered = await pool(feeds, 8, async ({ url, country }) => {
     const res = await get(url);
     if (!res.ok) return 0;
     const json = await res.json();
@@ -111,7 +117,11 @@ async function chartIds() {
     if (!Array.isArray(entries)) return 0;
     for (const e of entries) {
       const id = e && e.id && e.id.attributes && e.id.attributes["im:id"];
-      if (id) ids.set(id, (ids.get(id) ?? 0) + 1);
+      if (!id) continue;
+      ids.set(id, (ids.get(id) ?? 0) + 1);
+      const seen = markets.get(id) ?? new Set();
+      seen.add(country);
+      markets.set(id, seen);
     }
     return entries.length;
   });
@@ -120,7 +130,10 @@ async function chartIds() {
       " feeds answered, " + ids.size + " unique ids");
   // Charting in several countries at once is the closest thing to a popularity
   // signal these feeds give, so lead with those.
-  return [...ids.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  return {
+    ids: [...ids.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id),
+    markets,
+  };
 }
 
 // ------------------------------------------------------------------ lookup
@@ -366,7 +379,7 @@ const hash = (s) => {
   return Math.abs(h);
 };
 
-const ids = await chartIds();
+const { ids, markets } = await chartIds();
 const raw = await lookup(ids.slice(0, Math.ceil(LIMIT * 1.35)));
 
 const seen = new Set();
@@ -407,6 +420,7 @@ for (const entry of withHooks.filter(Boolean)) {
     genre: (r.primaryGenreName ?? "pop").toLowerCase(),
     accent: ACCENTS[hash(trackId) % ACCENTS.length],
     origin: "curated",
+    markets: [...(markets.get(trackId) ?? [])],
   });
   entry.hooks.forEach((w, order) => {
     hooks.push({
