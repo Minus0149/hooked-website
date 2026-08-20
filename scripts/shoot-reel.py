@@ -19,7 +19,7 @@ from playwright.async_api import async_playwright, TimeoutError as PWTimeout
 OUT_DIR = r"F:\Videos\Insta\2nd Reel (Hooked)"
 CLIPS = os.path.join(OUT_DIR, "clips")
 RAW = os.path.join(OUT_DIR, "raw")
-URL = "http://localhost:4321/"
+URL = "http://localhost:4322/"
 VIEW = {"width": 430, "height": 932}
 # Playwright's video recorder and the CDP screencast both capture at CSS pixels
 # — 430x932 here — whatever DPI the context is set to, and scaling that up to
@@ -154,8 +154,8 @@ class Scene:
               window.Audio = Wrapped;
             })();
         """)
-        await self.pg.goto(URL, wait_until="networkidle")
-        await self.pg.wait_for_timeout(1400)
+        await self.pg.goto(URL, wait_until="domcontentloaded")
+        await self.pg.wait_for_timeout(2600)
         await self.start()
         await self.pg.wait_for_timeout(900)
 
@@ -387,7 +387,15 @@ def encode(scene, name):
     out = os.path.join(CLIPS, name + ".mp4")
     audio = build_audio(scene)
     extra = ["-i", audio] if audio else []
-    tail = (["-c:a", "aac", "-b:a", "192k", "-shortest"] if audio else ["-an"])
+    # Summing segments with normalize=0 pushed peaks to 0dBFS — audible as
+    # crunch on the loud parts. loudnorm brings it to the -14 LUFS / -1.5dBTP
+    # that Instagram targets anyway, so the platform re-encode has headroom
+    # instead of clipping further.
+    tail = (
+        ["-af", "loudnorm=I=-14:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "192k", "-shortest"]
+        if audio
+        else ["-an"]
+    )
     r = subprocess.run(
         ["ffmpeg", "-y", "-framerate", "16", "-i", os.path.join(d, "%05d.jpg"), *extra,
          # fit to HEIGHT: the phone is 430:932, narrower than 9:16, so scaling
