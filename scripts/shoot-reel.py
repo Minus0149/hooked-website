@@ -98,12 +98,19 @@ class Scene:
                 break  # page closing under us
             with open(os.path.join(self.dir, f"{i:05d}.jpg"), "wb") as f:
                 f.write(shot)
+            # A screenshot is not free and its cost varies, so the real rate
+            # drifts — 10.6fps measured where 16 was assumed. Assembling at a
+            # fixed rate therefore played the video back half again too fast
+            # and slid it out of step with the reconstructed audio, which is
+            # laid out on wall-clock. Keep each frame's actual time instead.
+            self.frames.append(time.monotonic() - self.t0)
             i += 1
 
     async def start(self):
         self.grabbing = True
         self.t0 = time.monotonic()
         self.audio = []
+        self.frames = []
         self.task = asyncio.ensure_future(self._grab())
         self.watch = asyncio.ensure_future(self._watch())
 
@@ -121,6 +128,8 @@ class Scene:
         # hand the playback log to the encoder
         with open(os.path.join(self.dir, "audio.json"), "w", encoding="utf-8") as f:
             json.dump(self.audio, f)
+        with open(os.path.join(self.dir, "frames.json"), "w", encoding="utf-8") as f:
+            json.dump(self.frames, f)
 
     async def open(self, fresh=True):
         if fresh:
@@ -156,8 +165,28 @@ class Scene:
         """)
         await self.pg.goto(URL, wait_until="domcontentloaded")
         await self.pg.wait_for_timeout(2600)
+
+    async def rolling(self, on_audio=False, timeout=8000):
+        """Start filming.
+
+        With on_audio, wait until a preview is actually playing first. Capture
+        used to begin the moment the page loaded, so every clip opened on a
+        second of silence — correct, since nothing was playing yet, but a
+        terrible first second for a reel and impossible to trim afterwards
+        without sliding the audio out of sync with the picture.
+        """
+        if on_audio:
+            waited = 0
+            while waited < timeout:
+                playing = await self.pg.evaluate(
+                    "() => (window.__played || []).some((a) => a.src && !a.paused && a.currentTime > 0.1)"
+                )
+                if playing:
+                    break
+                await self.pg.wait_for_timeout(150)
+                waited += 150
         await self.start()
-        await self.pg.wait_for_timeout(900)
+        await self.pg.wait_for_timeout(500)
 
     async def click(self, selector, expect=None, label=None, wait=900):
         """Click, then prove the screen moved. Raises rather than pretending."""
@@ -215,6 +244,7 @@ async def onboarding(pw):
     """The introduction: welcome, the three taste questions, into the deck."""
     async with Scene(pw, "onboarding") as s:
         await s.open()
+        await s.rolling()
         log(" onboarding")
         await s.click(".ob-primary", expect=".ob-chips", label="Let's start", wait=1300)
 
@@ -245,6 +275,7 @@ async def deck(pw):
         await s.open()
         log(" deck")
         await s.click(".ob-skip", expect=".card", label="straight to the deck", wait=3200)
+        await s.rolling(on_audio=True)
         # let a hook run so the segmented bar fills on camera
         await s.pg.wait_for_timeout(5600)
         await s.swipe_card(0, -260, "up  = skip")
@@ -261,6 +292,7 @@ async def gate(pw):
         await s.open()
         log(" gate")
         await s.click(".ob-skip", expect=".card", label="into the deck", wait=3000)
+        await s.rolling(on_audio=True)
         await s.pg.wait_for_timeout(2600)
         box = await s.pg.locator(".card").first.bounding_box()
         cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
@@ -285,6 +317,7 @@ async def home(pw):
         await s.open()
         log(" home")
         await s.click(".ob-skip", expect=".card", label="into the app", wait=2400)
+        await s.rolling(on_audio=True)
         await s.click('.nav-btn:has-text("Home")', expect=".row-card", label="home", wait=2600)
         await s.pg.mouse.wheel(0, 300)
         await s.pg.wait_for_timeout(1800)
@@ -298,6 +331,7 @@ async def settings(pw):
         await s.open()
         log(" settings")
         await s.click(".ob-skip", expect=".card", label="into the app", wait=2400)
+        await s.rolling(on_audio=True)
         # bury one so the buried-songs list has something real in it
         await s.swipe_card(-260, 0, "bury a song", settle=2000)
         await s.click('.nav-btn:has-text("Home")', expect=".row-card", label="home", wait=1800)
@@ -306,6 +340,57 @@ async def settings(pw):
         await s.pg.wait_for_timeout(2400)
         await s.pg.mouse.wheel(0, 380)
         await s.pg.wait_for_timeout(2800)
+
+
+def bed_file():
+    """The preview used as a bed — the app's own catalogue, cached."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    catalog = os.path.join(os.path.dirname(here), "src", "data", "catalog.json")
+    try:
+        with open(catalog, encoding="utf-8") as f:
+            url = json.load(f)[0]["previewUrl"]
+    except Exception:
+        return None
+    cache = os.path.join(RAW, "_previews")
+    os.makedirs(cache, exist_ok=True)
+    src = os.path.join(cache, "bed.m4a")
+    if not os.path.exists(src):
+        try:
+            urllib.request.urlretrieve(url, src)
+        except Exception:
+            return None
+    return src
+
+
+def bed(scene_dir, seconds=30):
+    """A quiet music bed, taken from the catalogue the app actually ships."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    catalog = os.path.join(os.path.dirname(here), "src", "data", "catalog.json")
+    try:
+        with open(catalog, encoding="utf-8") as f:
+            url = json.load(f)[0]["previewUrl"]
+    except Exception:
+        return None
+    cache = os.path.join(RAW, "_previews")
+    os.makedirs(cache, exist_ok=True)
+    src = os.path.join(cache, "bed.m4a")
+    if not os.path.exists(src):
+        try:
+            urllib.request.urlretrieve(url, src)
+        except Exception:
+            return None
+    out = os.path.join(scene_dir, "audio.m4a")
+    r = subprocess.run(
+        ["ffmpeg", "-y", "-i", src, "-t", str(seconds),
+         "-af", "volume=-7dB,afade=t=in:st=0:d=0.6,"
+                f"afade=t=out:st={max(seconds - 1.2, 0)}:d=1.2",
+         "-c:a", "aac", "-b:a", "192k", out],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        return None
+    log("   audio: bed (nothing plays on this screen)")
+    return out
 
 
 def build_audio(scene):
@@ -337,11 +422,29 @@ def build_audio(scene):
             segments.append({"src": src, "start": at, "end": at, "from": pos, "pos": pos})
     segments = [s for s in segments if s["end"] - s["start"] > 0.6]
     if not segments:
-        return None
+        # Nothing plays during onboarding — the deck hasn't started — so this
+        # scene is honestly silent, which is fatal for a reel that opens with
+        # it. Lay a bed from the app's own catalogue instead of shipping
+        # fifteen seconds of dead air.
+        return bed(d)
 
     cache = os.path.join(RAW, "_previews")
     os.makedirs(cache, exist_ok=True)
+
+    # A bed under the whole scene.
+    #
+    # Checking only for a *completely* silent track missed the real problem:
+    # onboarding plays nothing until the deck appears, so it was 72% dead air
+    # with a song arriving at the end. Any gap is bad for a reel, so a quiet
+    # bed runs underneath throughout and the real audio sits on top of it.
+    span = max(seg["end"] for seg in segments) + 2
+    bed_src = bed_file()
     parts, filters, labels = [], [], []
+    if bed_src:
+        parts += ["-stream_loop", "-1", "-t", f"{span:.2f}", "-i", bed_src]
+        filters.append("[0:a]volume=-11dB,afade=t=in:st=0:d=0.8,"
+                       f"afade=t=out:st={max(span - 1.4, 0):.2f}:d=1.4[bed]")
+        labels.append("[bed]")
     for i, seg in enumerate(segments):
         name = str(abs(hash(seg["src"]))) + ".m4a"
         path = os.path.join(cache, name)
@@ -352,13 +455,14 @@ def build_audio(scene):
                 continue
         dur = seg["end"] - seg["start"]
         parts += ["-ss", f"{max(seg['from'] - 0.15, 0):.2f}", "-t", f"{dur:.2f}", "-i", path]
+        idx = len(labels)
         # a short fade each end so a cut never clicks
         filters.append(
-            f"[{len(labels)}:a]afade=t=in:st=0:d=0.25,"
+            f"[{idx}:a]afade=t=in:st=0:d=0.25,"
             f"afade=t=out:st={max(dur - 0.35, 0):.2f}:d=0.35,"
-            f"adelay={int(seg['start'] * 1000)}|{int(seg['start'] * 1000)}[a{len(labels)}]"
+            f"adelay={int(seg['start'] * 1000)}|{int(seg['start'] * 1000)}[a{idx}]"
         )
-        labels.append(f"[a{len(labels)}]")
+        labels.append(f"[a{idx}]")
     if not labels:
         return None
 
@@ -372,8 +476,27 @@ def build_audio(scene):
     if r.returncode != 0:
         log("   audio:", r.stderr[-300:])
         return None
+    # Trusting the segment detection was not enough: onboarding produced one
+    # "segment" from an element the player had only preloaded, which decoded to
+    # silence and shipped fifteen dead seconds. Check the result, not the plan.
+    if silent(out):
+        log("   audio: rebuilt track was silent, using a bed instead")
+        return bed(d)
     log(f"   audio: {len(segments)} segment(s)")
     return out
+
+
+def silent(path, floor=-50.0):
+    """True if a file is effectively silence."""
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-i", path, "-af", "volumedetect",
+                        "-f", "null", "-"], capture_output=True, text=True)
+    for line in reversed(r.stderr.splitlines()):
+        if "mean_volume:" in line:
+            try:
+                return float(line.split("mean_volume:")[1].split("dB")[0]) < floor
+            except ValueError:
+                return False
+    return True
 
 
 def encode(scene, name):
@@ -385,6 +508,27 @@ def encode(scene, name):
         return None
     os.makedirs(CLIPS, exist_ok=True)
     out = os.path.join(CLIPS, name + ".mp4")
+    # play the frames back on the clock they were taken on
+    times = []
+    tpath = os.path.join(d, "frames.json")
+    if os.path.exists(tpath):
+        with open(tpath, encoding="utf-8") as f:
+            times = json.load(f)
+    listfile = os.path.join(d, "frames.txt")
+    with open(listfile, "w", encoding="utf-8") as f:
+        for i, shot in enumerate(shots):
+            if i + 1 < len(times):
+                hold = max(times[i + 1] - times[i], 0.01)
+            else:
+                hold = 1 / 16
+            f.write("file '" + os.path.join(d, shot).replace(chr(92), "/") + "'" + chr(10))
+
+            f.write("duration " + format(hold, ".4f") + chr(10))
+        f.write("file '" + os.path.join(d, shots[-1]).replace(chr(92), "/") + "'" + chr(10))
+
+    real = (times[-1] - times[0]) if len(times) > 1 else len(shots) / 16
+    log(f"   {len(shots)} frames over {real:.1f}s = {len(shots)/max(real,0.01):.1f}fps")
+
     audio = build_audio(scene)
     extra = ["-i", audio] if audio else []
     # Summing segments with normalize=0 pushed peaks to 0dBFS — audible as
@@ -397,7 +541,7 @@ def encode(scene, name):
         else ["-an"]
     )
     r = subprocess.run(
-        ["ffmpeg", "-y", "-framerate", "16", "-i", os.path.join(d, "%05d.jpg"), *extra,
+        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", listfile, *extra,
          # fit to HEIGHT: the phone is 430:932, narrower than 9:16, so scaling
          # to 1080 wide overflows 1920 and the pad filter rejects it
          "-vf", f"fps={FPS},scale=-2:1920:flags=lanczos,"
