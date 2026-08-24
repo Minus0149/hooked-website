@@ -187,6 +187,15 @@ function CreatorWorkspace({ tracks, curator }: { tracks: Track[]; curator: boole
         </button>
       ) : (
         <form className="creator-newtrack" onSubmit={submit}>
+          <header className="creator-newtrack-head">
+            <span className="creator-newtrack-num">new</span>
+            <div>
+              <strong>Add a track</strong>
+              <small>
+                metadata first — audio and hooks come next, publishing last
+              </small>
+            </div>
+          </header>
           <input className="auth-input" placeholder="title" value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })} required maxLength={120} />
           <input className="auth-input" placeholder="artist" value={form.artist}

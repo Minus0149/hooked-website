@@ -180,41 +180,60 @@ export function AuthForm() {
           : "Sign in to pick up your library where you left it."}
       </p>
 
-      <input
-        className="auth-input"
-        type="email"
-        required
-        placeholder="email"
-        value={email}
-        autoComplete="email"
-        onChange={(e) => setEmail(e.target.value)}
-      />
-      <input
-        className="auth-input"
-        type="password"
-        required
-        minLength={8}
-        placeholder="password (8+ characters)"
-        value={password}
-        autoComplete={mode === "signup" ? "new-password" : "current-password"}
-        onChange={(e) => setPassword(e.target.value)}
-      />
+      {/* 01 — identity */}
+      <div className="prefs-block">
+        <span className="prefs-label">01 · who are you</span>
+        <input
+          className="auth-input"
+          type="email"
+          required
+          placeholder="you@example.com"
+          value={email}
+          autoComplete="email"
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <span className="prefs-hint">
+          {mode === "signup"
+            ? "the email your library will follow across devices"
+            : resetSent
+              ? "reset link sent — check that inbox (and the promotions tab)"
+              : "the one you signed up with"}
+        </span>
+      </div>
+
+      {/* 02 — the key */}
+      <div className="prefs-block">
+        <span className="prefs-label">02 · the key</span>
+        <input
+          className="auth-input"
+          type="password"
+          required
+          minLength={8}
+          placeholder={mode === "signup" ? "create a password (8+ characters)" : "your password"}
+          value={password}
+          autoComplete={mode === "signup" ? "new-password" : "current-password"}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <span className="prefs-hint">
+          {mode === "signup"
+            ? "hashed on our side — even we can't read it"
+            : mode === "signin" && !resetSent && (
+                <button
+                  type="button"
+                  className="linklike"
+                  onClick={() => void sendReset()}
+                >
+                  {resetting ? "sending…" : "forgot it? send a reset link"}
+                </button>
+              )}
+        </span>
+      </div>
 
       {error && <p className="auth-error">{error}</p>}
-      {resetSent && (
-        <p className="auth-error" style={{ color: "var(--save)" }}>
-          Reset link sent — check that inbox (and the promotions tab).
-        </p>
-      )}
 
       <button className="ob-primary" type="submit" disabled={busy}>
         {busy ? "…" : mode === "signup" ? "Create account" : "Sign in"}
       </button>
-      {mode === "signin" && !resetSent && (
-        <button type="button" className="ob-skip" onClick={() => void sendReset()}>
-          {resetting ? "sending…" : "forgot your password?"}
-        </button>
-      )}
       <button
         type="button"
         className="ob-skip"

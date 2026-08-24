@@ -2609,3 +2609,28 @@ html[data-motion="reduced"] .drift { animation: none !important; }
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   border-radius: 999px; padding: 11px 22px; justify-self: center;
 }
+
+/* inline text-button inside form hints */
+.linklike {
+  appearance: none; background: none; border: 0; padding: 0;
+  color: var(--accent); cursor: pointer; font: inherit;
+  text-decoration: underline dotted; text-underline-offset: 3px;
+}
+.linklike:hover { color: var(--text); }
+
+/* headed header for the creator add-track form */
+.creator-newtrack-head {
+  display: flex; align-items: center; gap: 12px;
+  padding-bottom: 12px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.creator-newtrack-head .creator-newtrack-num {
+  font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid currentColor; border-radius: 999px;
+  padding: 3px 9px;
+}
+.creator-newtrack-head strong {
+  display: block; font-family: var(--display), sans-serif;
+  font-size: 15px; letter-spacing: -.2px; color: var(--text);
+}
+.creator-newtrack-head small { display: block; color: var(--muted); font-size: 12px; }
