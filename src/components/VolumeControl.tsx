@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { IconVolume, IconVolumeMute } from "./icons";
 
@@ -51,23 +51,26 @@ export function VolumeRail({
               </motion.span>
             )}
           </AnimatePresence>
-          <div
-            ref={trackRef}
-            className="volume-track"
-            onPointerDown={(e) => {
-              e.currentTarget.setPointerCapture(e.pointerId);
-              setActive(true);
-              setFromY(e.clientY);
-            }}
-            onPointerMove={(e) => {
-              if (e.buttons > 0) setFromY(e.clientY);
-            }}
-            onPointerUp={() => setActive(false)}
-            onPointerCancel={() => setActive(false)}
-          >
-            <div className="volume-fill" style={{ height: `${volume * 100}%` }} />
-            <div className="volume-knob" style={{ bottom: `calc(${volume * 100}% - 6px)` }} />
-          </div>
+            <div
+              ref={trackRef}
+              className="volume-track"
+              style={{ "--v": Math.min(Math.max(volume, 0), 1) } as CSSProperties}
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                setActive(true);
+                setFromY(e.clientY);
+              }}
+              onPointerMove={(e) => {
+                if (e.buttons > 0) setFromY(e.clientY);
+              }}
+              onPointerUp={() => setActive(false)}
+              onPointerCancel={() => setActive(false)}
+            >
+              {/* scaleY, not height: transform keeps the drag off the layout
+                  path entirely */}
+              <div className="volume-fill" />
+              <div className="volume-knob" />
+            </div>
           <button
             className="volume-speaker"
             onClick={() => onVolume(volume === 0 ? lastNonZero.current : 0)}

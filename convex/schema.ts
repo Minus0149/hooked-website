@@ -66,6 +66,20 @@ export default defineSchema({
         adventure: v.string(),
       }),
     ),
+    /**
+     * How the app should look and behave, edited in Settings and synced across
+     * devices. Mirrors the client's UserPrefs shape (src/data/prefs.ts);
+     * unknown keys are dropped by cleanPrefs rather than trusted.
+     */
+    prefs: v.optional(
+      v.object({
+        motion: v.string(),
+        haptics: v.string(),
+        accentMode: v.string(),
+        accentColor: v.string(),
+        swipeSensitivity: v.number(),
+      }),
+    ),
   }).index("by_userId", ["userId"]),
 
   playlists: defineTable({
@@ -133,6 +147,19 @@ export default defineSchema({
      * "worldwide", so genre cannot stand in for it.
      */
     markets: v.optional(v.array(v.string())),
+    /**
+     * How played this track is, normalised 0..1 against the catalogue's
+     * leader. Written by the hourly heat job (see hooks.computeHeat), never by
+     * a swipe, so the catalogue query stays cheap and cacheable. This is what
+     * makes the onboarding "the hits / take me deep" answer do anything.
+     */
+    heat: v.optional(v.number()),
+    /**
+     * When the external analyzer last measured this track's audio and wrote
+     * real hooks (see scripts/analyze-hooks.mjs). Absent means "still waiting
+     * for analysis" — the even-spaced provisional windows cover until then.
+     */
+    analyzedAt: v.optional(v.string()),
   })
     .index("by_trackId", ["trackId"])
     .index("by_owner", ["ownerUserId"]),
@@ -220,7 +247,9 @@ export default defineSchema({
     // rely on the caller's identity travelling with it — this is what proves
     // the writes belong to the run that was authorised. Cleared on completion.
     token: v.optional(v.string()),
-  }).index("by_userId", ["userId"]),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_status", ["status"]),
 
   // Every request for access, from either surface: the landing site's beta form
   // ("landing") and the in-app wall after the free swipes run out ("app").

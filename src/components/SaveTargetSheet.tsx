@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import type { Playlist, SaveTarget } from "../types";
+import { useDialog } from "../lib/dialog";
 import { IconCheck, IconFolder, IconHeart } from "./icons";
 
 const PLAYLIST_ACCENTS = ["#7C5CFF", "#00C2FF", "#FF6B35", "#E040FB", "#69F0AE", "#FFD740"];
@@ -20,6 +21,7 @@ export function SaveTargetSheet({
 }) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const dialog = useDialog({ onClose });
 
   const pick = (t: SaveTarget) => {
     onChange(t);
@@ -51,6 +53,7 @@ export function SaveTargetSheet({
         animate={{ y: 0 }}
         exit={{ y: "110%" }}
         transition={{ type: "spring", stiffness: 380, damping: 34 }}
+        {...dialog}
       >
         <h3 className="sheet-title">Swipe down saves to…</h3>
         <p className="sheet-sub">Pick where a ↓ swipe sends the song.</p>

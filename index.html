@@ -14,7 +14,8 @@
       content="default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; media-src https: blob:; connect-src 'self' https://convex.hookedcue.com https://cnx.hookedcue.com wss://convex.hookedcue.com wss://cnx.hookedcue.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
     />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- zoom stays enabled: disabling it fails WCAG 1.4.4 and iOS ignores it anyway -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="hooked. is a swipe-based music discovery app for finding new songs from 30-second previews. Skip, save, ask for more like this, or block artists with four gestures." />
     <meta name="keywords" content="music discovery app, swipe music app, discover new songs, song recommendations, 30 second song previews, find new music" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />

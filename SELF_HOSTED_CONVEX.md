@@ -74,6 +74,9 @@ npx convex env set ADMIN_EMAILS "minus4399@gmail.com"
 
 # shared secret for the landing site's /beta ingest route
 npx convex env set BETA_INGEST_SECRET "<random 32 bytes>"
+
+# shared secret for the external hook analyzer (web/scripts/analyze-hooks.mjs)
+npx convex env set HOOK_ANALYZE_KEY "<random 32 bytes>"
 ```
 
 Then set the matching pair on the landing deployment:

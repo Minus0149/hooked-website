@@ -8,7 +8,8 @@ import {
 } from "react";
 import type { Playlist, SaveTarget, SwipeAction, Track } from "../types";
 import catalogJson from "../data/catalog.json";
-import { EMPTY_TASTE, tasteScore, type TastePrefs } from "../data/taste";
+import { EMPTY_TASTE, genreBoostScore, tasteScore, type TastePrefs } from "../data/taste";
+import { coercePrefs, DEFAULT_PREFS, type UserPrefs } from "../data/prefs";
 
 /**
  * Songs shipped inside the bundle. They are the offline fallback and the very
@@ -49,6 +50,8 @@ export interface AppState {
   replayContainers: string[];
   // what they told us before the first card
   taste: TastePrefs;
+  // how the app should look and behave (Settings → synced to the profile)
+  prefs: UserPrefs;
 }
 
 type Action =
@@ -59,6 +62,8 @@ type Action =
   | { type: "SET_AUTO_ADVANCE"; value: boolean }
   | { type: "SET_REPLAY"; container: string; allow: boolean }
   | { type: "UNBURY"; trackId: string }
+  | { type: "UNBLOCK_ARTIST"; artist: string }
+  | { type: "SET_PREFS"; prefs: Partial<UserPrefs> }
   | { type: "SET_TASTE"; taste: TastePrefs }
   | { type: "CREATE_PLAYLIST"; playlist: Playlist }
   | { type: "DELETE_PLAYLIST"; id: string }
@@ -73,6 +78,7 @@ type Action =
       neverTracks: string[];
       replayContainers: string[];
       taste: TastePrefs | null;
+      prefs: Partial<UserPrefs> | null;
       saveTarget: SaveTarget;
     }
   | {
@@ -109,7 +115,7 @@ function loadPersisted() {
         | "boostGenres"
         | "autoAdvance"
       >
-    >;
+    > & { prefs?: Partial<UserPrefs> };
   } catch {
     return null;
   }
@@ -120,13 +126,15 @@ function buildQueue(
   exclude: Set<string>,
   neverArtists: string[],
   taste?: TastePrefs,
+  boostGenres?: string[],
 ): Track[] {
   const fresh = catalog.filter(
     (t) => !exclude.has(t.id) && !neverArtists.includes(t.artist),
   );
   // If the user has heard everything, loop the catalog rather than dead-ending
   const pool = fresh.length > 4 ? fresh : catalog.filter((t) => !neverArtists.includes(t.artist));
-  return taste ? tasteSort(pool, taste) : shuffle(pool);
+  if (taste) return tasteSort(pool, taste, boostGenres);
+  return boostGenres?.length ? boostSort(pool, boostGenres) : shuffle(pool);
 }
 
 /**
@@ -135,13 +143,27 @@ function buildQueue(
  * Not a sort by score: that would front-load every Hindi hip-hop track in the
  * catalogue and the deck would feel like a playlist someone else made. Shuffling
  * first and biasing second keeps it unpredictable while still opening with
- * things they said they wanted.
+ * things they said they wanted. A right-swipe's genre steer works the same way,
+ * just at half weight — it's a nudge from one gesture, not a stated preference.
  */
-function tasteSort(tracks: Track[], taste: TastePrefs): Track[] {
+function tasteSort(tracks: Track[], taste: TastePrefs, boostGenres?: string[]): Track[] {
   const scored = shuffle(tracks).map((t, i) => ({
     t,
     // index keeps the shuffle meaningful; score is worth a few places, not all
-    key: i - tasteScore(t, taste) * 12,
+    key:
+      i -
+      tasteScore(t, taste) * 12 -
+      genreBoostScore(t, boostGenres ?? []) * 6,
+  }));
+  scored.sort((a, b) => a.key - b.key);
+  return scored.map((s) => s.t);
+}
+
+/** Same idea for listeners who never answered the onboarding questions. */
+function boostSort(tracks: Track[], boostGenres: string[]): Track[] {
+  const scored = shuffle(tracks).map((t, i) => ({
+    t,
+    key: i - genreBoostScore(t, boostGenres) * 6,
   }));
   scored.sort((a, b) => a.key - b.key);
   return scored.map((s) => s.t);
@@ -221,19 +243,23 @@ function initState(): AppState {
     tracks: uniqueById(p.tracks),
   }));
   const neverArtists = saved?.neverArtists ?? [];
+  const boostGenres = saved?.boostGenres ?? [];
   const inLibrary = libraryIds({ liked, discoveries, playlists });
   return {
     catalog: BAKED,
     neverTracks: saved?.neverTracks ?? [],
     replayContainers: saved?.replayContainers ?? [],
     taste: saved?.taste ?? EMPTY_TASTE,
-    queue: spreadAlbums(buildQueue(BAKED, inLibrary, neverArtists)),
+    prefs: { ...DEFAULT_PREFS, ...coercePrefs(saved?.prefs) },
+    queue: spreadAlbums(
+      buildQueue(BAKED, inLibrary, neverArtists, saved?.taste, boostGenres),
+    ),
     history: [],
     liked,
     discoveries,
     playlists,
     neverArtists,
-    boostGenres: saved?.boostGenres ?? [],
+    boostGenres,
     saveTarget: saved?.saveTarget ?? "liked",
     autoAdvance: saved?.autoAdvance ?? true,
     allowedIds: null,
@@ -326,7 +352,16 @@ function reducer(state: AppState, action: Action): AppState {
         );
         const fresh = pickable.filter((t) => !avoid.has(t.id));
         const pool = fresh.length >= 3 ? fresh : pickable.filter((t) => t.id !== current.id);
-        rest = [...rest, ...shuffle(pool)];
+        // Refills honour the steer and the taste answers too — otherwise a
+        // right-swipe's promise expired the moment its one reshuffle was spent
+        rest = [
+          ...rest,
+          ...(state.taste.languages.length || state.taste.genres.length
+            ? tasteSort(pool, state.taste, boostGenres)
+            : boostGenres.length
+              ? boostSort(pool, boostGenres)
+              : shuffle(pool)),
+        ];
       }
       return {
         ...state,
@@ -347,7 +382,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "BACK": {
       const last = state.history[state.history.length - 1];
       if (!last) return state;
-      let { liked, discoveries, playlists, neverArtists } = state;
+      let { liked, discoveries, playlists, neverArtists, neverTracks } = state;
       // Going back also reverts what the swipe did, so the user can re-decide —
       // but only if that save actually added the track (a re-like of an
       // already-saved song must not strip it from the library)
@@ -361,6 +396,9 @@ function reducer(state: AppState, action: Action): AppState {
       }
       if (last.action === "never") {
         neverArtists = neverArtists.filter((a) => a !== last.track.artist);
+        // un-bury the song too — a left swipe buries both, so undoing it must
+        // lift both, or the ↩ button quietly lied about half its promise
+        neverTracks = neverTracks.filter((id) => id !== last.track.id);
       }
       return {
         ...state,
@@ -370,6 +408,7 @@ function reducer(state: AppState, action: Action): AppState {
         discoveries,
         playlists,
         neverArtists,
+        neverTracks,
       };
     }
 
@@ -409,6 +448,7 @@ function reducer(state: AppState, action: Action): AppState {
             blockedIds(state),
             state.neverArtists,
             action.taste,
+            state.boostGenres,
           ),
         ),
       };
@@ -418,6 +458,23 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         neverTracks: state.neverTracks.filter((id) => id !== action.trackId),
       };
+
+    case "UNBLOCK_ARTIST":
+      // lifting the block doesn't rewrite history: the buried *songs* stay
+      // buried unless they're dug out individually
+      return {
+        ...state,
+        neverArtists: state.neverArtists.filter((a) => a !== action.artist),
+      };
+
+    case "SET_PREFS": {
+      // merge only the keys actually present — coercePrefs fills defaults,
+      // and using it here would reset every untouched setting
+      const patch = Object.fromEntries(
+        Object.entries(action.prefs).filter(([, v]) => v !== undefined),
+      ) as Partial<UserPrefs>;
+      return { ...state, prefs: { ...state.prefs, ...patch } };
+    }
 
     case "SET_REPLAY": {
       const allow = new Set(state.replayContainers);
@@ -485,6 +542,7 @@ function reducer(state: AppState, action: Action): AppState {
         replayContainers: action.replayContainers,
         // a signed-in profile's answers win over whatever this device had
         taste: action.taste ?? state.taste,
+        prefs: action.prefs ? { ...state.prefs, ...coercePrefs(action.prefs) } : state.prefs,
         saveTarget: action.saveTarget,
         queue: spreadAlbums(uniqueById(queue)),
         // keep history: clearing it killed the ↩ button at every sign-in
@@ -512,7 +570,13 @@ function reducer(state: AppState, action: Action): AppState {
       const exclude = libraryIds(state);
       if (keepHead) exclude.add(keepHead.id);
 
-      const rest = buildQueue(action.tracks, exclude, state.neverArtists);
+      const rest = buildQueue(
+        action.tracks,
+        exclude,
+        state.neverArtists,
+        state.taste,
+        state.boostGenres,
+      );
       return {
         ...state,
         catalog: action.tracks,
@@ -535,7 +599,9 @@ interface StoreValue {
   setAutoAdvance: (value: boolean) => void;
   setReplay: (container: string, allow: boolean) => void;
   setTaste: (taste: TastePrefs) => void;
+  setPrefs: (prefs: Partial<UserPrefs>) => void;
   unbury: (trackId: string) => void;
+  unblockArtist: (artist: string) => void;
   hydrateRemote: (payload: {
     liked: Track[];
     discoveries: Track[];
@@ -544,6 +610,7 @@ interface StoreValue {
     neverTracks: string[];
     replayContainers: string[];
     taste: TastePrefs | null;
+    prefs: Partial<UserPrefs> | null;
     saveTarget: SaveTarget;
   }) => void;
   applyCatalog: (tracks: Track[]) => void;
@@ -556,12 +623,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, initState);
 
   useEffect(() => {
-    const { liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, saveTarget, boostGenres, autoAdvance } = state;
+    const { liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, prefs, saveTarget, boostGenres, autoAdvance } = state;
     localStorage.setItem(
       PERSIST_KEY,
-      JSON.stringify({ liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, saveTarget, boostGenres, autoAdvance }),
+      JSON.stringify({ liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, prefs, saveTarget, boostGenres, autoAdvance }),
     );
-  }, [state.liked, state.discoveries, state.playlists, state.neverArtists, state.neverTracks, state.replayContainers, state.taste, state.saveTarget, state.boostGenres, state.autoAdvance]);
+  }, [state.liked, state.discoveries, state.playlists, state.neverArtists, state.neverTracks, state.replayContainers, state.taste, state.prefs, state.saveTarget, state.boostGenres, state.autoAdvance]);
 
   // CRITICAL: actions are memoized once (dispatch is stable). They must NOT
   // be recreated per state change — effects depend on these functions, and
@@ -580,7 +647,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setReplay: (container: string, allow: boolean) =>
         dispatch({ type: "SET_REPLAY", container, allow }),
       unbury: (trackId: string) => dispatch({ type: "UNBURY", trackId }),
+      unblockArtist: (artist: string) => dispatch({ type: "UNBLOCK_ARTIST", artist }),
       setTaste: (taste: TastePrefs) => dispatch({ type: "SET_TASTE", taste }),
+      setPrefs: (prefs: Partial<UserPrefs>) => dispatch({ type: "SET_PREFS", prefs }),
       hydrateRemote: (payload: {
         liked: Track[];
         discoveries: Track[];
@@ -589,6 +658,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         neverTracks: string[];
         replayContainers: string[];
         taste: TastePrefs | null;
+        prefs: Partial<UserPrefs> | null;
         saveTarget: SaveTarget;
       }) => dispatch({ type: "HYDRATE_REMOTE", ...payload }),
       applyCatalog: (tracks: Track[]) => dispatch({ type: "APPLY_CATALOG", tracks }),

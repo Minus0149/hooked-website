@@ -10,8 +10,10 @@
 
 import type * as access from "../access.js";
 import type * as admin from "../admin.js";
+import type * as analyzer from "../analyzer.js";
 import type * as auth from "../auth.js";
 import type * as creators from "../creators.js";
+import type * as crons from "../crons.js";
 import type * as hooks from "../hooks.js";
 import type * as http from "../http.js";
 import type * as imports from "../imports.js";
@@ -29,10 +31,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   access: typeof access;
   admin: typeof admin;
+  analyzer: typeof analyzer;
   auth: typeof auth;
   creators: typeof creators;
-  http: typeof http;
+  crons: typeof crons;
   hooks: typeof hooks;
+  http: typeof http;
   imports: typeof imports;
   library: typeof library;
   matching: typeof matching;

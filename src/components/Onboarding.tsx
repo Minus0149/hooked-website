@@ -312,13 +312,17 @@ export function Onboarding({
                 </span>
               </motion.div>
               <AnimatePresence>
-                <DemoCard
-                  key={gs.dir}
-                  track={demoTracks[gestureIndex % demoTracks.length]}
-                  requiredDir={gs.dir}
-                  color={gs.color}
-                  onDone={() => setStep((s) => s + 1)}
-                />
+                {/* a catalogue thin enough to leave the demo deck empty must
+                    degrade to "no card", never crash on `undefined.artwork` */}
+                {demoTracks.length > 0 && (
+                  <DemoCard
+                    key={gs.dir}
+                    track={demoTracks[gestureIndex % demoTracks.length]}
+                    requiredDir={gs.dir}
+                    color={gs.color}
+                    onDone={() => setStep((s) => s + 1)}
+                  />
+                )}
               </AnimatePresence>
             </div>
             <p className="ob-copy">{gs.copy}</p>

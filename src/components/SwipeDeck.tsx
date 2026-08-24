@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   AnimatePresence,
   motion,
@@ -8,6 +8,7 @@ import {
 } from "motion/react";
 import type { SwipeDir, Track } from "../types";
 import { gesture } from "../design/tokens";
+import { useDialog } from "../lib/dialog";
 import { DiscFX, type SaveFxData, type SaveRelease } from "./DiscFX";
 import {
   IconHeart,
@@ -34,13 +35,18 @@ interface Props {
   onNextHook: () => void;
   // return false to refuse the swipe (login gate) — card snaps back, no FX
   gateSwipe?: (dir: SwipeDir) => boolean;
+  // scales the drag distance a swipe needs (Settings → Gestures)
+  sensitivity?: number;
 }
 
-export function resolveDir(info: PanInfo): SwipeDir | null {
+export function resolveDir(info: PanInfo, sensitivity = 1): SwipeDir | null {
   const { offset, velocity } = info;
   const absX = Math.abs(offset.x);
   const absY = Math.abs(offset.y);
-  const committedByDistance = Math.max(absX, absY) > gesture.commitDistance;
+  // sensitivity scales the drag distance a swipe needs (mobile parity); the
+  // flick threshold stays fixed so a decisive flick always commits
+  const committedByDistance =
+    Math.max(absX, absY) > gesture.commitDistance * sensitivity;
   const committedByFlick =
     Math.max(Math.abs(velocity.x), Math.abs(velocity.y)) > gesture.commitVelocity;
   if (!committedByDistance && !committedByFlick) return null;
@@ -60,6 +66,7 @@ const EXIT: Record<SwipeDir, { x: number; y: number; rotate: number; scale: numb
 interface ExitCustom {
   dir: SwipeDir;
   deckH: number;
+  deckW: number;
 }
 
 const cardVariants = {
@@ -72,8 +79,19 @@ const cardVariants = {
       // the real card just vanishes underneath it
       return { opacity: 0, transition: { duration: 0.01 } };
     }
+    // fly past the MEASURED deck edge (plus margin) instead of a hardcoded
+    // pixel count — tall screens used to watch the card die mid-screen
+    const base = EXIT[dir];
+    const far =
+      dir === "up"
+        ? -(custom?.deckH ?? 760) * 1.2
+        : (dir === "right" ? 1 : -1) *
+          Math.max(custom?.deckW ?? 520, 360) * 1.3;
     return {
-      ...EXIT[dir],
+      x: dir === "left" || dir === "right" ? far : base.x,
+      y: dir === "up" ? far : base.y,
+      rotate: base.rotate,
+      scale: base.scale,
       opacity: 0,
       transition: { duration: 0.32, ease: "easeOut" as const },
     };
@@ -133,6 +151,7 @@ function ScrubBar({
     <div
       ref={ref}
       className="scrub"
+      style={{ "--p": Math.min(Math.max(progress, 0), 1) } as CSSProperties}
       onPointerDown={(e) => {
         e.stopPropagation(); // don't start a card drag from the scrubber
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -146,17 +165,25 @@ function ScrubBar({
       }}
     >
       <div className="scrub-track" />
-      <div className="scrub-fill" style={{ width: `${progress * 100}%` }} />
-      <div className="scrub-knob" style={{ left: `${progress * 100}%` }} />
+      {/* scaleX + a CSS var instead of width/left: transform never triggers
+          layout, so a 4Hz progress tick can't thrash the whole card */}
+      <div className="scrub-fill" />
+      <div className="scrub-knob" />
     </div>
   );
 }
 
 /** Links out to where the track can legally play in full. */
 function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }) {
+  const dialog = useDialog({ onClose });
   const q = encodeURIComponent(`${track.title} ${track.artist}`);
+  // Only a pure-numeric id is an iTunes item — creator uploads ("own:…") and
+  // imports ("imp:…") would 404 as /song/{id}. Those get a storefront search.
+  const appleHref = /^\d+$/.test(track.id)
+    ? `https://music.apple.com/us/song/${track.id}`
+    : `https://music.apple.com/us/search?term=${q}`;
   const services = [
-    { name: "Apple Music", href: `https://music.apple.com/us/song/${track.id}` },
+    { name: "Apple Music", href: appleHref },
     { name: "Spotify", href: `https://open.spotify.com/search/${q}` },
     { name: "YouTube", href: `https://www.youtube.com/results?search_query=${q}` },
   ];
@@ -175,6 +202,7 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
         animate={{ y: 0 }}
         exit={{ y: "110%" }}
         transition={{ type: "spring", stiffness: 380, damping: 34 }}
+        {...dialog}
       >
         <h3 className="sheet-title">Hear the whole thing</h3>
         <p className="sheet-sub">
@@ -248,6 +276,7 @@ function TopCard({
   exitCustom,
   onSeek,
   onSwipe,
+  sensitivity = 1,
 }: {
   track: Track;
   playing: boolean;
@@ -259,6 +288,8 @@ function TopCard({
   exitCustom: ExitCustom;
   onSeek: (fraction: number) => void;
   onSwipe: (dir: SwipeDir, release?: SaveRelease) => void;
+  /** scales the drag distance a swipe needs (Settings → Gestures) */
+  sensitivity?: number;
 }) {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
@@ -278,7 +309,7 @@ function TopCard({
       dragElastic={0.7}
       whileDrag={{ scale: 1.02 }}
       onDragEnd={(_, info) => {
-        const dir = resolveDir(info);
+        const dir = resolveDir(info, sensitivity);
         if (dir)
           onSwipe(dir, {
             x: x.get(),
@@ -351,6 +382,7 @@ export function SwipeDeck({
   hookLabel,
   onNextHook,
   gateSwipe,
+  sensitivity = 1,
 }: Props) {
   const [onDeck, next, nextNext] = tracks;
   const lastDir = useRef<SwipeDir>("up");
@@ -383,28 +415,31 @@ export function SwipeDeck({
     return () => window.removeEventListener("resize", measure);
   }, []);
 
-  const handleSwipe = (dir: SwipeDir, release?: SaveRelease) => {
-    if (locked || !onDeck) return;
-    if (gateSwipe && !gateSwipe(dir)) return; // login wall — card snaps back untouched
-    lastDir.current = dir;
-    setLocked(true);
-    if (dir === "down") {
-      saveCount.current += 1;
-      setSaveFx({
-        key: Date.now(),
-        track: onDeck,
-        from: release ?? { x: 0, y: 0, vx: 0, vy: 650 }, // ♥ button: drop from center
-        mode: saveCount.current % 5 === 0 ? "cinematic" : "fast",
-      });
-    } else if (dir !== "up") {
-      const type = dir === "right" ? "more" : "never";
-      window.clearTimeout(fxTimer.current);
-      setFx({ type, key: Date.now() });
-      fxTimer.current = window.setTimeout(() => setFx(null), 700);
-    }
-    onSwipe(dir);
-    window.setTimeout(() => setLocked(false), 200);
-  };
+  const handleSwipe = useCallback(
+    (dir: SwipeDir, release?: SaveRelease) => {
+      if (locked || !onDeck) return;
+      if (gateSwipe && !gateSwipe(dir)) return; // login wall — card snaps back untouched
+      lastDir.current = dir;
+      setLocked(true);
+      if (dir === "down") {
+        saveCount.current += 1;
+        setSaveFx({
+          key: Date.now(),
+          track: onDeck,
+          from: release ?? { x: 0, y: 0, vx: 0, vy: 650 }, // ♥ button: drop from center
+          mode: saveCount.current % 5 === 0 ? "cinematic" : "fast",
+        });
+      } else if (dir !== "up") {
+        const type = dir === "right" ? "more" : "never";
+        window.clearTimeout(fxTimer.current);
+        setFx({ type, key: Date.now() });
+        fxTimer.current = window.setTimeout(() => setFx(null), 700);
+      }
+      onSwipe(dir);
+      window.setTimeout(() => setLocked(false), 200);
+    },
+    [locked, onDeck, gateSwipe, onSwipe],
+  );
 
   // desktop keyboard support: arrows swipe, space toggles playback
   useEffect(() => {
@@ -425,9 +460,13 @@ export function SwipeDeck({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, [handleSwipe, onToggle]);
 
-  const exitCustom: ExitCustom = { dir: lastDir.current, deckH: deckH.current };
+  const exitCustom: ExitCustom = {
+    dir: lastDir.current,
+    deckH: deckH.current,
+    deckW: deckW.current,
+  };
 
   return (
     <div className="deck-wrap">
@@ -471,6 +510,7 @@ export function SwipeDeck({
               exitCustom={exitCustom}
               onSeek={onSeek}
               onSwipe={handleSwipe}
+              sensitivity={sensitivity}
             />
           )}
         </AnimatePresence>

@@ -19,7 +19,13 @@ export function NewPlaylistSheet({
   // the input — that scroll is what shifted the whole screen up and stuck
   useEffect(() => {
     inputRef.current?.focus({ preventScroll: true });
-  }, []);
+    // the dialog hook would steal focus back from the input, so just Esc
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   const create = async () => {
     const trimmed = name.trim();

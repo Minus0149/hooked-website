@@ -42,8 +42,7 @@ export const list = query({
             durationMs: h.durationMs,
             label: h.label,
           })),
-        };
-      }),
+        };}),
     );
   },
 });

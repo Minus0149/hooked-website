@@ -175,4 +175,86 @@ http.route({
   }),
 });
 
+/**
+ * External hook analyzer service.
+ *
+ * The analyzer runs where ffmpeg lives (a laptop, a CI job), not in Convex —
+ * see scripts/analyze-hooks.mjs. GET hands out the tracks still waiting for
+ * measurement; POST takes the measured windows back. Both are guarded by a
+ * shared secret, set with:
+ *   npx convex env set HOOK_ANALYZE_KEY "<random-32-bytes>"
+ *
+ * The body cap is generous because one POST can carry windows for many tracks.
+ */
+http.route({
+  path: "/analyzer/pending",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const secret = process.env.HOOK_ANALYZE_KEY;
+    const provided = request.headers.get("x-analyzer-key") ?? "";
+    if (!secret || !safeEqual(provided, secret)) {
+      return new Response("forbidden", { status: 403 });
+    }
+    const limit = Number(new URL(request.url).searchParams.get("limit") ?? 50);
+    const tracks = await ctx.runQuery(internal.analyzer.pendingTracks, {
+      limit: Number.isFinite(limit) ? limit : 50,
+    });
+    return Response.json({ ok: true, tracks }, { status: 200 });
+  }),
+});
+
+const ANALYZER_MAX_BODY_BYTES = 512 * 1024;
+
+http.route({
+  path: "/analyzer/ingest",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const secret = process.env.HOOK_ANALYZE_KEY;
+    const provided = request.headers.get("x-analyzer-key") ?? "";
+    if (!secret || !safeEqual(provided, secret)) {
+      return new Response("forbidden", { status: 403 });
+    }
+
+    const raw = await request.text();
+    if (raw.length > ANALYZER_MAX_BODY_BYTES) {
+      return new Response("too large", { status: 413 });
+    }
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return new Response("bad request", { status: 400 });
+    }
+
+    type Result =
+      | { trackId: string; ok: true; written: number }
+      | { trackId: string; ok: false; reason?: string };
+    const results: Result[] = [];
+
+    // accept both a single {trackId, windows} and a batch [{...}, ...]
+    const items: unknown[] = Array.isArray(body.batch) ? body.batch : [body];
+    for (const item of items.slice(0, 500)) {
+      const rec = item as Record<string, unknown>;
+      const trackId = str(rec.trackId);
+      const analyzedAt = str(rec.analyzedAt) || new Date().toISOString();
+      if (!trackId || !Array.isArray(rec.windows)) continue;
+      try {
+        const result = await ctx.runMutation(internal.analyzer.ingestHooks, {
+          trackId,
+          analyzedAt,
+          windows: rec.windows as { startMs: number; durationMs: number }[],
+        });
+        results.push(
+          result.ok
+            ? { trackId, ok: true, written: result.written }
+            : { trackId, ok: false, reason: result.reason },
+        );
+      } catch {
+        results.push({ trackId, ok: false, reason: "write failed" });
+      }
+    }
+    return Response.json({ ok: true, results }, { status: 200 });
+  }),
+});
+
 export default http;

@@ -11,6 +11,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { Track } from "./types";
 import { MS, clock, secs } from "./types";
+import { HookEditor } from "./HookEditor";
 
 export function TrackCard({ track }: { track: Track }) {
   const generateUploadUrl = useMutation(api.creators.generateUploadUrl);
@@ -185,17 +186,38 @@ export function TrackCard({ track }: { track: Track }) {
         })}
       </div>
 
-      {canAddMore ? (
-        <div className="creator-addhook">
-          <input className="auth-input" type="number" min="0" step="0.5" placeholder="start (s)"
-            value={newStart} onChange={(e) => setNewStart(e.target.value)} />
-          <input className="auth-input" type="number" min="5" max="45" step="1" placeholder="length (s)"
-            value={newLen} onChange={(e) => setNewLen(e.target.value)} />
-          <input className="auth-input" placeholder="label — 'the drop' (optional)"
-            value={newLabel} onChange={(e) => setNewLabel(e.target.value)} maxLength={40} />
-          <button className="aq-btn yes" onClick={addHook}>+ hook</button>
-        </div>
-      ) : (
+      {canAddMore && (
+        <>
+          {/* drag the window onto the waveform and audition it in a loop —
+              falls back to the number boxes when the audio can't be decoded */}
+          {(track.audioUrl || track.previewUrl) && !error && (
+            <HookEditor
+              audioUrl={(track.audioUrl ?? track.previewUrl) as string}
+              ceilingMs={ceilingMs}
+              accent={track.accent}
+              onAdd={async (startMs, durationMs) => {
+                setError(null);
+                try {
+                  await upsertHook({ trackId: track.trackId, startMs, durationMs });
+                  setNewLabel("");
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Could not add that hook");
+                }
+              }}
+            />
+          )}
+          <div className="creator-addhook">
+            <input className="auth-input" type="number" min="0" step="0.5" placeholder="start (s)"
+              value={newStart} onChange={(e) => setNewStart(e.target.value)} />
+            <input className="auth-input" type="number" min="5" max="45" step="1" placeholder="length (s)"
+              value={newLen} onChange={(e) => setNewLen(e.target.value)} />
+            <input className="auth-input" placeholder="label — 'the drop' (optional)"
+              value={newLabel} onChange={(e) => setNewLabel(e.target.value)} maxLength={40} />
+            <button className="aq-btn yes" onClick={addHook}>+ hook</button>
+          </div>
+        </>
+      )}
+      {!canAddMore && (
         <p className="creator-note">
           {hasFullAudio
             ? "Six hooks is plenty for one song."

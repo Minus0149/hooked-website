@@ -110,6 +110,7 @@ export const getLibrary = query({
       neverTracks: buried.map((n) => n.trackId),
       replayContainers: profile?.replayContainers ?? [],
       taste: profile?.taste ?? null,
+      prefs: profile?.prefs ?? null,
       saveTarget: profile?.saveTarget ?? "liked",
       isAdmin: profile?.isAdmin ?? false,
       permissions: profile?.permissions ?? [],
@@ -328,13 +329,31 @@ export const revertSwipe = mutation({
       for (const s of songs) await ctx.db.delete(s._id);
     }
     if (action === "never") {
-      const entry = await ctx.db
-        .query("neverArtists")
-        .withIndex("by_user_artist", (q) =>
-          q.eq("userId", user.id).eq("artist", safeArtist),
+      // undoing a left swipe must lift BOTH promises it made: the song is
+      // un-buried and the artist block goes too. The artist row is only
+      // removed when no other left-swipe of theirs still vouches for it —
+      // two "nevers" used to be undone by one ↩, silently resurrecting an
+      // artist the listener had buried twice.
+      const buried = await ctx.db
+        .query("neverTracks")
+        .withIndex("by_user_track", (q) =>
+          q.eq("userId", user.id).eq("trackId", safeTrackId),
         )
         .unique();
-      if (entry) await ctx.db.delete(entry._id);
+      if (buried) await ctx.db.delete(buried._id);
+
+      const stillBlocked = swipes.some(
+        (s) => s.action === "never" && s.artist === safeArtist && s._id !== latest?._id,
+      );
+      if (!stillBlocked) {
+        const entry = await ctx.db
+          .query("neverArtists")
+          .withIndex("by_user_artist", (q) =>
+            q.eq("userId", user.id).eq("artist", safeArtist),
+          )
+          .unique();
+        if (entry) await ctx.db.delete(entry._id);
+      }
     }
   },
 });
@@ -382,6 +401,22 @@ export const unburyTrack = mutation({
   },
 });
 
+/** Lift an artist block ("unblock"), so their songs can come round again. */
+export const unblockArtist = mutation({
+  args: { artist: v.string() },
+  handler: async (ctx, { artist }) => {
+    const user = await requireUser(ctx);
+    await enforceRateLimit(ctx, `unblock:${user.id}`, 120, 60_000);
+    const row = await ctx.db
+      .query("neverArtists")
+      .withIndex("by_user_artist", (q) =>
+        q.eq("userId", user.id).eq("artist", cleanText(artist, 160)),
+      )
+      .unique();
+    if (row) await ctx.db.delete(row._id);
+  },
+});
+
 /** Store what the onboarding questions collected. */
 export const setTaste = mutation({
   args: {
@@ -419,6 +454,47 @@ export const setSaveTarget = mutation({
 });
 
 /**
+ * Store the Settings choices that should follow a listener across devices
+ * (motion level, accent, haptics, swipe sensitivity). Volume is deliberately
+ * absent — hardware differs per device, so it stays local.
+ *
+ * Values are coerced through the same rules the clients use; an old or
+ * hand-edited row can't smuggle in garbage.
+ */
+export const setPrefs = mutation({
+  args: {
+    motion: v.string(),
+    haptics: v.string(),
+    accentMode: v.string(),
+    accentColor: v.string(),
+    swipeSensitivity: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const profile = await getProfile(ctx, user.id);
+    if (!profile) throw new Error("No profile");
+    ensureActiveProfile(profile);
+    await enforceRateLimit(ctx, `prefs:${user.id}`, 60, 60_000);
+
+    const motion = ["full", "reduced", "off"].includes(args.motion)
+      ? args.motion
+      : "full";
+    const haptics = ["off", "subtle", "full"].includes(args.haptics)
+      ? args.haptics
+      : "subtle";
+    const accentMode = args.accentMode === "custom" ? "custom" : "track";
+    const accentColor = cleanAccent(args.accentColor).toUpperCase();
+    const sensitivity = Math.round(
+      Math.min(Math.max(args.swipeSensitivity, 0.6), 1.4) * 100,
+    ) / 100;
+
+    await ctx.db.patch(profile._id, {
+      prefs: { motion, haptics, accentMode, accentColor, swipeSensitivity: sensitivity },
+    });
+  },
+});
+
+/**
  * Self-service account deletion.
  *
  * Google Play requires an in-app path to delete an account and its data, plus a
@@ -442,13 +518,14 @@ export const deleteMyAccount = mutation({
     }
 
     const userId = profile.userId;
-    const [swipes, songs, never, playlists] = await Promise.all([
+    const [swipes, songs, never, buried, playlists] = await Promise.all([
       ctx.db.query("swipes").withIndex("by_userId", (q) => q.eq("userId", userId)).collect(),
       ctx.db.query("librarySongs").withIndex("by_user_kind", (q) => q.eq("userId", userId)).collect(),
       ctx.db.query("neverArtists").withIndex("by_user_artist", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("neverTracks").withIndex("by_user_track", (q) => q.eq("userId", userId)).collect(),
       ctx.db.query("playlists").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
     ]);
-    for (const doc of [...swipes, ...songs, ...never, ...playlists]) {
+    for (const doc of [...swipes, ...songs, ...never, ...buried, ...playlists]) {
       await ctx.db.delete(doc._id);
     }
 

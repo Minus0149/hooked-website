@@ -1,4 +1,4 @@
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useStore } from "../state/store";
 import type { LibraryContainer, Track } from "../types";
 import { art } from "../lib/art";
@@ -15,6 +15,11 @@ const rise = {
     y: 0,
     transition: { type: "spring" as const, stiffness: 260, damping: 26 },
   },
+};
+// rows leave with a real exit now — removing a song used to make it vanish
+// mid-frame, which read as a flicker rather than an action
+const fall = {
+  exit: { opacity: 0, x: -24, transition: { duration: 0.18, ease: "easeIn" as const } },
 };
 
 function totalMinutes(tracks: Track[]) {
@@ -152,8 +157,9 @@ export function LibraryScreen({
             </p>
           </motion.div>
         ) : (
-          tracks.map((t, i) => (
-            <motion.div className="library-row" key={t.id} variants={rise}>
+          <AnimatePresence initial={false}>
+            {tracks.map((t, i) => (
+              <motion.div className="library-row" key={t.id} variants={{ ...rise, ...fall }}>
               <span className="library-index">{String(i + 1).padStart(2, "0")}</span>
               <button className="library-row-main" onClick={() => onPlay(t.id)}>
                 <span className="library-art-wrap">
@@ -173,8 +179,9 @@ export function LibraryScreen({
               >
                 <IconX size={13} />
               </button>
-            </motion.div>
-          ))
+              </motion.div>
+            ))}
+          </AnimatePresence>
         )}
         <div style={{ height: 10 }} />
       </motion.div>

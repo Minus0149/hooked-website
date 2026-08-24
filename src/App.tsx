@@ -1,8 +1,10 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { coerceTaste } from "./data/taste";
+import { coercePrefs } from "./data/prefs";
+import type { UserPrefs } from "./data/prefs";
 import { authClient } from "./lib/auth-client";
 import { StoreProvider, useStore } from "./state/store";
 import { usePlayer } from "./audio/usePlayer";
@@ -78,12 +80,21 @@ type ServerTrackWithHooks = ServerTrack & {
   audioUrl?: string | null;
   hooks?: { id: string; startMs: number; durationMs: number; label?: string }[];
   markets?: string[];
+  heat?: number;
 };
+
+interface ServerLibrary {
+  isAdmin: boolean;
+  permissions: string[];
+  taste?: unknown;
+  prefs?: Partial<UserPrefs> | null;
+}
 
 const toLocal = (t: ServerTrackWithHooks): Track => ({
   audioUrl: t.audioUrl ?? undefined,
   hooks: t.hooks,
   markets: t.markets,
+  heat: t.heat,
   id: t.trackId,
   title: t.title,
   artist: t.artist,
@@ -108,10 +119,16 @@ function Shell() {
     setAutoAdvance,
     setReplay,
     unbury,
+    unblockArtist,
     setTaste,
+    setPrefs,
     hydrateRemote,
     applyCatalog,
   } = useStore();
+  // latest state without re-creating callbacks that read it (the debounced
+  // prefs push below reads state.prefs at fire time, not capture time)
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const [view, setView] = useState<View>("home");
   const [onboarded, setOnboarded] = useState(
     () => localStorage.getItem(ONBOARD_KEY) === "1",
@@ -122,6 +139,23 @@ function Shell() {
   const [backToken, setBackToken] = useState(0);
   const [toast, setToast] = useState<{ key: number; msg: string; icon: string } | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
+
+  const showToast = useCallback((msg: string, icon: string) => {
+    window.clearTimeout(toastTimer.current);
+    setToast({ key: Date.now(), msg, icon });
+    toastTimer.current = window.setTimeout(() => setToast(null), 1600);
+  }, []);
+
+  // Cloud writes used to fail in total silence (`.catch(() => undefined)`),
+  // which read as "the app ate my save". Surface it — throttled so a burst of
+  // failures shows one message, not eleven — while the local copy keeps the
+  // action alive for when connectivity returns.
+  const lastSyncWarn = useRef(0);
+  const syncFailed = useCallback(() => {
+    if (Date.now() - lastSyncWarn.current < 15_000) return;
+    lastSyncWarn.current = Date.now();
+    showToast("Cloud sync hiccuped — kept on this device", "⚠");
+  }, [showToast]);
 
   // ----- cloud sync -----
   const session = authClient.useSession();
@@ -190,20 +224,50 @@ function Shell() {
     (container: string, allow: boolean) => {
       setReplay(container, allow);
       if (signedIn) {
-        void setReplayMutation({ container, allow }).catch(() => undefined);
+        void setReplayMutation({ container, allow }).catch(syncFailed);
       }
     },
-    [setReplay, signedIn, setReplayMutation],
+    [setReplay, signedIn, setReplayMutation, syncFailed],
   );
 
   const unburyMutation = useMutation(api.library.unburyTrack);
+  const unblockArtistMutation = useMutation(api.library.unblockArtist);
   const setTasteMutation = useMutation(api.library.setTaste);
+  const setPrefsMutation = useMutation(api.library.setPrefs);
   const handleUnbury = useCallback(
     (trackId: string) => {
       unbury(trackId);
-      if (signedIn) void unburyMutation({ trackId }).catch(() => undefined);
+      if (signedIn) void unburyMutation({ trackId }).catch(syncFailed);
     },
-    [unbury, signedIn, unburyMutation],
+    [unbury, signedIn, unburyMutation, syncFailed],
+  );
+  const handleUnblockArtist = useCallback(
+    (artist: string) => {
+      unblockArtist(artist);
+      if (signedIn) void unblockArtistMutation({ artist }).catch(syncFailed);
+    },
+    [unblockArtist, signedIn, unblockArtistMutation, syncFailed],
+ );
+
+  /** Push pref changes to the profile, debounced so slider drags don't spam. */
+  const prefsTimer = useRef<number | undefined>(undefined);
+  const handleSetPrefs = useCallback(
+    (p: Partial<UserPrefs>) => {
+      setPrefs(p); // local-first: instant, works offline
+      if (!signedIn) return;
+      window.clearTimeout(prefsTimer.current);
+      prefsTimer.current = window.setTimeout(() => {
+        const merged = { ...stateRef.current.prefs, ...p };
+        void setPrefsMutation({
+          motion: merged.motion,
+          haptics: merged.haptics,
+          accentMode: merged.accentMode,
+          accentColor: merged.accentColor,
+          swipeSensitivity: merged.swipeSensitivity,
+        }).catch(syncFailed);
+      }, 600);
+    },
+    [setPrefs, signedIn, setPrefsMutation, syncFailed],
   );
 
   const hydratedFor = useRef<string | null>(null);
@@ -228,13 +292,16 @@ function Shell() {
         neverTracks: library.neverTracks ?? [],
         replayContainers: library.replayContainers ?? [],
         taste: coerceTaste(library.taste),
+        prefs: coercePrefs(library.prefs),
         saveTarget: library.saveTarget as SaveTarget,
       });
     }
   }, [library, sessionUid, hydrateRemote]);
 
   useEffect(() => {
-    if (serverTracks && serverTracks.length > 0) {
+    // An empty server catalogue is a real state (admin hid everything, or the
+    // table is fresh) — honour it instead of dealing tracks the server buried.
+    if (serverTracks !== undefined && serverTracks !== null) {
       // Full tracks, not just ids. Passing ids only meant the deck kept
       // dealing the bundled copies, so hooks, creator uploads and imported
       // songs never reached a card.
@@ -262,13 +329,12 @@ function Shell() {
     () => {
       if (autoAdvanceRef.current) swipe("skip"); // preview ended → next song
     },
+    // the player already auto-skips dead audio; this is where it gets reported
+    (src) => {
+      console.warn(`[audio] source failed: ${src}`);
+      showToast("That track's audio is gone — skipped", "⚠");
+    },
   );
-
-  const showToast = useCallback((msg: string, icon: string) => {
-    window.clearTimeout(toastTimer.current);
-    setToast({ key: Date.now(), msg, icon });
-    toastTimer.current = window.setTimeout(() => setToast(null), 1600);
-  }, []);
 
   const handleSwipe = useCallback(
     (dir: SwipeDir) => {
@@ -279,18 +345,21 @@ function Shell() {
       swipe(action);
       if (signedIn && track) {
         const playingHookId = hookRef.current?.id;
+        // only server-issued Convex ids may be credited — the baked catalog's
+        // synthetic ids ("123:0") and the "whole" fallback would fail
+        // validation and turn every swipe on a cold start into a sync error
+        const validHookId =
+          playingHookId && /^[a-z0-9]{20,}$/.test(playingHookId)
+            ? (playingHookId as never)
+            : undefined;
         void recordSwipe({
           track: toServer(track),
           action,
-          // "whole" is the synthetic window for tracks nobody marked up
-          hookId:
-            playingHookId && playingHookId !== "whole"
-              ? (playingHookId as never)
-              : undefined,
-        }).catch(() => undefined);
+          hookId: validHookId,
+        }).catch(syncFailed);
       }
     },
-    [swipe, showToast, onDeck, signedIn, recordSwipe],
+    [swipe, showToast, onDeck, signedIn, recordSwipe, syncFailed],
   );
 
   const hookRef = useRef(hook);
@@ -309,16 +378,16 @@ function Shell() {
         trackId: previous.track.id,
         artist: previous.track.artist,
         action: previous.action,
-      }).catch(() => undefined);
+      }).catch(syncFailed);
     }
-  }, [back, previous, showToast, signedIn, revertSwipe]);
+  }, [back, previous, showToast, signedIn, revertSwipe, syncFailed]);
 
   const handleSaveTarget = useCallback(
     (target: SaveTarget) => {
       setSaveTarget(target);
-      if (signedIn) void saveTargetMutation({ target }).catch(() => undefined);
+      if (signedIn) void saveTargetMutation({ target }).catch(syncFailed);
     },
-    [setSaveTarget, signedIn, saveTargetMutation],
+    [setSaveTarget, signedIn, saveTargetMutation, syncFailed],
   );
 
   const handleCreatePlaylist = useCallback(
@@ -361,19 +430,34 @@ function Shell() {
     (id: string) => {
       deletePlaylist(id);
       if (signedIn && !id.startsWith("local-")) {
-        void deletePlaylistMutation({ playlistId: id as never }).catch(() => undefined);
+        void deletePlaylistMutation({ playlistId: id as never }).catch(syncFailed);
       }
     },
-    [deletePlaylist, signedIn, deletePlaylistMutation],
+    [deletePlaylist, signedIn, deletePlaylistMutation, syncFailed],
   );
 
   const handleRemoveSong = useCallback(
     (trackId: string) => {
       removeSong(trackId);
-      if (signedIn) void removeSongMutation({ trackId }).catch(() => undefined);
+      if (signedIn) void removeSongMutation({ trackId }).catch(syncFailed);
     },
-    [removeSong, signedIn, removeSongMutation],
+    [removeSong, signedIn, removeSongMutation, syncFailed],
   );
+
+  // The tutorial deals from cards 4–8. On a thin queue that slice can come
+  // back with fewer than four — or zero — and `index % 0` is NaN, which made
+  // the demo card read `.artwork` of undefined and crash onboarding entirely.
+  const demoTracks = useMemo(() => {
+    const fromQueue = state.queue.slice(3, 8);
+    if (fromQueue.length >= 5) return fromQueue;
+    const used = new Set(
+      [...state.queue.slice(0, 3), ...fromQueue].map((t) => t.id),
+    );
+    const extra = state.catalog
+      .filter((t) => !used.has(t.id))
+      .slice(0, 5 - fromQueue.length);
+    return [...fromQueue, ...extra];
+  }, [state.queue, state.catalog]);
 
   const goDiscover = useCallback(
     (trackId?: string) => {
@@ -383,11 +467,22 @@ function Shell() {
     [jumpTo],
   );
 
-  // tint the whole room with the on-deck track's accent
+  // tint the whole room with the on-deck track's accent — or a fixed colour
+  // if they chose one in Settings → Appearance
+  const trackAccent = inDiscover && onDeck ? onDeck.accent : "#FF3D71";
+  const accent =
+    state.prefs.accentMode === "custom" ? state.prefs.accentColor : trackAccent;
   useEffect(() => {
-    const accent = inDiscover && onDeck ? onDeck.accent : "#FF3D71";
     document.documentElement.style.setProperty("--accent", accent);
-  }, [inDiscover, onDeck?.accent]);
+  }, [accent]);
+
+  // motion preference rides a data attribute so CSS can gate its loops
+  useEffect(() => {
+    document.documentElement.dataset.motion = state.prefs.motion;
+    return () => {
+      delete document.documentElement.dataset.motion;
+    };
+  }, [state.prefs.motion]);
 
   return (
     <div className="stage">
@@ -446,6 +541,7 @@ function Shell() {
                 hookLabel={hook?.label}
                 onNextHook={nextHook}
                 gateSwipe={gateSwipe}
+                sensitivity={state.prefs.swipeSensitivity}
               />
             </>
           )}
@@ -464,6 +560,10 @@ function Shell() {
               onAutoAdvance={setAutoAdvance}
               onReplay={handleReplay}
               onUnbury={handleUnbury}
+              onUnblockArtist={handleUnblockArtist}
+              onSetPrefs={handleSetPrefs}
+              volume={volume}
+              onVolume={setVolume}
               onReplayTutorial={() => {
                 localStorage.removeItem(ONBOARD_KEY);
                 setOnboarded(false);
@@ -553,14 +653,14 @@ function Shell() {
         <AnimatePresence>
           {!onboarded && (
             <Onboarding
-              demoTracks={state.queue.slice(3, 8)}
+              demoTracks={demoTracks}
               demoCatalog={state.catalog}
               onFinish={(taste) => {
                 localStorage.setItem(ONBOARD_KEY, "1");
                 // apply locally first so the very first deck is already tilted;
                 // the server copy is for the next device they sign in on
                 setTaste(taste);
-                if (signedIn) void setTasteMutation(taste).catch(() => undefined);
+                if (signedIn) void setTasteMutation(taste).catch(syncFailed);
                 setOnboarded(true);
                 setView("discover"); // this tap unlocks audio autoplay
               }}

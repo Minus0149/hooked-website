@@ -389,3 +389,30 @@ export const myImports = query({
     return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 12);
   },
 });
+
+/**
+ * Runs whose browser tab went away mid-match used to sit in status:"matching"
+ * forever. Anything older than the worst-case run time (~4 minutes of iTunes
+ * throttle, with generous margin) is dead: mark it failed and burn the token
+ * so nothing can still write to it.
+ */
+const STALE_AFTER_MS = 30 * 60_000;
+
+export const sweepStale = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = Date.now() - STALE_AFTER_MS;
+    const stale = (
+      await ctx.db.query("imports").withIndex("by_status", (q) => q.eq("status", "matching")).collect()
+    ).filter((r) => new Date(r.createdAt).getTime() < cutoff);
+
+    for (const run of stale) {
+      await ctx.db.patch(run._id, {
+        status: "failed",
+        note: "timed out — the matching tab closed before the run finished",
+        token: undefined,
+      });
+    }
+    return { swept: stale.length };
+  },
+});

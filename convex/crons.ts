@@ -17,4 +17,21 @@ crons.hourly(
   internal.hooks.rerank,
 );
 
+crons.hourly(
+  "compute catalogue heat for the adventure answer",
+  { minuteUTC: 11 },
+  internal.hooks.computeHeat,
+);
+
+/**
+ * Import runs live in a browser tab; if that tab dies mid-match the run row
+ * sits in status:"matching" forever, holding its token. Sweep them so the
+ * dashboard shows an honest failure instead of an eternal spinner.
+ */
+crons.interval(
+  "sweep stale import runs",
+  { minutes: 10 },
+  internal.imports.sweepStale,
+);
+
 export default crons;

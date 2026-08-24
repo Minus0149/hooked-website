@@ -98,7 +98,7 @@ export const EMPTY_TASTE: TastePrefs = {
 const flatten = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export function tasteScore(
-  track: { genre: string; markets?: string[] },
+  track: { genre: string; markets?: string[]; heat?: number },
   prefs: TastePrefs,
 ): number {
   let score = 0;
@@ -126,7 +126,33 @@ export function tasteScore(
     }
   }
 
+  // "The hits / a bit of both / take me deep" finally does something: `heat`
+  // is each track's play count normalised against the catalogue's leader
+  // (written by an hourly job, see crons.ts), so the answer tilts the deck
+  // toward what everyone is playing — or away from it. Unknown heat counts as
+  // unknown, which is exactly what "deep" listeners are asking for.
+  if (prefs.adventure === "hits" || prefs.adventure === "deep") {
+    const heat = typeof track.heat === "number" ? Math.min(Math.max(track.heat, 0), 1) : 0;
+    score += prefs.adventure === "hits" ? heat * 2.5 : (1 - heat) * 1.75;
+  }
+
   return score;
+}
+
+/**
+ * How strongly a right-swipe's promise still applies to this track.
+ *
+ * "More like this" re-ranks the visible queue immediately, and the genres it
+ * named are kept so refills honour the steer too — without this the gesture's
+ * effect died the moment the re-ranked cards were gone.
+ */
+export function genreBoostScore(
+  track: { genre: string },
+  boostGenres: string[],
+): number {
+  if (boostGenres.length === 0) return 0;
+  const genre = flatten(track.genre ?? "");
+  return boostGenres.some((b) => genre.includes(flatten(b))) ? 1 : 0;
 }
 
 /**

@@ -153,3 +153,44 @@ export const rerank = internalMutation({
     return { tracks: byTrack.size, changed };
   },
 });
+
+/**
+ * Turn play counts into the catalogue-wide "how known is this song" signal.
+ *
+ * Every track gets `heat`: its total plays across hooks, normalised so the
+ * most-played track sits at 1. This is what lets the onboarding adventure
+ * answer ("the hits" vs "take me deep") actually tilt a deck — see tasteScore.
+ *
+ * Runs on the same schedule as rerank, for the same reason: it writes rows the
+ * catalogue query reads, so that invalidation is hourly, not per swipe.
+ * Writes only when a value moved, keeping no-op runs free.
+ */
+export const computeHeat = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const stats = await ctx.db.query("hookStats").collect();
+    const playsByTrack = new Map<string, number>();
+    for (const s of stats) {
+      playsByTrack.set(s.trackId, (playsByTrack.get(s.trackId) ?? 0) + s.plays);
+    }
+
+    let leader = 0;
+    for (const plays of playsByTrack.values()) {
+      if (plays > leader) leader = plays;
+    }
+
+    const tracks = await ctx.db.query("tracks").collect();
+    let changed = 0;
+    for (const track of tracks) {
+      const plays = playsByTrack.get(track.trackId) ?? 0;
+      const heat = leader > 0 ? Math.round((plays / leader) * 1000) / 1000 : 0;
+      // absent and zero mean the same thing; don't grow rows that never played
+      if (heat === 0 && track.heat === undefined) continue;
+      if (track.heat !== heat) {
+        await ctx.db.patch(track._id, { heat });
+        changed++;
+      }
+    }
+    return { tracks: tracks.length, changed, leader };
+  },
+});

@@ -535,13 +535,14 @@ export const deleteUserData = mutation({
     if (!target) throw new Error("No such user");
     if (target.isAdmin) throw new Error("Demote the admin first");
     const userId = target.userId;
-    const [swipes, songs, never, playlists] = await Promise.all([
+    const [swipes, songs, never, buried, playlists] = await Promise.all([
       ctx.db.query("swipes").withIndex("by_userId", (q) => q.eq("userId", userId)).collect(),
       ctx.db.query("librarySongs").withIndex("by_user_kind", (q) => q.eq("userId", userId)).collect(),
       ctx.db.query("neverArtists").withIndex("by_user_artist", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("neverTracks").withIndex("by_user_track", (q) => q.eq("userId", userId)).collect(),
       ctx.db.query("playlists").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
     ]);
-    for (const doc of [...swipes, ...songs, ...never, ...playlists]) {
+    for (const doc of [...swipes, ...songs, ...never, ...buried, ...playlists]) {
       await ctx.db.delete(doc._id);
     }
     await ctx.db.delete(profileId);

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Build the deck catalogue from Apple's live charts, with real hooks.
  *
  * Two problems this solves at once:
@@ -7,24 +7,23 @@
  *    current charts across countries and genres instead, and writes JSONL for
  *    `npx convex import`, so the deck can grow without growing the bundle.
  *
- * 2. Every track gets three hooks rather than one 30-second block. A preview is
- *    all we have — Instagram picks three moments out of a full master, we only
- *    get the 30 seconds Apple chose — so the three windows are thirds of that
- *    preview, *ordered by how loud they actually are*. ffmpeg decodes each
- *    preview and the most energetic third leads. That's a guess, but a measured
- *    one, and tracks.list re-sorts by real save rate once a hook has 20 plays,
- *    so the guess only has to survive the first few listeners.
+ * 2. Every track gets three hooks rather than one 30-second block. The windows
+ *    come from lib/hook-detector.mjs â€” loudness, transients AND phrase-level
+ *    repetition, so choruses lead â€” and are also baked into both clients'
+ *    src/data/catalog.json (see --bake), so a cold start plays measured hooks
+ *    instead of "the whole preview from 0s".
  *
  * Usage:
- *   node scripts/build-catalog.mjs --limit 1000 [--no-audio] [--out ./dir]
+ *   node scripts/build-catalog.mjs --limit 1000 [--no-audio] [--out ./dir] [--bake 100]
  */
-import { spawn } from "node:child_process";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { analyzeUrl } from "./lib/hook-detector.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const web = dirname(here);
+const repo = dirname(web);
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -34,9 +33,10 @@ const flag = (name, fallback) => {
 const LIMIT = Number(flag("limit", 1000));
 const ANALYSE = !args.includes("--no-audio");
 const OUT = flag("out", join(web, "catalog-out"));
+const BAKE = Number(flag("bake", 100)); // 0 disables the client catalogs
 
 // Charts are per storefront, so spreading the countries is what keeps the deck
-// from being one market's top 40. India and the Gulf are deliberate — that's
+// from being one market's top 40. India and the Gulf are deliberate â€” that's
 // who this is being built for first.
 const COUNTRIES = ["in", "us", "gb", "ae", "sa", "ca", "au", "ng", "kr", "br"];
 
@@ -47,18 +47,6 @@ const ACCENTS = [
   "#ff3d71", "#00e5a0", "#ffb627", "#7c5cff",
   "#ff6b6b", "#3ddc97", "#4dabf7", "#f783ac",
 ];
-
-const HOOK_COUNT = 3;
-const MIN_HOOK_MS = 6000;
-
-/**
- * 22.05kHz, not the 8kHz loudness alone needs. Everything above 4kHz — the
- * crack of a snare, a hi-hat — is what makes a transient findable, and 8kHz
- * throws all of it away.
- */
-const SR = 22050;
-const HOP = 256;
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(...a);
 
@@ -105,8 +93,8 @@ async function chartIds() {
 
   const ids = new Map(); // id -> how many charts it shows up in
   // Which storefronts a song charts in is the only language signal these feeds
-  // carry. Apple's genre taxonomy is mostly Western — an entire Bollywood chart
-  // comes back as "worldwide" — so charting in `in` is what tells us a track is
+  // carry. Apple's genre taxonomy is mostly Western â€” an entire Bollywood chart
+  // comes back as "worldwide" â€” so charting in `in` is what tells us a track is
   // likely Hindi, and `sa`/`ae` Arabic.
   const markets = new Map();
   const answered = await pool(feeds, 8, async ({ url, country }) => {
@@ -163,213 +151,8 @@ async function lookup(ids) {
 
 // ------------------------------------------------------------------ audio
 
-/**
- * Pipe the encoded audio through ffmpeg and collect raw PCM.
- *
- * Written with spawn rather than execFile on purpose: execFile has no `input`
- * option (that belongs to execFileSync), so passing one is silently ignored and
- * ffmpeg sits forever on a stdin that never closes. Nothing errors, nothing
- * finishes.
- */
-function decode(audio) {
-  return new Promise((resolve) => {
-    const ff = spawn("ffmpeg", [
-      "-v", "error", "-i", "pipe:0",
-      "-ac", "1", "-ar", String(SR), "-f", "s16le", "-",
-    ]);
-    const chunks = [];
-    let settled = false;
-    const done = (value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(value);
-    };
-    const timer = setTimeout(() => {
-      ff.kill("SIGKILL");
-      done(null);
-    }, 20000);
-
-    ff.stdout.on("data", (c) => chunks.push(c));
-    ff.on("error", () => done(null));
-    ff.on("close", () => done(Buffer.concat(chunks)));
-    ff.stdin.on("error", () => {}); // a rejected pipe is the close path, not a crash
-    ff.stdin.end(audio);
-  });
-}
-
-/**
- * Where a hook is allowed to begin.
- *
- * A window that opens mid-syllable sounds like a glitch even when the ten
- * seconds after it are the best in the song, so each planned start is nudged
- * to the nearest transient — a drum hit, a vocal entry, the top of a bar.
- *
- * This is deliberately *not* beat tracking. Estimating tempo from a 30-second
- * preview kept landing a third out (129 against a true 89), and snapping to a
- * wrong grid is worse than not snapping at all. An onset is observed rather
- * than inferred, so it cannot be an octave or a triplet off.
- *
- * The three bands matter: a hi-hat barely moves broadband energy, and it was
- * invisible at the 8kHz used for loudness. High frequencies carry most of the
- * transient, hence the extra weight.
- */
-function onsetEnvelope(pcm) {
-  const frames = Math.floor(pcm.length / HOP);
-  const low = new Float32Array(frames);
-  const mid = new Float32Array(frames);
-  const high = new Float32Array(frames);
-  let lp = 0;
-  let lp2 = 0;
-  for (let f = 0; f < frames; f++) {
-    let l = 0;
-    let m = 0;
-    let h = 0;
-    for (let i = f * HOP; i < (f + 1) * HOP; i++) {
-      const x = pcm[i] / 32768;
-      lp += 0.05 * (x - lp); // roughly below 200Hz
-      lp2 += 0.35 * (x - lp2); // roughly below 2kHz
-      l += lp * lp;
-      m += (lp2 - lp) * (lp2 - lp);
-      h += (x - lp2) * (x - lp2);
-    }
-    low[f] = Math.sqrt(l / HOP);
-    mid[f] = Math.sqrt(m / HOP);
-    high[f] = Math.sqrt(h / HOP);
-  }
-  const env = new Float32Array(frames);
-  for (let f = 1; f < frames; f++) {
-    env[f] =
-      Math.max(0, low[f] - low[f - 1]) +
-      Math.max(0, mid[f] - mid[f - 1]) +
-      1.5 * Math.max(0, high[f] - high[f - 1]);
-  }
-  let max = 0;
-  for (const v of env) max = Math.max(max, v);
-  if (max > 0) for (let i = 0; i < frames; i++) env[i] /= max;
-  return env;
-}
-
-/** The strongest onset near `targetMs`, preferring ones that barely move. */
-function snapToOnset(env, targetMs, windowMs = 1200) {
-  const fps = SR / HOP;
-  const centre = Math.round((targetMs / 1000) * fps);
-  const reach = Math.round((windowMs / 1000) * fps);
-  let best = -1;
-  let bestScore = 0;
-  for (let i = Math.max(1, centre - reach); i < Math.min(env.length, centre + reach); i++) {
-    const score = env[i] * (1 - 0.6 * (Math.abs(i - centre) / reach));
-    if (score > bestScore) {
-      bestScore = score;
-      best = i;
-    }
-  }
-  return best < 0 ? targetMs : Math.round((best / fps) * 1000);
-}
-
-/**
- * Decode the preview once and measure both things it has to tell us: loudness
- * per second, which ranks the windows, and transients, which position them.
- */
-async function energyProfile(previewUrl) {
-  const res = await get(previewUrl, 25000);
-  if (!res.ok) return null;
-  const audio = Buffer.from(await res.arrayBuffer());
-
-  const stdout = await decode(audio);
-  if (!stdout || stdout.length < 16000) return null;
-
-  const pcm = new Int16Array(
-    stdout.buffer,
-    stdout.byteOffset,
-    Math.floor(stdout.length / 2),
-  );
-  const seconds = Math.floor(pcm.length / SR);
-  const rms = [];
-  for (let s = 0; s < seconds; s++) {
-    let sum = 0;
-    for (let i = s * SR; i < (s + 1) * SR; i++) sum += pcm[i] * pcm[i];
-    rms.push(Math.sqrt(sum / SR));
-  }
-  return {
-    rms,
-    onsets: onsetEnvelope(pcm),
-    durationMs: Math.round((pcm.length / SR) * 1000),
-  };
-}
-
-/**
- * Three windows over whatever audio exists, loudest first.
- *
- * Non-overlapping on purpose: these are meant to be three *distinct* parts, so
- * tapping through never replays the same seconds. A 30s preview gives three 10s
- * windows; a longer upload gives three 15s windows spread across it.
- */
-/**
- * Where the audio stops being worth listening to.
- *
- * Apple fades every preview out, and across a first run of 1000 songs the final
- * third won the loudness contest exactly zero times — the fade was dragging its
- * average down, and worse, the last hook of every song ended in silence.
- * Trimming to the last moment that still carries real signal fixes both.
- */
-function usableEnd(profile) {
-  if (!profile || profile.rms.length === 0) return null;
-  const sorted = [...profile.rms].sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)];
-  const floor = median * 0.3;
-  for (let i = profile.rms.length - 1; i >= 0; i--) {
-    if (profile.rms[i] > floor) return (i + 1) * 1000;
-  }
-  return null;
-}
-
-function planHooks(profile, fallbackMs) {
-  const raw = (profile && profile.durationMs) || fallbackMs;
-  const trimmed = usableEnd(profile);
-  // never trim more than a quarter of the preview away
-  const total = trimmed && trimmed > raw * 0.75 ? trimmed : raw;
-  if (!total || total < MIN_HOOK_MS * 2) {
-    return [{ startMs: 0, durationMs: Math.max(total || 30000, MIN_HOOK_MS), score: 0 }];
-  }
-
-  const windowMs = Math.min(15000, Math.floor(total / HOOK_COUNT));
-  if (windowMs < MIN_HOOK_MS) return [{ startMs: 0, durationMs: total, score: 0 }];
-
-  const stride = Math.floor((total - windowMs) / (HOOK_COUNT - 1));
-  const windows = Array.from({ length: HOOK_COUNT }, (_, i) => ({
-    startMs: i * stride,
-    durationMs: windowMs,
-    score: 0,
-  }));
-
-  if (profile) {
-    for (const w of windows) {
-      const from = Math.floor(w.startMs / 1000);
-      const to = Math.min(profile.rms.length, Math.ceil((w.startMs + w.durationMs) / 1000));
-      const slice = profile.rms.slice(from, to);
-      w.score = slice.length ? slice.reduce((a, b) => a + b, 0) / slice.length : 0;
-    }
-  }
-
-  // put each start on a transient rather than an arbitrary tick of the clock
-  if (profile?.onsets) {
-    for (const w of windows) {
-      const snapped = snapToOnset(profile.onsets, w.startMs);
-      // never let a nudge push a window past the end of the audio
-      if (snapped >= 0 && snapped + w.durationMs <= raw) w.startMs = snapped;
-    }
-    windows.sort((a, b) => a.startMs - b.startMs);
-    // a nudge can overlap the neighbour it moved toward; give the later one back
-    for (let i = 1; i < windows.length; i++) {
-      const prevEnd = windows[i - 1].startMs + windows[i - 1].durationMs;
-      if (windows[i].startMs < prevEnd) windows[i].startMs = prevEnd;
-    }
-  }
-
-  // loudest first — tracks.list re-sorts by real save rate once there's data
-  return [...windows].sort((a, b) => b.score - a.score);
-}
+// Audio analysis lives in lib/hook-detector.mjs, shared with
+// scripts/analyze-hooks.mjs so the CLI and this builder can never drift.
 
 // ------------------------------------------------------------------ main
 
@@ -394,14 +177,29 @@ for (const r of raw) {
 log(picked.length + " tracks after dedupe");
 
 let analysed = 0;
-if (ANALYSE) log("measuring loudness (ffmpeg, 8 at a time)...");
+if (ANALYSE) log("measuring loudness, transients and repetition (ffmpeg, 8 at a time)...");
 const withHooks = await pool(picked, 8, async (r) => {
-  const profile = ANALYSE ? await energyProfile(r.previewUrl).catch(() => null) : null;
-  if (profile) {
+  const windows = ANALYSE
+    ? await analyzeUrl(r.previewUrl, r.trackTimeMillis ?? 30000).catch(() => null)
+    : null;
+  if (windows) {
     analysed++;
     if (analysed % 100 === 0) log("  analysed " + analysed + "...");
   }
-  return { r, hooks: planHooks(profile, 30000) };
+  // fall back to even thirds when the audio can't be fetched or decoded
+  const hooks =
+    windows ??
+    ((() => {
+      const total = 30000;
+      const windowMs = Math.min(15000, Math.floor(total / 3));
+      const stride = Math.floor((total - windowMs) / 2);
+      return [0, 1, 2].map((i) => ({
+        startMs: i * stride,
+        durationMs: windowMs,
+        score: 0,
+      }));
+    })());
+  return { r, hooks };
 });
 
 const tracks = [];
@@ -440,8 +238,43 @@ const jsonl = (rows) => rows.map((r) => JSON.stringify(r)).join("\n") + "\n";
 writeFileSync(join(OUT, "tracks.jsonl"), jsonl(tracks));
 writeFileSync(join(OUT, "hooks.jsonl"), jsonl(hooks));
 
+// ---- cold-start catalogs for the two clients ------------------------------
+//
+// The baked list is what a brand-new visitor swipes before tracks.list has
+// ever answered — and until now it carried no hooks at all, so the very first
+// session ignored everything above. Baked hook ids are synthetic ("<id>:<n>"),
+// which the clients treat as opaque; only server hook ids are ever credited.
+if (BAKE > 0) {
+  const hooksByTrack = new Map();
+  for (const h of hooks) {
+    const list = hooksByTrack.get(h.trackId) ?? [];
+    list.push(h);
+    hooksByTrack.set(h.trackId, list);
+  }
+  const clientCatalog = tracks.slice(0, BAKE).map((t) => ({
+    id: t.trackId,
+    title: t.title,
+    artist: t.artist,
+    album: t.album,
+    artwork: t.artwork,
+    previewUrl: t.previewUrl,
+    durationMs: t.durationMs,
+    genre: t.genre,
+    accent: t.accent,
+    markets: t.markets,
+    hooks: (hooksByTrack.get(t.trackId) ?? []).map((h, i) => ({
+      id: `${t.trackId}:${i}`,
+      startMs: h.startMs,
+      durationMs: h.durationMs,
+    })),
+  }));
+  const pretty = JSON.stringify(clientCatalog, null, 1) + "\n";
+  writeFileSync(join(web, "src", "data", "catalog.json"), pretty);
+  writeFileSync(join(repo, "mobile", "src", "data", "catalog.json"), pretty);
+}
+
 log("");
 log("tracks : " + tracks.length);
-log("hooks  : " + hooks.length + "  (" + analysed + " placed by loudness, " +
+log("hooks  : " + hooks.length + "  (" + analysed + " scored by the detector, " +
     (tracks.length - analysed) + " evenly)");
-log("written: " + OUT);
+log("written: " + OUT + (BAKE > 0 ? ` + ${Math.min(BAKE, tracks.length)} baked to both clients` : ""));

@@ -410,10 +410,13 @@ button {
   bottom: 0;
   left: 0;
   right: 0;
+  top: 0;
   border-radius: 999px;
   background: var(--accent);
   box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent);
-  transition: background 0.5s ease;
+  /* no background transition — --accent changes per card; scaleY for progress */
+  transform: scaleY(var(--v, 1));
+  transform-origin: bottom center;
 }
 .volume-knob {
   position: absolute;
@@ -425,6 +428,7 @@ button {
   background: var(--text);
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
   pointer-events: none;
+  bottom: calc(var(--v, 1) * (100% - 12px));
 }
 .volume-speaker {
   display: grid;
@@ -1025,10 +1029,15 @@ button {
   position: absolute;
   left: 0;
   bottom: 0;
+  width: 100%;
   height: 4px;
   background: var(--accent);
-  transition: background 0.5s ease;
+  /* no background transition: --accent changes per card and a 0.5s crossfade
+     read as the UI lagging behind the artwork */
   border-radius: 0 4px 4px 0;
+  /* progress rides a CSS var on .scrub; scaleX never triggers layout */
+  transform: scaleX(var(--p, 0));
+  transform-origin: left center;
 }
 .scrub-knob {
   position: absolute;
@@ -1041,6 +1050,7 @@ button {
   box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 80%, transparent);
   opacity: 0;
   transition: opacity 0.15s ease;
+  left: calc(var(--p, 0) * 100%);
 }
 .scrub:hover .scrub-knob,
 .scrub:active .scrub-knob {
@@ -2378,3 +2388,135 @@ button {
 .panel-actions { display: flex; gap: 7px; flex: none; }
 .admin-empty-line { padding: 6px 0; }
 .admin-stat.is-bad { border-color: color-mix(in srgb, var(--never) 45%, var(--line)); }
+
+/* ------------------------------------------------------------------
+   Deep settings (Appearance / Playback / Gestures / Sound & taste /
+   Data & privacy) — chips, swatches and range inputs. */
+
+.prefs-block {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  margin-bottom: 8px;
+}
+.prefs-label {
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted); font-weight: 700;
+}
+.prefs-hint {
+  margin: -4px 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--muted);
+}
+
+.prefs-segmented { display: flex; flex-wrap: wrap; gap: 6px; }
+.prefs-chip {
+  appearance: none; cursor: pointer;
+  padding: 7px 14px; border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface2, #12121a) 80%, transparent);
+  color: var(--text); font-size: 12.5px; font-weight: 600;
+  transition: border-color 0.15s, background 0.15s, transform 0.12s;
+}
+.prefs-chip:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.prefs-chip:active { transform: scale(0.96); }
+.prefs-chip.on {
+  background: var(--accent); border-color: var(--accent); color: #0b0b10;
+}
+
+.prefs-swatches { display: flex; gap: 10px; margin: 4px 0; }
+.prefs-swatch {
+  width: 34px; height: 34px; border-radius: 17px;
+  border: none; cursor: pointer; outline: 2px solid transparent;
+  outline-offset: 3px;
+  transition: transform 0.12s, outline-color 0.12s;
+}
+.prefs-swatch:hover { transform: scale(1.08); }
+.prefs-swatch[aria-checked="true"] { outline-color: var(--text); }
+
+input[type="range"].prefs-range {
+  appearance: none; -webkit-appearance: none;
+  width: 150px; height: 22px; background: transparent; cursor: pointer;
+}
+input[type="range"].prefs-range::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 30%, var(--line)));
+}
+input[type="range"].prefs-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px; border-radius: 9px; margin-top: -6px;
+  background: var(--text); border: 2px solid var(--bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+input[type="range"].prefs-range::-moz-range-track {
+  height: 6px; border-radius: 3px; background: var(--line);
+}
+input[type="range"].prefs-range::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 7px;
+  background: var(--text); border: 2px solid var(--bg);
+}
+
+/* ------------------------------------------------------------------
+   Reduced motion.
+
+   Two gates: the OS setting (media query) and the in-app preference
+   (html[data-motion]). Both stop the decorative loops; transitions that
+   carry meaning (sheet slides) collapse to near-instant instead of
+   disappearing, so nothing teleports confusingly. */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html[data-motion="off"] .eq,
+html[data-motion="reduced"] .eq { display: none; }
+html[data-motion="off"] .ob-arrow,
+html[data-motion="reduced"] .ob-arrow { animation: none !important; opacity: 0.9 !important; }
+
+/* the drift/pulse loops are pure decoration */
+@keyframes drift { to { transform: translate(0, 0); } }
+html[data-motion="off"] .drift,
+html[data-motion="reduced"] .drift { animation: none !important; }
+
+/* ------------------------------------------------------------------
+   Creator waveform hook editor — drag the window onto the part of the
+   song you mean, audition it in a loop, then commit. */
+
+.hook-editor { margin: 10px 0; }
+.hook-editor-canvas {
+  position: relative;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface2, #12121a) 85%, transparent);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.hook-editor-loading {
+  height: 72px; display: grid; place-items: center;
+  color: var(--muted); font-size: 12px;
+}
+.hook-editor-window {
+  position: absolute; top: 0; bottom: 0;
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  cursor: grab;
+  touch-action: none;
+}
+.hook-editor-window:active { cursor: grabbing; }
+.hook-editor-grip {
+  position: absolute; top: 0; bottom: 0; width: 12px;
+  cursor: ew-resize;
+}
+.hook-editor-grip:first-child { left: -4px; }
+.hook-editor-grip:last-child { right: -4px; }
+.hook-editor-row {
+  display: flex; align-items: center; gap: 10px; margin-top: 8px;
+}
+.hook-editor-readout {
+  font-size: 12.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

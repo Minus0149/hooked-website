@@ -5,9 +5,48 @@ import { api } from "../../convex/_generated/api";
 import { authClient } from "../lib/auth-client";
 import { ReplayRules } from "./settings/ReplayRules";
 import { useStore } from "../state/store";
+import {
+  ACCENT_SWATCHES,
+  HAPTICS_LEVELS,
+  MOTION_LEVELS,
+  type AccentMode,
+  type HapticsLevel,
+  type MotionLevel,
+} from "../data/prefs";
+import { ADVENTURE, availableTasteOptions, type Adventure, type TastePrefs } from "../data/taste";
 import { IconBack, IconCheck, IconFolder, IconHeart, IconUser } from "./icons";
 
 const BETA_URL = import.meta.env.VITE_BETA_URL ?? "https://hookedcue.com/beta";
+
+function Group({ children }: { children: string }) {
+  return <p className="settings-group">{children}</p>;
+}
+
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { id: T; label: string }[];
+  value: T;
+  onChange: (id: T) => void;
+}) {
+  return (
+    <div className="prefs-segmented" role="radiogroup">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          role="radio"
+          aria-checked={o.id === value}
+          className={`prefs-chip ${o.id === value ? "on" : ""}`}
+          onClick={() => onChange(o.id)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function SettingsScreen({
   isAdmin,
@@ -18,6 +57,10 @@ export function SettingsScreen({
   onAutoAdvance,
   onReplay,
   onUnbury,
+  onUnblockArtist,
+  onSetPrefs,
+  volume,
+  onVolume,
 }: {
   isAdmin: boolean;
   onBack: () => void;
@@ -27,11 +70,23 @@ export function SettingsScreen({
   onAutoAdvance: (value: boolean) => void;
   onReplay: (container: string, allow: boolean) => void;
   onUnbury: (trackId: string) => void;
+  onUnblockArtist: (artist: string) => void;
+  onSetPrefs: (p: Partial<import("../data/prefs").UserPrefs>) => void;
+  /** 0..1 — wired to the same player the deck uses */
+  volume: number;
+  onVolume: (v: number) => void;
 }) {
-  const { state } = useStore();
+  const { state, setTaste } = useStore();
   const session = authClient.useSession();
   const deleteAccount = useMutation(api.library.deleteMyAccount);
   const [deleting, setDeleting] = useState(false);
+  const [showBlocked, setShowBlocked] = useState(false);
+  const options = availableTasteOptions(state.catalog);
+
+  const taste = state.taste;
+  const toggleIn = (list: string[], id: string) =>
+    list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+  const editTaste = (patch: Partial<TastePrefs>) => setTaste({ ...taste, ...patch });
 
   // Google Play requires an in-app route to delete an account and its data.
   const removeAccount = async () => {
@@ -47,6 +102,33 @@ export function SettingsScreen({
       window.alert(err instanceof Error ? err.message : "Could not delete the account");
       setDeleting(false);
     }
+  };
+
+  const exportData = () => {
+    // a real download of what this account holds — same shape the cloud has
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      taste,
+      prefs: state.prefs,
+      saveTarget: state.saveTarget,
+      autoAdvance: state.autoAdvance,
+      liked: state.liked.map(({ id, title, artist, album }) => ({ id, title, artist, album })),
+      discoveries: state.discoveries.map(({ id, title, artist, album }) => ({ id, title, artist, album })),
+      playlists: state.playlists.map((p) => ({
+        name: p.name,
+        accent: p.accent,
+        tracks: p.tracks.map(({ id, title, artist }) => ({ id, title, artist })),
+      })),
+      blockedArtists: state.neverArtists,
+      buriedSongs: state.neverTracks,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "hooked-library.json";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const targetLabel =
@@ -78,21 +160,42 @@ export function SettingsScreen({
           Settings
         </h2>
 
-        <p className="settings-group">swiping</p>
-        <button className="settings-row" onClick={onOpenSaveTarget}>
-          <span className="settings-row-icon" style={{ color: "var(--save)" }}>
-            {state.saveTarget === "liked" ? <IconHeart size={17} /> : <IconFolder size={17} />}
-          </span>
-          <span className="settings-row-label">
-            Swipe down saves to
-            <small>{targetLabel}</small>
-          </span>
-          <span className="settings-row-value">change</span>
-        </button>
-        <button
-          className="settings-row"
-          onClick={() => onAutoAdvance(!state.autoAdvance)}
-        >
+        <Group>appearance</Group>
+        <div className="prefs-block">
+          <span className="prefs-label">Accent</span>
+          <Segmented<AccentMode>
+            options={[
+              { id: "track", label: "From each song" },
+              { id: "custom", label: "Fixed colour" },
+            ]}
+            value={state.prefs.accentMode}
+            onChange={(accentMode) => onSetPrefs({ accentMode })}
+          />
+          {state.prefs.accentMode === "custom" && (
+            <div className="prefs-swatches" role="radiogroup" aria-label="accent colour">
+              {ACCENT_SWATCHES.map((c) => (
+                <button
+                  key={c}
+                  role="radio"
+                  aria-checked={c.toUpperCase() === state.prefs.accentColor.toUpperCase()}
+                  aria-label={`accent ${c}`}
+                  className="prefs-swatch"
+                  style={{ background: c, outlineColor: c }}
+                  onClick={() => onSetPrefs({ accentColor: c })}
+                />
+              ))}
+            </div>
+          )}
+          <span className="prefs-label">Motion</span>
+          <Segmented<MotionLevel>
+            options={MOTION_LEVELS}
+            value={state.prefs.motion}
+            onChange={(motion) => onSetPrefs({ motion })}
+          />
+        </div>
+
+        <Group>playback</Group>
+        <button className="settings-row" onClick={() => onAutoAdvance(!state.autoAdvance)}>
           <span className="settings-row-icon" style={{ color: "var(--more)" }}>
             ▶
           </span>
@@ -104,10 +207,125 @@ export function SettingsScreen({
             <span className="toggle-knob" />
           </span>
         </button>
+        <div className="settings-row" style={{ cursor: "default" }}>
+          <span className="settings-row-icon">♪</span>
+          <span className="settings-row-label">
+            Volume
+            <small>{Math.round(volume * 100)}%</small>
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={volume}
+            onChange={(e) => onVolume(Number(e.target.value))}
+            aria-label="volume"
+            className="prefs-range"
+          />
+        </div>
+
+        <Group>gestures</Group>
+        <div className="settings-row" style={{ cursor: "default" }}>
+          <span className="settings-row-icon" style={{ color: "var(--save)" }}>✥</span>
+          <span className="settings-row-label">
+            Swipe distance
+            <small>
+              {state.prefs.swipeSensitivity < 0.9
+                ? "feather-light flicks"
+                : state.prefs.swipeSensitivity > 1.1
+                  ? "deliberate drags"
+                  : "the shipped default"}
+            </small>
+          </span>
+          <input
+            type="range"
+            min={0.6}
+            max={1.4}
+            step={0.05}
+            value={state.prefs.swipeSensitivity}
+            onChange={(e) =>
+              onSetPrefs({ swipeSensitivity: Number(e.target.value) })
+            }
+            aria-label="swipe distance sensitivity"
+            className="prefs-range"
+          />
+        </div>
+        <div className="prefs-block">
+          <span className="prefs-label">Haptics</span>
+          <Segmented<HapticsLevel>
+            options={HAPTICS_LEVELS}
+            value={state.prefs.haptics}
+            onChange={(haptics) => onSetPrefs({ haptics })}
+          />
+        </div>
+
+        <Group>sound &amp; taste</Group>
+        <p className="prefs-hint">
+          The deck tilts toward these answers without ever walling anything out.
+        </p>
+        <span className="prefs-label" style={{ marginTop: 4 }}>Languages</span>
+        <div className="prefs-segmented" role="group" aria-label="languages">
+          {options.languages.map((l) => (
+            <button
+              key={l.id}
+              aria-pressed={taste.languages.includes(l.id)}
+              className={`prefs-chip ${taste.languages.includes(l.id) ? "on" : ""}`}
+              onClick={() => editTaste({ languages: toggleIn(taste.languages, l.id) })}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+        <span className="prefs-label">Genres</span>
+        <div className="prefs-segmented" role="group" aria-label="genres">
+          {options.genres.map((g) => (
+            <button
+              key={g.id}
+              aria-pressed={taste.genres.includes(g.id)}
+              className={`prefs-chip ${taste.genres.includes(g.id) ? "on" : ""}`}
+              onClick={() => editTaste({ genres: toggleIn(taste.genres, g.id) })}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+        <span className="prefs-label">Adventure</span>
+        <Segmented<Adventure>
+          options={ADVENTURE.map((a) => ({ id: a.id, label: a.label }))}
+          value={taste.adventure}
+          onChange={(adventure) => editTaste({ adventure })}
+        />
 
         <ReplayRules state={state} onReplay={onReplay} onUnbury={onUnbury} />
 
-        <p className="settings-group">account</p>
+        {state.neverArtists.length > 0 && (
+          <>
+            <button className="settings-row" onClick={() => setShowBlocked((v) => !v)} aria-expanded={showBlocked}>
+              <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>
+              <span className="settings-row-label">
+                Blocked artists ({state.neverArtists.length})
+                <small>their songs never reach your deck</small>
+              </span>
+              <span className="settings-row-value">{showBlocked ? "hide" : "unblock"}</span>
+            </button>
+            {showBlocked &&
+              state.neverArtists.slice(0, 50).map((a) => (
+                <button key={a} className="settings-row" onClick={() => onUnblockArtist(a)}>
+                  <span className="settings-row-icon">·</span>
+                  <span className="settings-row-label">
+                    {a}
+                    <small>blocked</small>
+                  </span>
+                  <span className="settings-row-value" style={{ color: "var(--more)" }}>
+                    unblock
+                  </span>
+                </button>
+              ))}
+          </>
+        )}
+
+        <Group>account</Group>
         <button className="settings-row" onClick={onOpenProfile}>
           <span className="settings-row-icon"><IconUser size={17} /></span>
           <span className="settings-row-label">
@@ -141,7 +359,15 @@ export function SettingsScreen({
           </a>
         )}
 
-        <p className="settings-group">app</p>
+        <Group>data &amp; privacy</Group>
+        <button className="settings-row" onClick={exportData}>
+          <span className="settings-row-icon" style={{ color: "var(--more)" }}>↓</span>
+          <span className="settings-row-label">
+            Export my library
+            <small>your lists and answers as JSON</small>
+          </span>
+          <span className="settings-row-value">save</span>
+        </button>
         {/* the browser build is step 1 of the beta funnel — someone who has got
             this far has already swiped, which is exactly when the android ask
             is easiest to say yes to */}

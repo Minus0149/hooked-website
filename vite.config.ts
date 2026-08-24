@@ -8,23 +8,16 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     esbuild: isProduction
       ? {
-          drop: ["console", "debugger"],
+          // strip chatter but keep console.warn/error — they carry the
+          // diagnostics (dead audio, crash reports) worth having in prod
+          drop: ["debugger"],
+          pure: ["console.log", "console.info", "console.debug"],
         }
       : undefined,
     build: {
       sourcemap: false,
       minify: "esbuild",
       cssMinify: true,
-    },
-    server: {
-      proxy: {
-        // iTunes Search API has no CORS headers; proxy it in dev for live search
-        "/itunes": {
-          target: "https://itunes.apple.com",
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/itunes/, ""),
-        },
-      },
     },
   };
 });
