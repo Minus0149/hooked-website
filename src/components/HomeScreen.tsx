@@ -63,16 +63,27 @@ export function HomeScreen({
 
   const mosaic = (tracks: Track[]) => {
     const cells = tracks.slice(0, 2);
+    // a completely empty library reads better as ONE quiet heart than two
+    // half-hearts pretending to be a collage
+    if (cells.length === 0) {
+      return (
+        <div className="tile-mosaic">
+          <div className="empty empty-solo">
+            <IconHeart size={16} />
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="tile-mosaic">
         {cells.map((t) => (
           <img key={t.id} src={art(t.artwork, 200)} alt="" />
         ))}
-        {Array.from({ length: 2 - cells.length }).map((_, i) => (
-          <div key={i} className="empty">
+        {cells.length === 1 && (
+          <div className="empty">
             <IconHeart size={16} />
           </div>
-        ))}
+        )}
       </div>
     );
   };

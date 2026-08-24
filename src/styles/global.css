@@ -843,6 +843,11 @@ button {
 .row-scroll::-webkit-scrollbar { display: none; }
 .row-card {
   flex: 0 0 124px;
+  /* min-width:0 matters: flex items refuse to shrink below their content's
+     min-content width by default, so a long nowrap artist name used to blow
+     the card (and the whole row's rhythm) out past 124px */
+  min-width: 0;
+  width: 124px;
   text-align: left;
   transition: transform 0.15s ease;
 }
@@ -2634,3 +2639,6 @@ html[data-motion="reduced"] .drift { animation: none !important; }
   font-size: 15px; letter-spacing: -.2px; color: var(--text);
 }
 .creator-newtrack-head small { display: block; color: var(--muted); font-size: 12px; }
+
+/* empty library tile: one heart, full width */
+.tile-mosaic .empty-solo { grid-column: 1 / -1; }
