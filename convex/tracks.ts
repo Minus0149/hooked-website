@@ -34,7 +34,20 @@ export const list = query({
         hooks.sort((a, b) => (a.rank ?? a.order) - (b.rank ?? b.order) || a.order - b.order);
 
         return {
-          ...track,
+          // explicit field list rather than a spread: the row carries
+          // ownerUserId and storage ids that public clients have no business
+          // reading, and a schema addition shouldn't silently become a leak
+          trackId: track.trackId,
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          artwork: track.artwork,
+          previewUrl: track.previewUrl,
+          durationMs: track.durationMs,
+          genre: track.genre,
+          accent: track.accent,
+          markets: track.markets,
+          heat: track.heat,
           audioUrl: track.audioStorageId ? await ctx.storage.getUrl(track.audioStorageId) : null,
           hooks: hooks.map((h) => ({
             id: h._id,

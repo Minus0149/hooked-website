@@ -55,10 +55,28 @@ export async function requireAdmin(ctx: QueryCtx | MutationCtx) {
   return { user, profile };
 }
 
+/**
+ * The access gate, enforced where it can't be clicked past.
+ *
+ * A profile row only exists once ensureProfile has seen an APPROVED access
+ * request (or the ADMIN_EMAILS allowlist) — so "has a profile" IS the
+ * authorisation. Passing `null` here used to fall through silently, which
+ * meant anyone who signed up could keep writing swipes and playlists straight
+ * into Convex while the UI politely showed them the waiting room.
+ */
 export function ensureActiveProfile(
   profile: { suspended?: boolean } | null,
-) {
-  if (profile?.suspended) throw new Error("Account suspended");
+): asserts profile is NonNullable<typeof profile> {
+  if (!profile) throw new Error("No approved account yet");
+  if (profile.suspended) throw new Error("Account suspended");
+}
+
+/** requireUser + gate in one step, for mutations that skipped the profile. */
+export async function requireGatedUser(ctx: QueryCtx | MutationCtx) {
+  const user = await requireUser(ctx);
+  const profile = await getProfile(ctx, user.id);
+  ensureActiveProfile(profile);
+  return { user, profile };
 }
 
 export async function enforceRateLimit(

@@ -370,7 +370,6 @@ function Shell() {
       void recordAdEvent({
         adId: adCandidate.id as never,
         kind: "impression",
-        userId: signedIn ? (sessionUid ?? undefined) : undefined,
         anonKey: anonKeyRef.current ?? undefined,
       }).catch(() => undefined);
     }
@@ -382,7 +381,6 @@ function Shell() {
         void recordAdEvent({
           adId: activeAd.id as never,
           kind,
-          userId: signedIn ? (sessionUid ?? undefined) : undefined,
           anonKey: anonKeyRef.current ?? undefined,
         }).catch(() => undefined);
       }
@@ -819,3 +817,4 @@ export default function App() {
     </StoreProvider>
   );
 }
+

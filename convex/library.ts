@@ -9,6 +9,7 @@ import {
   enforceRateLimit,
   ensureActiveProfile,
   getProfile,
+  requireGatedUser,
   requireUser,
   type TrackInput,
   validateSaveTarget,
@@ -389,7 +390,7 @@ export const setReplayContainer = mutation({
 export const unburyTrack = mutation({
   args: { trackId: v.string() },
   handler: async (ctx, { trackId }) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireGatedUser(ctx);
     await enforceRateLimit(ctx, `unbury:${user.id}`, 120, 60_000);
     const row = await ctx.db
       .query("neverTracks")
@@ -405,7 +406,7 @@ export const unburyTrack = mutation({
 export const unblockArtist = mutation({
   args: { artist: v.string() },
   handler: async (ctx, { artist }) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireGatedUser(ctx);
     await enforceRateLimit(ctx, `unblock:${user.id}`, 120, 60_000);
     const row = await ctx.db
       .query("neverArtists")

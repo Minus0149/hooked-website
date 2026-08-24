@@ -5,12 +5,12 @@ import {
   query,
   type QueryCtx,
 } from "./_generated/server";
+import { authComponent } from "./auth";
 import {
   cleanAccent,
   cleanText,
   enforceRateLimit,
   requirePermission,
-  requireUser,
 } from "./security";
 
 /**
@@ -281,24 +281,39 @@ export const nextAd = query({
   },
 });
 
-/** Impression / click / skip. Rate-limited hard — it's a public write. */
+/**
+ * Impression / click / skip.
+ *
+ * Identity is decided HERE, never taken from the caller: signed-in events key
+ * to the authenticated user id, anonymous ones to the random per-install
+ * anonKey (which is what makes the daily cap real for logged-out listeners —
+ * previously they couldn't write events at all, so no cap applied). A client
+ * cannot attribute events to someone else's account because it isn't asked.
+ */
 export const recordEvent = mutation({
   args: {
     adId: v.id("ads"),
     kind: v.union(v.literal("impression"), v.literal("click"), v.literal("skip")),
+    /** ignored — kept in the schema of the call for client compatibility */
     userId: v.optional(v.string()),
     anonKey: v.optional(v.string()),
   },
-  handler: async (ctx, { adId, kind, userId, anonKey }) => {
-    const user = await requireUser(ctx);
-    const capKey = `ad-event:${user.id}`;
+  handler: async (ctx, { adId, kind, anonKey }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    const cleanAnon = anonKey ? cleanText(anonKey, 64) : undefined;
+    if (!user && !cleanAnon) throw new Error("No identity");
+
+    // one bucket per identity: an anon key that spams this still trips its own
+    // limit without touching anyone else's
+    const capKey = `ad-event:${user ? String(user._id) : cleanAnon}`;
     await enforceRateLimit(ctx, capKey, 120, 60 * 60_000);
+
     const ad = await ctx.db.get(adId);
     if (!ad) throw new Error("No such ad");
 
     await ctx.db.insert("adEvents", {
-      userId: userId || user.id,
-      anonKey: anonKey ? cleanText(anonKey, 64) : undefined,
+      userId: user ? String(user._id) : undefined,
+      anonKey: user ? undefined : cleanAnon,
       adId,
       kind,
       day: dayKey(),

@@ -210,6 +210,8 @@ export const submitFingerprint = mutation({
   },
   handler: async (ctx, { trackId, hashes }) => {
     const { user, curator } = await requireCreator(ctx);
+    // each call rewrites up to 400 rows — keep it from being looped
+    await enforceRateLimit(ctx, `creator:fp:${user.id}`, 30, 60 * 60_000);
     const track = await requireOwnedTrack(ctx, trackId, curator, user.id);
 
     const clean = [
@@ -257,7 +259,9 @@ export const checkDuplicate = mutation({
     excludeTrackId: v.optional(v.string()),
   },
   handler: async (ctx, { hashes, excludeTrackId }) => {
-    await requireCreator(ctx);
+    const { user } = await requireCreator(ctx);
+    // up to 250 indexed lookups per call — rate limit the fan-out
+    await enforceRateLimit(ctx, `creator:fp-check:${user.id}`, 40, 60 * 60_000);
     const clean = [
       ...new Set(
         hashes

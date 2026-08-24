@@ -65,6 +65,9 @@ export const ingestHooks = internalMutation({
       .unique();
     if (!track) return { ok: false as const, reason: "no track" };
 
+    // bounded ISO timestamp — the analyzer is trusted but not infallible
+    const stamp = cleanText(analyzedAt, 40) || new Date().toISOString();
+
     const safeWindows = windows
       .slice(0, MAX_WINDOWS)
       .map((w) => ({
@@ -97,7 +100,7 @@ export const ingestHooks = internalMutation({
       });
     }
 
-    await ctx.db.patch(track._id, { analyzedAt });
+    await ctx.db.patch(track._id, { analyzedAt: stamp });
     return { ok: true as const, written: safeWindows.length };
   },
 });
