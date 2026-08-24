@@ -2642,3 +2642,11 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 
 /* empty library tile: one heart, full width */
 .tile-mosaic .empty-solo { grid-column: 1 / -1; }
+
+/* gate form: breathing room between clusters, grouped secondary action */
+.access-form .prefs-block { margin-bottom: 2px; }
+.access-form .auth-submit { margin-top: 6px; }
+.gate-secondary {
+  display: flex; justify-content: center;
+  padding-top: 4px;
+}

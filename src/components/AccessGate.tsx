@@ -133,61 +133,82 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
         hooked. is invite-only while it's in testing. tell me who you are and i'll get back to you.
       </p>
 
-      <input
-        className="auth-input"
-        placeholder="your name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        autoComplete="name"
-        maxLength={60}
-        required
-      />
-      <input
-        className="auth-input"
-        type="email"
-        inputMode="email"
-        placeholder="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        autoComplete="email"
-        maxLength={200}
-        required
-      />
-      <input
-        className="auth-input"
-        placeholder="phone you'd use it on (optional)"
-        value={device}
-        onChange={(e) => setDevice(e.target.value)}
-        maxLength={80}
-      />
-
-      <p className="access-label">what do you actually play? (optional)</p>
-      <div className="access-pills">
-        {GENRES.map((g) => {
-          const on = genres.includes(g);
-          return (
-            <button
-              type="button"
-              key={g}
-              className={on ? "access-pill on" : "access-pill"}
-              aria-pressed={on}
-              disabled={!on && genres.length >= MAX_GENRES}
-              onClick={() => toggleGenre(g)}
-            >
-              {g}
-            </button>
-          );
-        })}
+      {/* 01 — identity: the two fields that actually matter */}
+      <div className="prefs-block">
+        <span className="prefs-label">01 · who are you</span>
+        <input
+          className="auth-input"
+          placeholder="your name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          autoComplete="name"
+          maxLength={60}
+          required
+        />
+        <input
+          className="auth-input"
+          type="email"
+          inputMode="email"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+          maxLength={200}
+          required
+        />
+        <span className="prefs-hint">
+          the invite and every update goes to this one address
+        </span>
       </div>
 
-      <textarea
-        className="auth-input access-notes"
-        placeholder="anything you want to tell me (optional)"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        rows={2}
-        maxLength={500}
-      />
+      {/* 02 — the phone, since the test build is android-only */}
+      <div className="prefs-block">
+        <span className="prefs-label">02 · your phone</span>
+        <input
+          className="auth-input"
+          placeholder="pixel 8a, redmi note 13, ..."
+          value={device}
+          onChange={(e) => setDevice(e.target.value)}
+          maxLength={80}
+        />
+        <span className="prefs-hint">optional — the test build only runs on android</span>
+      </div>
+
+      {/* 03 — taste: optional, but it tunes the first deck you're dealt */}
+      <div className="prefs-block">
+        <span className="prefs-label">03 · what do you actually play?</span>
+        <div className="access-pills">
+          {GENRES.map((g) => {
+            const on = genres.includes(g);
+            return (
+              <button
+                type="button"
+                key={g}
+                className={on ? "access-pill on" : "access-pill"}
+                aria-pressed={on}
+                disabled={!on && genres.length >= MAX_GENRES}
+                onClick={() => toggleGenre(g)}
+              >
+                {g}
+              </button>
+            );
+          })}
+        </div>
+        <span className="prefs-hint">optional — up to {MAX_GENRES}; tunes your first deck</span>
+      </div>
+
+      {/* 04 — the open floor */}
+      <div className="prefs-block">
+        <span className="prefs-label">04 · anything else</span>
+        <textarea
+          className="auth-input access-notes"
+          placeholder="bugs you expect, features you want, complaints"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={2}
+          maxLength={500}
+        />
+      </div>
 
       {/* honeypot — never shown, never announced, only bots fill it */}
       <div className="access-hp" aria-hidden="true">
@@ -208,9 +229,11 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
       <button className="auth-submit" type="submit" disabled={busy}>
         {busy ? "sending..." : "ask for access"}
       </button>
-      <button type="button" className="gate-close" onClick={() => setStage("signin")}>
-        already approved? sign in
-      </button>
+      <div className="gate-secondary">
+        <button type="button" className="gate-close" onClick={() => setStage("signin")}>
+          already approved? sign in
+        </button>
+      </div>
     </form>
   );
 }
