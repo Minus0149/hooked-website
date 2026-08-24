@@ -9,13 +9,96 @@
  */
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { StatCard } from "../ui";
 import { art } from "../../lib/art";
 import { pct } from "./shared";
 
-type Analytics = NonNullable<ReturnType<typeof useAnalyticsType>>;
-function useAnalyticsType() {
-  return useQuery(api.admin.analytics, {});
+/**
+ * The snapshot is stored as JSON in appSettings (v.any), so the wire type is
+ * loose — this is the contract the nightly computation actually produces.
+ */
+export interface AnalyticsSnapshot {
+  computedAt?: string;
+  span: number;
+  series: {
+    date: string;
+    dau: number;
+    swipes: number;
+    saves: number;
+    signups: number;
+    requests: number;
+  }[];
+  live: {
+    dau: number;
+    wau: number;
+    mau: number;
+    stickiness: number;
+    swipesPerActive: number;
+  };
+  retention: { d1: number; d1Eligible: number; d7: number; d7Eligible: number };
+  sessions: {
+    count: number;
+    swipesPer: number;
+    perUser: number;
+    longest: number;
+  };
+  funnel: {
+    requested: number;
+    approved: number;
+    signedUp: number;
+    activated: number;
+    saved: number;
+    ungated: number;
+    pending: number;
+    rejected: number;
+    bySource: { app: number; landing: number };
+  };
+  catalogue: {
+    total: number;
+    published: number;
+    withHook: number;
+    multiHook: number;
+    noAudio: number;
+    unplayed: number;
+    dead: number;
+    hooks: number;
+    hooksPerTrack: number;
+  };
+  hookPositions: {
+    order: number;
+    hooks: number;
+    plays: number;
+    saves: number;
+    rate: number;
+  }[];
+  bestHooks: HookRow[];
+  worstHooks: HookRow[];
+  creators: {
+    total: number;
+    pending: number;
+    approved: number;
+    top: { artistName: string; email: string; tracks: number }[];
+  };
+}
+
+interface HookRow {
+  hookId: Id<"hooks">;
+  trackId: string;
+  title: string;
+  artist: string;
+  artwork: string;
+  label?: string;
+  order: number;
+  startMs: number;
+  plays: number;
+  saves: number;
+  rate: number;
+}
+
+type Analytics = AnalyticsSnapshot;
+function useAnalyticsType(): AnalyticsSnapshot | null | undefined {
+  return useQuery(api.admin.analytics, {}) as AnalyticsSnapshot | null | undefined;
 }
 
 /** Bars for volume, a line for the people — one grid, two scales. */

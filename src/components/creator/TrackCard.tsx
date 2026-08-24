@@ -12,6 +12,11 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import type { Track } from "./types";
 import { MS, clock, secs } from "./types";
 import { HookEditor } from "./HookEditor";
+import { computeFingerprint } from "../../lib/audio-fp";
+
+/** Overlap at/above this is a re-encoded copy, not a coincidence. */
+const DUPLICATE_BLOCK_SCORE = 0.35;
+const DUPLICATE_WARN_SCORE = 0.12;
 
 export function TrackCard({ track }: { track: Track }) {
   const generateUploadUrl = useMutation(api.creators.generateUploadUrl);
@@ -19,9 +24,13 @@ export function TrackCard({ track }: { track: Track }) {
   const upsertHook = useMutation(api.creators.upsertHook);
   const deleteHook = useMutation(api.creators.deleteHook);
   const setHidden = useMutation(api.creators.setTrackHidden);
+  const checkDuplicate = useMutation(api.creators.checkDuplicate);
+  const submitFingerprint = useMutation(api.creators.submitFingerprint);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [fpNote, setFpNote] = useState<string | null>(null);
+  const [rights, setRights] = useState(!!track.rightsConfirmedAt);
   const [error, setError] = useState<string | null>(null);
   const [newStart, setNewStart] = useState("");
   const [newLen, setNewLen] = useState("20");
@@ -48,7 +57,13 @@ export function TrackCard({ track }: { track: Track }) {
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!rights) {
+      setError("Tick the rights box first — uploads without it are refused.");
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
     setError(null);
+    setFpNote("listening to the audio…");
     setUploading(true);
     try {
       // read the real duration in the browser — the server has no decoder
@@ -59,12 +74,65 @@ export function TrackCard({ track }: { track: Track }) {
         audio.onerror = () => reject(new Error("Couldn't read that audio file"));
         audio.src = URL.createObjectURL(file);
       });
+
+      // fingerprint before anything uploads: a copy never leaves this machine
+      let hashes: number[] = [];
+      try {
+        const Ctx =
+          window.AudioContext ??
+          (window as unknown as { webkitAudioContext: typeof AudioContext })
+            .webkitAudioContext;
+        const ctx = new Ctx();
+        const decoded = await ctx.decodeAudioData(await file.arrayBuffer());
+        void ctx.close();
+        hashes = computeFingerprint(decoded);
+      } catch {
+        hashes = []; // undecodable here — proceed; the rights box still binds
+      }
+
+      if (hashes.length >= 20) {
+        setFpNote("comparing against the catalogue…");
+        const { conflicts } = await checkDuplicate({
+          hashes,
+          excludeTrackId: track.trackId,
+        });
+        const worst = conflicts[0];
+        if (worst && worst.score >= DUPLICATE_BLOCK_SCORE) {
+          throw new Error(
+            `This looks like a copy of “${worst.title}” by ${worst.artist} ` +
+              `(≈${Math.round(worst.score * 100)}% match). Upload something you ` +
+              `actually have the rights to.`,
+          );
+        }
+        if (worst && worst.score >= DUPLICATE_WARN_SCORE) {
+          const ok = window.confirm(
+            `Heads up: part of this resembles “${worst.title}” by ${worst.artist} ` +
+              `(≈${Math.round(worst.score * 100)}% overlap). If that's a cleared ` +
+              `sample or your own rework, continue; otherwise go back.`,
+          );
+          if (!ok) throw new Error("Upload cancelled");
+        }
+      } else {
+        setFpNote(null);
+      }
+
       const url = await generateUploadUrl({});
       const res = await fetch(url, { method: "POST", headers: { "content-type": file.type }, body: file });
       const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
-      await attachAudio({ trackId: track.trackId, storageId, audioDurationMs: durationMs });
+      await attachAudio({
+        trackId: track.trackId,
+        storageId,
+        audioDurationMs: durationMs,
+        rightsConfirmed: rights,
+      });
+      // index AFTER the audio attaches — a failed upload leaves no prints
+      if (hashes.length >= 20) {
+        void submitFingerprint({ trackId: track.trackId, hashes }).catch(() => undefined);
+        setFpNote("fingerprint indexed ✓");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
+      setFpNote(null);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -226,8 +294,16 @@ export function TrackCard({ track }: { track: Track }) {
       )}
 
       <div className="creator-upload">
+        <label className="creator-rights creator-rights-compact">
+          <input
+            type="checkbox"
+            checked={rights}
+            onChange={(e) => setRights(e.target.checked)}
+          />
+          <span>I hold the rights to this recording</span>
+        </label>
         <label className="aq-btn">
-          {uploading ? "uploading…" : hasFullAudio ? "replace audio" : "upload full track"}
+          {uploading ? (fpNote ?? "working…") : hasFullAudio ? "replace audio" : "upload full track"}
           <input ref={fileRef} type="file" accept="audio/*" onChange={onFile} hidden disabled={uploading} />
         </label>
         {hasFullAudio && track.audioUrl && (

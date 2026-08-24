@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { action, internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
+import { runtimeFor } from "./runtime";
 import { planWindows } from "./hooks";
 import {
   MIN_CONFIDENCE,
@@ -392,16 +393,15 @@ export const myImports = query({
 
 /**
  * Runs whose browser tab went away mid-match used to sit in status:"matching"
- * forever. Anything older than the worst-case run time (~4 minutes of iTunes
- * throttle, with generous margin) is dead: mark it failed and burn the token
- * so nothing can still write to it.
+ * forever. Anything older than the configured worst-case run time is dead:
+ * mark it failed and burn the token so nothing can still write to it.
+ * The threshold is runtime config (importStaleMinutes), editable live.
  */
-const STALE_AFTER_MS = 30 * 60_000;
-
 export const sweepStale = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const cutoff = Date.now() - STALE_AFTER_MS;
+    const runtime = await runtimeFor(ctx);
+    const cutoff = Date.now() - runtime.importStaleMinutes * 60_000;
     const stale = (
       await ctx.db.query("imports").withIndex("by_status", (q) => q.eq("status", "matching")).collect()
     ).filter((r) => new Date(r.createdAt).getTime() < cutoff);

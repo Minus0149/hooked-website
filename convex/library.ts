@@ -455,8 +455,8 @@ export const setSaveTarget = mutation({
 
 /**
  * Store the Settings choices that should follow a listener across devices
- * (motion level, accent, haptics, swipe sensitivity). Volume is deliberately
- * absent — hardware differs per device, so it stays local.
+ * (motion level, accent, haptics, swipe sensitivity, ads opt-out). Volume is
+ * deliberately absent — hardware differs per device, so it stays local.
  *
  * Values are coerced through the same rules the clients use; an old or
  * hand-edited row can't smuggle in garbage.
@@ -468,6 +468,7 @@ export const setPrefs = mutation({
     accentMode: v.string(),
     accentColor: v.string(),
     swipeSensitivity: v.number(),
+    adsOptOut: v.boolean(),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -487,9 +488,10 @@ export const setPrefs = mutation({
     const sensitivity = Math.round(
       Math.min(Math.max(args.swipeSensitivity, 0.6), 1.4) * 100,
     ) / 100;
+    const adsOptOut = args.adsOptOut === true;
 
     await ctx.db.patch(profile._id, {
-      prefs: { motion, haptics, accentMode, accentColor, swipeSensitivity: sensitivity },
+      prefs: { motion, haptics, accentMode, accentColor, swipeSensitivity: sensitivity, adsOptOut },
     });
   },
 });

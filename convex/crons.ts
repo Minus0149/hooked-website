@@ -34,4 +34,32 @@ crons.interval(
   internal.imports.sweepStale,
 );
 
+/**
+ * Fold recent activity into statsDaily so the admin ticker stays reactive
+ * WITHOUT scanning history. Cheap by construction: each run only touches rows
+ * newer than the previous run's watermark.
+ */
+crons.interval(
+  "rollup daily counters",
+  { minutes: 10 },
+  internal.admin.rollupStats,
+);
+
+// The analytics snapshot is the expensive report (it reads history once) —
+// computed offline, read instantly. Nightly keeps it fresh enough; admins can
+// also recompute on demand from the dashboard.
+crons.daily(
+  "recompute analytics snapshot",
+  { hourUTC: 3, minuteUTC: 17 },
+  internal.admin.computeSnapshot,
+  {},
+);
+
+// Ad event log: caps only need ~45 days of memory. Older rows are dead weight.
+crons.daily(
+  "sweep old ad events",
+  { hourUTC: 4, minuteUTC: 7 },
+  internal.ads.sweepOldEvents,
+);
+
 export default crons;

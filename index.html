@@ -11,7 +11,7 @@
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; media-src https: blob:; connect-src 'self' https://convex.hookedcue.com https://cnx.hookedcue.com wss://convex.hookedcue.com wss://cnx.hookedcue.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
+      content="default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; media-src https: blob:; connect-src 'self' https://convex.hookedcue.com https://cnx.hookedcue.com wss://convex.hookedcue.com wss://cnx.hookedcue.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
     />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <!-- zoom stays enabled: disabling it fails WCAG 1.4.4 and iOS ignores it anyway -->
@@ -52,34 +52,10 @@
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "hooked.",
-        "applicationCategory": "MusicApplication",
-        "operatingSystem": "Web, Android",
-        "url": "https://app.hookedcue.com/",
-        "description": "A swipe-based music discovery app that plays 30-second song previews and learns taste from skip, save, more-like-this, and never-again gestures.",
-        "offers": {
-          "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "USD"
-        }
-      }
-    </script>
-    <script>
-      // Stand-in for frame-ancestors, which a meta CSP can't express. Nothing
-      // embeds this app — the landing page links out to it — so being framed
-      // means someone else put it there, and the session cookie is in play.
-      if (window.top !== window.self) {
-        try {
-          window.top.location = window.self.location;
-        } catch {
-          document.documentElement.style.display = "none";
-        }
-      }
-    </script>
+    <!-- JSON-LD lives in an external file: it lets script-src drop
+         'unsafe-inline' entirely (SEO crawlers follow the src fine) -->
+    <script type="application/ld+json" src="/structured-data.json"></script>
+    <script src="/frame-guard.js" defer></script>
   </head>
   <body>
     <div id="root"></div>

@@ -167,18 +167,139 @@ export const attachAudio = mutation({
     trackId: v.string(),
     storageId: v.id("_storage"),
     audioDurationMs: v.number(),
+    /** the uploader ticked the rights box on this exact upload */
+    rightsConfirmed: v.boolean(),
   },
-  handler: async (ctx, { trackId, storageId, audioDurationMs }) => {
+  handler: async (ctx, { trackId, storageId, audioDurationMs, rightsConfirmed }) => {
     const { user, curator } = await requireCreator(ctx);
     const track = await requireOwnedTrack(ctx, trackId, curator, user.id);
     if (audioDurationMs < 1000 || audioDurationMs > 20 * 60_000) {
       throw new Error("That doesn't look like a track length");
     }
+    if (!rightsConfirmed) {
+      throw new Error("Confirm you hold the rights to this recording first");
+    }
     // replacing audio drops the old file rather than leaking it
     if (track.audioStorageId && track.audioStorageId !== storageId) {
       await ctx.storage.delete(track.audioStorageId);
     }
-    await ctx.db.patch(track._id, { audioStorageId: storageId, audioDurationMs });
+    await ctx.db.patch(track._id, {
+      audioStorageId: storageId,
+      audioDurationMs,
+      rightsConfirmedAt: new Date().toISOString(),
+    });
+  },
+});
+
+// ---------------------------------------------------------- fingerprints
+
+const MAX_FINGERPRINT_HASHES = 400;
+
+/**
+ * Store the landmark-pair hashes for a track's audio.
+ *
+ * The hashes are computed in the creator's browser (web/src/lib/audio-fp.ts)
+ * — the server never decodes audio, it just indexes integers. Replaces any
+ * previous set so a re-upload refreshes cleanly.
+ */
+export const submitFingerprint = mutation({
+  args: {
+    trackId: v.string(),
+    /** uint32 landmark-pair hashes, strongest first */
+    hashes: v.array(v.number()),
+  },
+  handler: async (ctx, { trackId, hashes }) => {
+    const { user, curator } = await requireCreator(ctx);
+    const track = await requireOwnedTrack(ctx, trackId, curator, user.id);
+
+    const clean = [
+      ...new Set(
+        hashes
+          .filter((h) => Number.isInteger(h) && h >= 0 && h <= 0xffffffff)
+          .slice(0, MAX_FINGERPRINT_HASHES),
+      ),
+    ];
+    if (clean.length < 20) {
+      throw new Error("Not enough audio to fingerprint");
+    }
+
+    const old = await ctx.db
+      .query("fingerprints")
+      .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))
+      .collect();
+    for (const row of old) await ctx.db.delete(row._id);
+    for (const hash of clean) {
+      await ctx.db.insert("fingerprints", { hash, trackId: track.trackId });
+    }
+    return { stored: clean.length };
+  },
+});
+
+export interface FingerprintConflict {
+  trackId: string;
+  title: string;
+  artist: string;
+  /** matched hashes / query hashes — rough overlap, higher = same recording */
+  score: number;
+}
+
+/**
+ * Compare a candidate fingerprint against every catalogued track.
+ *
+ * Inverted-index lookup: each distinct hash costs one indexed query capped at
+ * a few rows, so the check is O(matches), not O(catalogue). A different song
+ * shares almost no landmarks (~0.02); a re-encoded copy shares most (>0.35).
+ */
+export const checkDuplicate = mutation({
+  args: {
+    hashes: v.array(v.number()),
+    /** skip your own track when re-checking after an edit */
+    excludeTrackId: v.optional(v.string()),
+  },
+  handler: async (ctx, { hashes, excludeTrackId }) => {
+    await requireCreator(ctx);
+    const clean = [
+      ...new Set(
+        hashes
+          .filter((h) => Number.isInteger(h) && h >= 0 && h <= 0xffffffff)
+          .slice(0, MAX_FINGERPRINT_HASHES),
+      ),
+    ];
+    if (clean.length === 0) return { conflicts: [] as FingerprintConflict[] };
+
+    const tallies = new Map<string, number>();
+    let lookedUp = 0;
+    for (const hash of clean) {
+      if (lookedUp >= 250) break; // bound the query fan-out
+      lookedUp++;
+      const rows = await ctx.db
+        .query("fingerprints")
+        .withIndex("by_hash", (q) => q.eq("hash", hash))
+        .take(5);
+      for (const row of rows) {
+        if (row.trackId === excludeTrackId) continue;
+        tallies.set(row.trackId, (tallies.get(row.trackId) ?? 0) + 1);
+      }
+    }
+
+    const conflicts: FingerprintConflict[] = [];
+    for (const [trackId, count] of tallies) {
+      const score = count / Math.max(clean.length, 1);
+      if (score < 0.08) continue; // noise floor
+      const track = await ctx.db
+        .query("tracks")
+        .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
+        .unique();
+      if (!track) continue;
+      conflicts.push({
+        trackId,
+        title: track.title,
+        artist: track.artist,
+        score: Math.round(score * 100) / 100,
+      });
+    }
+    conflicts.sort((a, b) => b.score - a.score);
+    return { conflicts: conflicts.slice(0, 5) };
   },
 });
 
@@ -194,10 +315,17 @@ export const createTrack = mutation({
     previewUrl: v.optional(v.string()),
     durationMs: v.optional(v.number()),
     accent: v.optional(v.string()),
+    /** the rights box — publishing stays locked until audio is attached WITH it */
+    rightsConfirmed: v.boolean(),
   },
   handler: async (ctx, args) => {
     const { user, curator } = await requireCreator(ctx);
     await enforceRateLimit(ctx, `creator:track:${user.id}`, 60, 60 * 60_000);
+    if (!args.rightsConfirmed) {
+      throw new Error(
+        "Confirm you own or are licensed for this recording before creating it",
+      );
+    }
 
     const title = cleanText(args.title, MAX.title);
     const artist = cleanText(args.artist, MAX.artistName);
@@ -219,6 +347,7 @@ export const createTrack = mutation({
       ownerUserId: curator ? undefined : user.id,
       origin: "artist",
       hidden: true, // nothing reaches the deck until a hook exists and it's published
+      rightsConfirmedAt: new Date().toISOString(),
     });
     return { trackId };
   },
@@ -230,6 +359,11 @@ export const setTrackHidden = mutation({
     const { user, curator } = await requireCreator(ctx);
     const track = await requireOwnedTrack(ctx, trackId, curator, user.id);
     if (!hidden) {
+      if (track.origin === "artist" && !track.rightsConfirmedAt) {
+        throw new Error(
+          "Confirm you hold the rights to this recording before publishing",
+        );
+      }
       const hooks = await ctx.db
         .query("hooks")
         .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))

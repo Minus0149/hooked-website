@@ -2520,3 +2520,92 @@ html[data-motion="reduced"] .drift { animation: none !important; }
   font-size: 12.5px; color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* rights confirmation + fingerprint status on creator uploads */
+.creator-rights {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 12.5px; line-height: 1.5; color: var(--muted);
+  padding: 10px 12px; border-radius: 12px;
+  background: color-mix(in srgb, var(--surface2, #12121a) 80%, transparent);
+  border: 1px solid var(--line);
+}
+.creator-rights input { margin-top: 2px; accent-color: var(--accent); }
+.creator-rights a { color: var(--accent); }
+.creator-rights-compact {
+  flex: none; align-items: center; padding: 6px 10px;
+}
+
+/* ------------------------------------------------------------------
+   House ads: the between-swipes card + the support/opt-out ask. */
+
+.ad-takeover {
+  position: absolute; inset: 12px; z-index: 40;
+  border-radius: 28px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  padding: 16px;
+  box-shadow: 0 30px 80px rgba(0,0,0,.55);
+}
+.ad-chip-row { display: flex; justify-content: space-between; align-items: center; }
+.ad-chip {
+  font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+  font-weight: 700; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px;
+}
+.ad-close {
+  width: 32px; height: 32px; border-radius: 999px;
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+  cursor: pointer; font-size: 13px;
+}
+.ad-close:hover { color: var(--text); }
+.ad-body {
+  flex: 1; display: flex; flex-direction: column; gap: 14px;
+  align-items: center; justify-content: center; text-align: center;
+  min-height: 0;
+}
+.ad-art {
+  width: 132px; height: 132px; border-radius: 20px; object-fit: cover;
+  box-shadow: 0 14px 40px color-mix(in srgb, var(--ad-accent) 45%, transparent);
+}
+.ad-advertiser {
+  font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ad-accent); font-weight: 700;
+}
+.ad-title {
+  font-family: var(--display); font-size: 22px; letter-spacing: -.4px;
+  margin: 6px 0 0; color: var(--text);
+}
+.ad-sub { margin: 8px auto 0; max-width: 300px; font-size: 13.5px; line-height: 1.55; color: var(--muted); }
+.ad-cta {
+  display: inline-block; margin-top: 16px; padding: 12px 26px;
+  border-radius: 999px; font-weight: 700; font-size: 14px; color: #0b0b10;
+  text-decoration: none;
+}
+.ad-foot { display: flex; justify-content: space-between; align-items: center; }
+.ad-skip { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 6px; }
+.ad-skip:hover { color: var(--text); }
+.ad-why { background: none; border: none; color: var(--muted); opacity: .7; cursor: pointer; font-size: 12px; padding: 6px; text-decoration: underline dotted; }
+
+/* the emotional opt-out sheet */
+.ad-ask { z-index: 60; }
+.ad-ask-copy { font-size: 14px; line-height: 1.65; color: var(--text); opacity: .9; }
+.ad-ask-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+/* hash-route 404 */
+.notfound {
+  min-height: 100vh; display: grid; place-content: center; text-align: center;
+  gap: 10px; padding: 24px;
+}
+.notfound .wordmark { font-size: 20px; }
+.notfound h1 {
+  font-family: var(--display); font-size: 64px; letter-spacing: -.03em;
+  margin: 8px 0 0; color: var(--text);
+}
+.notfound p { color: var(--muted); max-width: 36ch; margin: 0 auto; }
+.notfound-home {
+  color: var(--accent); font-weight: 700; text-decoration: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 999px; padding: 11px 22px; justify-self: center;
+}

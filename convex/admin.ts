@@ -1,8 +1,16 @@
 import { v } from "convex/values";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import {
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
+import { internal } from "./_generated/api";
 import { authComponent } from "./auth";
 import { PERMISSIONS } from "./schema";
 import { enforceRateLimit, requireAdmin, requirePermission } from "./security";
+import { runtimeFor } from "./runtime";
 
 type Perm = (typeof PERMISSIONS)[number];
 
@@ -38,92 +46,147 @@ export const myAccess = query({
   },
 });
 
+const STATS_SNAPSHOT_KEY = "analytics:snapshot";
+
+const dayKeyOf = (ts: number) => new Date(ts).toISOString().slice(0, 10);
+
+/**
+ * The live ticker.
+ *
+ * This used to collect() every swipe in the database on every render — a
+ * reactive query over an ever-growing table, i.e. a performance cliff wearing
+ * a graph. Now the heavy numbers come from statsDaily (written by the
+ * rollup cron), and only genuinely-recent rows are read: the last 400 swipes
+ * for the activity sparklines and the recent list.
+ */
 export const stats = query({
   args: {},
   handler: async (ctx) => {
     const viewer = await getViewer(ctx);
     if (!hasPerm(viewer, "stats.view")) return null;
-    const [swipes, profiles] = await Promise.all([
-      ctx.db.query("swipes").collect(),
+
+    const [profiles, dailyRows] = await Promise.all([
       ctx.db.query("profiles").collect(),
+      // bounded to ~13 months of daily counters; older ones stop mattering
+      ctx.db
+        .query("statsDaily")
+        .withIndex("by_day", (q) =>
+          q.gte(
+            "day",
+            new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10),
+          ),
+        )
+        .collect(),
     ]);
     const profileCount = profiles.length;
     const emailByUser = new Map(profiles.map((p) => [p.userId, p.email]));
 
     const byAction = { skip: 0, save: 0, more: 0, never: 0 };
-    for (const s of swipes) byAction[s.action]++;
-
-    const saveCounts = new Map<
-      string,
-      { count: number; title: string; artist: string; artwork: string }
-    >();
-    for (const s of swipes) {
-      if (s.action !== "save") continue;
-      const entry = saveCounts.get(s.trackId) ?? {
-        count: 0,
-        title: s.title,
-        artist: s.artist,
-        artwork: s.artwork,
-      };
-      entry.count++;
-      saveCounts.set(s.trackId, entry);
+    const todayKey = dayKeyOf(Date.now());
+    let swipeCount = 0;
+    for (const row of dailyRows) {
+      swipeCount += row.saves + row.skips + row.nevers + row.mores;
+      byAction.save += row.saves;
+      byAction.skip += row.skips;
+      byAction.more += row.mores;
+      byAction.never += row.nevers;
     }
-    const topSaved = [...saveCounts.entries()]
-      .map(([trackId, e]) => ({ trackId, ...e }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 8);
+    const todayRow = dailyRows.find((r) => r.day === todayKey);
+    const todayByAction = {
+      save: todayRow?.saves ?? 0,
+      skip: todayRow?.skips ?? 0,
+      more: todayRow?.mores ?? 0,
+      never: todayRow?.nevers ?? 0,
+    };
 
-    const neverCounts = new Map<string, number>();
-    for (const s of swipes) {
-      if (s.action !== "never") continue;
-      neverCounts.set(s.artist, (neverCounts.get(s.artist) ?? 0) + 1);
-    }
-    const topNever = [...neverCounts.entries()]
-      .map(([artist, count]) => ({ artist, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
+    // recent tail only — enough for the sparklines and the live list
+    const tail = await ctx.db
+      .query("swipes")
+      .withIndex("by_creation_time")
+      .order("desc")
+      .take(400);
+    const recentAll = tail.reverse();
 
-    // live activity buckets (re-render reactively whenever a swipe lands)
     const now = Date.now();
     const MIN_BUCKETS = 30;
     const activity = Array.from({ length: MIN_BUCKETS }, () => 0);
     const HOUR_BUCKETS = 24;
     const activityHours = Array.from({ length: HOUR_BUCKETS }, () => 0);
-    const todayByAction = { skip: 0, save: 0, more: 0, never: 0 };
-    for (const s of swipes) {
-      const age = now - s._creationTime;
-      const ageMin = Math.floor(age / 60_000);
+    for (const s of recentAll) {
+      const ageMin = Math.floor((now - s._creationTime) / 60_000);
       if (ageMin >= 0 && ageMin < MIN_BUCKETS) activity[MIN_BUCKETS - 1 - ageMin]++;
-      const ageHour = Math.floor(age / 3_600_000);
+      const ageHour = Math.floor((now - s._creationTime) / 3_600_000);
       if (ageHour >= 0 && ageHour < HOUR_BUCKETS) {
         activityHours[HOUR_BUCKETS - 1 - ageHour]++;
         todayByAction[s.action]++;
       }
     }
 
-    // genre appetite: how each genre converts swipes into saves
-    const genreMap = new Map<string, { total: number; saves: number }>();
-    for (const s of swipes) {
-      const g = genreMap.get(s.genre) ?? { total: 0, saves: 0 };
-      g.total++;
-      if (s.action === "save") g.saves++;
-      genreMap.set(s.genre, g);
-    }
-    const genres = [...genreMap.entries()]
-      .map(([genre, g]) => ({ genre, ...g }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 8);
+    // aggregate views come from the nightly snapshot when it exists; before
+    // the first one lands they degrade to "computed from the recent tail",
+    // which is honest about being partial rather than pretending completeness
+    const snapshotRow = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", STATS_SNAPSHOT_KEY))
+      .unique();
+    const snapshot = snapshotRow?.value as
+      | { topSaved?: unknown[]; topNever?: unknown[]; genres?: unknown[] }
+      | undefined;
+
+    type TopSaved = {
+      trackId: string;
+      count: number;
+      title: string;
+      artist: string;
+      artwork: string;
+    }[];
+    type TopNever = { artist: string; count: number }[];
+    type GenreStat = { genre: string; total: number; saves: number }[];
+
+    const tally = <K extends string>(keyFn: (s: (typeof recentAll)[number]) => K) => {
+      const m = new Map<K, number>();
+      for (const s of recentAll) {
+        const k = keyFn(s);
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+      return m;
+    };
+    const topSaved =
+      (snapshot?.topSaved as TopSaved | undefined) ??
+      (() => {
+        const saves = tally((s) => s.trackId);
+        return [...saves.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(([trackId]) => {
+            const s = recentAll.find((x) => x.trackId === trackId)!;
+            return { trackId, count: saves.get(trackId)!, title: s.title, artist: s.artist, artwork: s.artwork };
+          });
+      })();
+    const topNever =
+      (snapshot?.topNever as TopNever | undefined) ??
+      [...tally((s) => (s.action === "never" ? s.artist : "")).entries()]
+        .filter(([a]) => a)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([artist, count]) => ({ artist, count }));
+    const genres =
+      (snapshot?.genres as GenreStat | undefined) ??
+      [...tally((s) => s.genre).entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([genre, total]) => ({ genre, total, saves: 0 }));
 
     return {
       userCount: profileCount,
-      swipeCount: swipes.length,
+      swipeCount,
       byAction,
       todayByAction,
-      saveRate: swipes.length > 0 ? byAction.save / swipes.length : 0,
+      saveRate: swipeCount > 0 ? byAction.save / swipeCount : 0,
       topSaved,
       topNever,
       genres,
-      recent: swipes
+      recent: recentAll
         .slice(-30)
         .reverse()
         .map((s) => ({ ...s, email: emailByUser.get(s.userId) ?? "unknown" })),
@@ -133,23 +196,29 @@ export const stats = query({
   },
 });
 
-const DAY_MS = 86_400_000;
-/** A gap this long between two swipes means the user put the phone down. */
-const SESSION_GAP_MS = 30 * 60_000;
-
 /**
  * The slower, wider view: growth, retention, the invite funnel and catalogue
  * health. Split from `stats` because that one re-runs on every swipe — this is
  * the report you open on purpose, not the ticker.
  */
-export const analytics = query({
-  args: { days: v.optional(v.number()) },
-  handler: async (ctx, { days }) => {
-    const viewer = await getViewer(ctx);
-    if (!hasPerm(viewer, "stats.view")) return null;
-
-    const span = Math.min(Math.max(days ?? 30, 7), 90);
+/**
+ * The full analytics computation, run OFFLINE.
+ *
+ * This body used to live inside a reactive query that collected() eight whole
+ * tables every time an admin opened the dashboard — fine at a hundred swipes,
+ * a slow death at a million. Now it runs on a schedule (and on demand), and
+ * its result is stored as one JSON blob the dashboard reads instantly.
+ */
+async function computeAnalyticsPayload(ctx: QueryCtx, spanDaysOverride?: number) {
+    const runtime = await runtimeFor(ctx);
     const now = Date.now();
+    const DAY_MS = 86_400_000;
+    /** A gap this long between two swipes means the user put the phone down. */
+    const SESSION_GAP_MS = runtime.sessionGapMinutes * 60_000;
+    /** best/worst-hook panels need at least this much evidence */
+    const MIN_HOOK_PLAYS = runtime.bestHookMinPlays;
+
+    const span = Math.min(Math.max(spanDaysOverride ?? runtime.analyticsSpanDays, 7), 90);
     const dayOf = (ts: number) => Math.floor(ts / DAY_MS);
     const today = dayOf(now);
     const from = today - (span - 1);
@@ -339,7 +408,7 @@ export const analytics = query({
 
     const titleFor = new Map(tracks.map((t) => [t.trackId, t]));
     const scored = hooks
-      .filter((h) => h.active && counts(String(h._id)).plays >= 10)
+      .filter((h) => h.active && counts(String(h._id)).plays >= MIN_HOOK_PLAYS)
       .map((h) => {
         const c = counts(String(h._id));
         return {
@@ -424,6 +493,165 @@ export const analytics = query({
           .slice(0, 6),
       },
     };
+}
+
+/**
+ * The dashboard's analytics panel reads this stored snapshot — O(1), zero
+ * table scans at read time. Recomputed nightly by cron and on demand via
+ * refreshAnalytics.
+ */
+export const analytics = query({
+  args: {},
+  handler: async (ctx) => {
+    const viewer = await getViewer(ctx);
+    if (!hasPerm(viewer, "stats.view")) return null;
+    const row = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", STATS_SNAPSHOT_KEY))
+      .unique();
+    if (!row) return null;
+    // the snapshot IS the payload; computedAt rides inside it
+    return row.value as { computedAt?: string };
+  },
+});
+
+/** On-demand recompute for the "refresh" button. Bounded like the cron run. */
+export const refreshAnalytics = mutation({
+  args: {},
+  handler: async (ctx): Promise<{ computedAt: string } | null> => {
+    const viewer = await getViewer(ctx);
+    if (!hasPerm(viewer, "stats.view")) return null;
+    await enforceRateLimit(
+      ctx,
+      `analytics:recompute:${viewer!.userId}`,
+      4,
+      60 * 60_000,
+    );
+    return await ctx.runMutation(internal.admin.computeSnapshot, { spanDays: undefined });
+  },
+});
+
+export const computeSnapshot = internalMutation({
+  args: { spanDays: v.optional(v.number()) },
+  handler: async (ctx, { spanDays }) => {
+    const payload = {
+      ...computeAnalyticsPayload(ctx, spanDays),
+      computedAt: new Date().toISOString(),
+    };
+    const existing = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", STATS_SNAPSHOT_KEY))
+      .unique();
+    if (existing) await ctx.db.patch(existing._id, { value: payload });
+    else await ctx.db.insert("appSettings", { key: STATS_SNAPSHOT_KEY, value: payload });
+    return { computedAt: payload.computedAt };
+  },
+});
+
+const WATERMARK_KEY = "stats:watermark";
+
+async function readWatermark(ctx: QueryCtx): Promise<number> {
+  const row = await ctx.db
+    .query("appSettings")
+    .withIndex("by_key", (q) => q.eq("key", WATERMARK_KEY))
+    .unique();
+  return typeof row?.value?.ms === "number" ? row.value.ms : 0;
+}
+
+/**
+ * Fold everything written since the last run into statsDaily.
+ *
+ * Runs every few minutes from crons.ts. Each run only touches rows newer than
+ * its watermark, so the cost is proportional to recent activity, not to the
+ * size of history — that's what keeps `stats` cheap enough to be reactive.
+ */
+export const rollupStats = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const wm = await readWatermark(ctx);
+    const CAP = 5000;
+
+    const blankDay = () => ({ saves: 0, skips: 0, nevers: 0, mores: 0, signups: 0, requests: 0, imports: 0 });
+    const days = new Map<string, ReturnType<typeof blankDay>>();
+    let lastSeen = wm;
+    let truncated = false;
+
+    // ---- swipes ---------------------------------------------------------
+    let swipes = 0;
+    const swipeRows = await ctx.db
+      .query("swipes")
+      .withIndex("by_creation_time", (q) => q.gt("_creationTime", wm))
+      .take(CAP);
+    for (const s of swipeRows) {
+      lastSeen = Math.max(lastSeen, s._creationTime);
+      const day = dayKeyOf(s._creationTime);
+      const bucket = days.get(day) ?? days.set(day, blankDay()).get(day)!;
+      bucket[
+        s.action === "save" ? "saves" : s.action === "skip" ? "skips" : s.action === "more" ? "mores" : "nevers"
+      ]++;
+      swipes++;
+    }
+    if (swipeRows.length >= CAP) truncated = true;
+
+    // ---- signups / requests / imports -----------------------------------
+    const [profiles, requests, imports] = await Promise.all([
+      ctx.db.query("profiles").collect(),
+      ctx.db.query("accessRequests").collect(),
+      ctx.db.query("imports").collect(),
+    ]);
+    for (const p of profiles) {
+      if (p._creationTime <= wm) continue;
+      lastSeen = Math.max(lastSeen, p._creationTime);
+      const bucket = days.get(dayKeyOf(p._creationTime)) ?? days.set(dayKeyOf(p._creationTime), blankDay()).get(dayKeyOf(p._creationTime))!;
+      bucket.signups++;
+    }
+    for (const r of requests) {
+      const ts = Date.parse(r.submittedAt);
+      if (Number.isNaN(ts) || ts <= wm) continue;
+      lastSeen = Math.max(lastSeen, ts);
+      const bucket = days.get(dayKeyOf(ts)) ?? days.set(dayKeyOf(ts), blankDay()).get(dayKeyOf(ts))!;
+      bucket.requests++;
+    }
+    for (const i of imports) {
+      const ts = Date.parse(i.createdAt);
+      if (Number.isNaN(ts) || ts <= wm) continue;
+      lastSeen = Math.max(lastSeen, ts);
+      const bucket = days.get(dayKeyOf(ts)) ?? days.set(dayKeyOf(ts), blankDay()).get(dayKeyOf(ts))!;
+      bucket.imports++;
+    }
+
+    // ---- write the daily rows -------------------------------------------
+    for (const [day, b] of days) {
+      const existing = await ctx.db
+        .query("statsDaily")
+        .withIndex("by_day", (q) => q.eq("day", day))
+        .unique();
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          saves: existing.saves + b.saves,
+          skips: existing.skips + b.skips,
+          nevers: existing.nevers + b.nevers,
+          mores: existing.mores + b.mores,
+          signups: existing.signups + b.signups,
+          requests: existing.requests + b.requests,
+          imports: existing.imports + b.imports,
+        });
+      } else {
+        await ctx.db.insert("statsDaily", { day, ...b });
+      }
+    }
+
+    // advance the watermark only as far as we actually processed — a truncated
+    // run resumes exactly where it stopped rather than skipping rows
+    const newWm = truncated && swipeRows.length > 0 ? swipeRows[swipeRows.length - 1]._creationTime : Math.max(lastSeen, wm);
+    const wmRow = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", WATERMARK_KEY))
+      .unique();
+    if (wmRow) await ctx.db.patch(wmRow._id, { value: { ms: newWm } });
+    else await ctx.db.insert("appSettings", { key: WATERMARK_KEY, value: { ms: newWm } });
+
+    return { swipes, days: days.size, truncated };
   },
 });
 

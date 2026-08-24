@@ -35,6 +35,8 @@ export const PERMISSIONS = [
   "users.view",
   "users.manage",
   "catalog.curate",
+  "ads.manage",
+  "config.manage",
 ] as const;
 
 export default defineSchema({
@@ -78,6 +80,8 @@ export default defineSchema({
         accentMode: v.string(),
         accentColor: v.string(),
         swipeSensitivity: v.number(),
+        /** the listener asked to stop seeing house ads */
+        adsOptOut: v.boolean(),
       }),
     ),
   }).index("by_userId", ["userId"]),
@@ -160,9 +164,96 @@ export default defineSchema({
      * for analysis" — the even-spaced provisional windows cover until then.
      */
     analyzedAt: v.optional(v.string()),
+    /**
+     * When the uploader confirmed they hold the rights to this recording.
+     * Publishing is gated on it; the copyright policy explains what we do
+     * when a rights holder disagrees (36-hour takedown target).
+     */
+    rightsConfirmedAt: v.optional(v.string()),
   })
     .index("by_trackId", ["trackId"])
     .index("by_owner", ["ownerUserId"]),
+
+  // ------------------------------------------------------------------ ads
+  //
+  // First-party house ads only: no SDKs, no third-party tags, no bidding.
+  // A card between swipes that the admin writes themselves.
+
+  ads: defineTable({
+    advertiser: v.string(), // shown as "Sponsored by …"
+    title: v.string(),
+    body: v.optional(v.string()),
+    ctaLabel: v.string(),
+    /** https-only destination; validated on write */
+    ctaUrl: v.string(),
+    /** optional artwork uploaded through Convex file storage */
+    imageStorageId: v.optional(v.id("_storage")),
+    accent: v.optional(v.string()),
+    /** weighted pick among live ads; 1 is the default share */
+    weight: v.number(),
+    status: v.union(v.literal("draft"), v.literal("live"), v.literal("retired")),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  }).index("by_status", ["status"]),
+
+  /**
+   * One row per impression/click/skip. Frequency caps are computed from these,
+   * so they're indexed for "what did THIS user see TODAY" and swept after 45
+   * days — an ad log is not a memory-keeping exercise, and the VPS notices.
+   */
+  adEvents: defineTable({
+    /** signed-in listener; absent for anonymous ones */
+    userId: v.optional(v.string()),
+    /** stable random id for anonymous listeners (localStorage/AsyncStorage) */
+    anonKey: v.optional(v.string()),
+    adId: v.id("ads"),
+    kind: v.union(v.literal("impression"), v.literal("click"), v.literal("skip")),
+    day: v.string(), // YYYY-MM-DD in UTC
+    at: v.number(),
+  })
+    .index("by_user_day", ["userId", "day"])
+    .index("by_anon_day", ["anonKey", "day"])
+    .index("by_adId", ["adId"]),
+
+  // ------------------------------------------------------------- settings
+
+  /** Small typed key/value store for server-side configuration. */
+  appSettings: defineTable({
+    key: v.string(),
+    value: v.any(),
+  }).index("by_key", ["key"]),
+
+  /**
+   * Pre-aggregated daily counters. The admin dashboard reads THESE instead of
+   * scanning every swipe ever written — analytics used to be a reactive query
+   * over whole tables, which is a performance cliff wearing a graph's clothes.
+   */
+  statsDaily: defineTable({
+    day: v.string(), // YYYY-MM-DD in UTC
+    saves: v.number(),
+    skips: v.number(),
+    nevers: v.number(),
+    mores: v.number(),
+    signups: v.number(),
+    requests: v.number(),
+    imports: v.number(),
+  }).index("by_day", ["day"]),
+
+  // -------------------------------------------------------- fingerprints
+
+  /**
+   * Inverted index for duplicate detection: one row per (landmark-pair hash,
+   * track). Computed entirely in the creator's browser (see
+   * web/src/lib/audio-fp.ts) — the VPS never decodes audio, it just counts
+   * hash collisions. ~200 rows per track; a thousand-track catalogue is a
+   * couple hundred thousand tiny rows that are only ever read via by_hash.
+   */
+  fingerprints: defineTable({
+    hash: v.number(), // uint32 landmark-pair hash
+    trackId: v.string(),
+  })
+    .index("by_hash", ["hash"])
+    .index("by_trackId", ["trackId"]),
 
   /**
    * A hook is a window into a track's audio. Imported tracks get exactly one

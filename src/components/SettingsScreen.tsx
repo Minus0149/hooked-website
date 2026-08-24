@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "../lib/auth-client";
@@ -61,6 +61,7 @@ export function SettingsScreen({
   onSetPrefs,
   volume,
   onVolume,
+  adsConfig,
 }: {
   isAdmin: boolean;
   onBack: () => void;
@@ -75,12 +76,20 @@ export function SettingsScreen({
   /** 0..1 — wired to the same player the deck uses */
   volume: number;
   onVolume: (v: number) => void;
+  /** live pacing rules; null while loading or when opted out */
+  adsConfig: {
+    enabled: boolean;
+    everyNSwipes: number;
+    cooldownMinutes: number;
+    maxPerDay: number;
+  } | null;
 }) {
   const { state, setTaste } = useStore();
   const session = authClient.useSession();
   const deleteAccount = useMutation(api.library.deleteMyAccount);
   const [deleting, setDeleting] = useState(false);
   const [showBlocked, setShowBlocked] = useState(false);
+  const [adsConfirm, setAdsConfirm] = useState(false);
   const options = availableTasteOptions(state.catalog);
 
   const taste = state.taste;
@@ -325,6 +334,37 @@ export function SettingsScreen({
           </>
         )}
 
+        <Group>support hooked</Group>
+        <div className="prefs-block">
+          <span className="prefs-label">House ads</span>
+          <p className="prefs-hint" style={{ marginTop: 2 }}>
+            {state.prefs.adsOptOut
+              ? "You've turned these off. Fair enough — they'll stay off until you change your mind."
+              : adsConfig?.enabled
+                ? `A small sponsored card every ~${adsConfig.everyNSwipes} swipes, at most ${adsConfig.maxPerDay} a day. Music never stops for one.`
+                : "No cards are being shown right now."}
+          </p>
+          <div className="prefs-segmented" role="group" aria-label="house ads">
+            <button
+              className={`prefs-chip ${!state.prefs.adsOptOut ? "on" : ""}`}
+              onClick={() => onSetPrefs({ adsOptOut: false })}
+              aria-pressed={!state.prefs.adsOptOut}
+            >
+              On — keep hooked independent
+            </button>
+            <button
+              className={`prefs-chip ${state.prefs.adsOptOut ? "on" : ""}`}
+              onClick={() => {
+                if (!state.prefs.adsOptOut) setAdsConfirm(true);
+                else onSetPrefs({ adsOptOut: false });
+              }}
+              aria-pressed={state.prefs.adsOptOut}
+            >
+              Off
+            </button>
+          </div>
+        </div>
+
         <Group>account</Group>
         <button className="settings-row" onClick={onOpenProfile}>
           <span className="settings-row-icon"><IconUser size={17} /></span>
@@ -431,6 +471,59 @@ export function SettingsScreen({
           </button>
         )}
       </motion.div>
+
+      {/* the ask when someone turns ads off — honest, not guilt-trippy */}
+      <AnimatePresence>
+        {adsConfirm && (
+          <>
+            <motion.div
+              className="sheet-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setAdsConfirm(false)}
+            />
+            <motion.div
+              className="sheet ad-ask"
+              initial={{ y: "110%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "110%" }}
+              transition={{ type: "spring", stiffness: 380, damping: 34 }}
+            >
+              <h3 className="sheet-title">Before you go…</h3>
+              <p className="ad-ask-copy">
+                hooked has no investors and no label money. Those few quiet cards
+                between songs are what pay for the servers, the licences and the
+                hours this takes. Turning them off won't cost you anything — but
+                if a few hundred people do, this deck goes quiet with them.
+              </p>
+              <p className="ad-ask-copy">
+                Whatever you choose, the music keeps playing. That's a promise.
+              </p>
+              <div className="ad-ask-actions">
+                <button
+                  className="prefs-chip on"
+                  onClick={() => {
+                    setAdsConfirm(false);
+                    onSetPrefs({ adsOptOut: false });
+                  }}
+                >
+                  Keep them on — I get it
+                </button>
+                <button
+                  className="prefs-chip"
+                  onClick={() => {
+                    setAdsConfirm(false);
+                    onSetPrefs({ adsOptOut: true });
+                  }}
+                >
+                  Turn them off anyway
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

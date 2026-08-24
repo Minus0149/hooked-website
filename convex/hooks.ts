@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";
 import { enforceRateLimit, requirePermission } from "./security";
+import { runtimeFor } from "./runtime";
 
 /**
  * Hooks for songs nobody has marked by hand.
@@ -102,14 +103,15 @@ export const backfill = mutation({
  * catalogue query reads, so the expensive invalidation happens hourly instead
  * of thousands of times an hour.
  *
- * A hook needs real evidence before it is allowed to jump the queue — below
- * that, the order its creator chose stands.
- */
-const ENOUGH_PLAYS = 20;
-
+  * A hook needs real evidence before it is allowed to jump the queue — below
+  * that, the order its creator chose stands. The evidence bar is runtime
+  * config (hookRankMinPlays), editable live from the dashboard.
+  */
 export const rerank = internalMutation({
   args: {},
   handler: async (ctx) => {
+    const runtime = await runtimeFor(ctx);
+    const ENOUGH_PLAYS = runtime.hookRankMinPlays;
     const stats = await ctx.db.query("hookStats").collect();
     if (stats.length === 0) return { tracks: 0, changed: 0 };
 

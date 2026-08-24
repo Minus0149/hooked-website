@@ -39,6 +39,43 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
+      // Password resets need somewhere to send the link. Resend's plain HTTPS
+      // API keeps this dependency-free; without a key the link is logged to
+      // the Convex dashboard instead, which is the honest self-host fallback.
+      sendResetPassword: async ({ user, url }) => {
+        const key = process.env.RESEND_API_KEY;
+        const from = process.env.RESEND_FROM ?? "hooked <onboarding@resend.dev>";
+        if (!key) {
+          console.warn(
+            `[auth] password reset for ${user.email}: ${url} — set RESEND_API_KEY to email these`,
+          );
+          return;
+        }
+        try {
+          const res = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${key}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              from,
+              to: [user.email],
+              subject: "reset your hooked. password",
+              html:
+                `<p>Someone (hopefully you) asked to reset the password for <b>${user.email}</b>.</p>` +
+                `<p><a href="${url}">Choose a new password</a> — the link works once and expires in an hour.</p>` +
+                `<p>If it wasn't you, ignore this and your password stays as it was.</p>`,
+            }),
+          });
+          if (!res.ok) {
+            console.error("[auth] reset email failed:", await res.text());
+          }
+        } catch (err) {
+          console.error("[auth] reset email error:", err);
+        }
+      },
+      resetPasswordTokenExpiresIn: 3600,
     },
     plugins: [crossDomain({ siteUrl }), convex({ authConfig })],
   });

@@ -10,6 +10,8 @@ import { RequestsPanel } from "./admin/Requests";
 import { CreatorsPanel } from "./admin/Creators";
 import { UsersPanel } from "./admin/Users";
 import { CatalogPanel } from "./admin/Catalog";
+import { AdsPanel } from "./admin/AdsPanel";
+import { ConfigPanel } from "./admin/ConfigPanel";
 import { FeedPanel } from "./admin/Feed";
 
 /**
@@ -52,9 +54,13 @@ export function AdminDashboard() {
     }
     if (userData !== null) t.push({ id: "users", label: "Users", icon: "◉" });
     if (catalog !== null) t.push({ id: "catalog", label: "Catalog", icon: "♪" });
+    if (access?.permissions.includes("ads.manage") || access?.isAdmin)
+      t.push({ id: "ads", label: "Ads", icon: "▣" });
+    if (access?.permissions.includes("config.manage") || access?.isAdmin)
+      t.push({ id: "config", label: "Config", icon: "⚙" });
     if (stats !== null) t.push({ id: "feed", label: "Live feed", icon: "≋" });
     return t;
-  }, [stats, userData, catalog, requests, analytics, creatorData]);
+  }, [stats, userData, catalog, requests, analytics, creatorData, access]);
 
   const [tab, setTab] = useState<Tab>("overview");
   const activeTab = tabs.some((t) => t.id === tab) ? tab : (tabs[0]?.id ?? "overview");
@@ -124,7 +130,9 @@ export function AdminDashboard() {
         transition={{ duration: 0.25 }}
       >
         {activeTab === "overview" && stats && <Overview stats={stats} />}
-        {activeTab === "analytics" && analytics && <AnalyticsPanel a={analytics} />}
+        {activeTab === "analytics" && analytics && (
+          <AnalyticsPanel a={analytics as import("./admin/Analytics").AnalyticsSnapshot} />
+        )}
         {activeTab === "creators" && creatorData && (
           <CreatorsPanel
             data={creatorData}
@@ -186,6 +194,8 @@ export function AdminDashboard() {
           />
         )}
         {activeTab === "feed" && stats && <FeedPanel recent={stats.recent} />}
+        {activeTab === "ads" && <AdsPanel />}
+        {activeTab === "config" && <ConfigPanel />}
       </motion.main>
     </div>
   );

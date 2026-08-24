@@ -10,6 +10,7 @@
 
 import type * as access from "../access.js";
 import type * as admin from "../admin.js";
+import type * as ads from "../ads.js";
 import type * as analyzer from "../analyzer.js";
 import type * as auth from "../auth.js";
 import type * as creators from "../creators.js";
@@ -19,6 +20,7 @@ import type * as http from "../http.js";
 import type * as imports from "../imports.js";
 import type * as library from "../library.js";
 import type * as matching from "../matching.js";
+import type * as runtime from "../runtime.js";
 import type * as security from "../security.js";
 import type * as tracks from "../tracks.js";
 
@@ -31,6 +33,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   access: typeof access;
   admin: typeof admin;
+  ads: typeof ads;
   analyzer: typeof analyzer;
   auth: typeof auth;
   creators: typeof creators;
@@ -40,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   imports: typeof imports;
   library: typeof library;
   matching: typeof matching;
+  runtime: typeof runtime;
   security: typeof security;
   tracks: typeof tracks;
 }>;

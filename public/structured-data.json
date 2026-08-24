@@ -1,0 +1,10 @@
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "hooked.",
+  "applicationCategory": "MusicApplication",
+  "operatingSystem": "Web, Android",
+  "url": "https://app.hookedcue.com/",
+  "description": "A swipe-based music discovery app that plays 30-second song previews and learns taste from skip, save, more-like-this, and never-again gestures.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}

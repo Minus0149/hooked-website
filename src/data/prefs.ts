@@ -25,6 +25,8 @@ export interface UserPrefs {
    * 0.6 = feather-light flicks, 1.4 = deliberate drags. 1 = shipped default.
    */
   swipeSensitivity: number;
+  /** The listener asked to stop seeing house ads (reversible, with a word). */
+  adsOptOut: boolean;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {
@@ -33,6 +35,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   accentMode: "track",
   accentColor: "#FF3D71",
   swipeSensitivity: 1,
+  adsOptOut: false,
 };
 
 export const MOTION_LEVELS: { id: MotionLevel; label: string }[] = [
@@ -83,5 +86,6 @@ export function coercePrefs(raw: unknown): Partial<UserPrefs> {
     r.swipeSensitivity <= 1.4
       ? Math.round(r.swipeSensitivity * 100) / 100
       : DEFAULT_PREFS.swipeSensitivity;
+  out.adsOptOut = r.adsOptOut === true;
   return out;
 }

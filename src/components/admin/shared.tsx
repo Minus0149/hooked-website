@@ -20,6 +20,8 @@ export type Tab =
   | "creators"
   | "users"
   | "catalog"
+  | "ads"
+  | "config"
   | "feed";
 
 export const pct = (n: number) => `${Math.round(n * 100)}%`;

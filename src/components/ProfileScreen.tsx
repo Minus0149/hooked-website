@@ -116,6 +116,8 @@ export function AuthForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -132,6 +134,25 @@ export function AuthForm() {
     setBusy(false);
     if (result.error) {
       setError(result.error.message ?? "Something went wrong");
+    }
+  };
+
+  const sendReset = async () => {
+    if (!email || resetting) return;
+    setResetting(true);
+    setError(null);
+    try {
+      // the link lands on the app origin; Better Auth appends its token
+      const res = await authClient.requestPasswordReset({
+        email,
+        redirectTo: `${window.location.origin}/#/`,
+      });
+      if (res.error) throw new Error(res.error.message ?? "Couldn't send it");
+      setResetSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't send a reset link");
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -180,10 +201,20 @@ export function AuthForm() {
       />
 
       {error && <p className="auth-error">{error}</p>}
+      {resetSent && (
+        <p className="auth-error" style={{ color: "var(--save)" }}>
+          Reset link sent — check that inbox (and the promotions tab).
+        </p>
+      )}
 
       <button className="ob-primary" type="submit" disabled={busy}>
         {busy ? "…" : mode === "signup" ? "Create account" : "Sign in"}
       </button>
+      {mode === "signin" && !resetSent && (
+        <button type="button" className="ob-skip" onClick={() => void sendReset()}>
+          {resetting ? "sending…" : "forgot your password?"}
+        </button>
+      )}
       <button
         type="button"
         className="ob-skip"

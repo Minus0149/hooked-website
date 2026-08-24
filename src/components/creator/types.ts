@@ -37,5 +37,7 @@ export type Track = {
   hidden?: boolean;
   audioUrl: string | null;
   audioDurationMs?: number;
+  /** set when the uploader ticked the rights box on an attached upload */
+  rightsConfirmedAt?: string;
   hooks: Hook[];
 };

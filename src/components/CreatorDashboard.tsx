@@ -126,7 +126,13 @@ export function CreatorDashboard() {
 function CreatorWorkspace({ tracks, curator }: { tracks: Track[]; curator: boolean }) {
   const createTrack = useMutation(api.creators.createTrack);
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ title: "", artist: "", genre: "", artwork: "" });
+  const [form, setForm] = useState({
+    title: "",
+    artist: "",
+    genre: "",
+    artwork: "",
+    rights: false,
+  });
   const [error, setError] = useState<string | null>(null);
 
   const totals = tracks.reduce(
@@ -153,8 +159,9 @@ function CreatorWorkspace({ tracks, curator }: { tracks: Track[]; curator: boole
         artist: form.artist.trim(),
         genre: form.genre.trim() || "unsorted",
         artwork: form.artwork.trim(),
+        rightsConfirmed: form.rights,
       });
-      setForm({ title: "", artist: "", genre: "", artwork: "" });
+      setForm({ title: "", artist: "", genre: "", artwork: "", rights: false });
       setAdding(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add that");
@@ -188,6 +195,19 @@ function CreatorWorkspace({ tracks, curator }: { tracks: Track[]; curator: boole
             onChange={(e) => setForm({ ...form, genre: e.target.value })} maxLength={40} />
           <input className="auth-input" placeholder="artwork url (https)" value={form.artwork}
             onChange={(e) => setForm({ ...form, artwork: e.target.value })} maxLength={500} />
+          <label className="creator-rights">
+            <input type="checkbox" checked={form.rights}
+              onChange={(e) => setForm({ ...form, rights: e.target.checked })} />
+            <span>
+              I own this recording or hold a licence for it, and it isn't a copy
+              of someone else's track. Uploads are fingerprint-checked against
+              the catalogue — see the{" "}
+              <a href="https://hookedcue.com/copyright" target="_blank" rel="noreferrer">
+                copyright policy
+              </a>
+              .
+            </span>
+          </label>
           {error && <p className="access-error">{error}</p>}
           <div className="creator-row-actions">
             <button className="aq-btn yes" type="submit">add</button>

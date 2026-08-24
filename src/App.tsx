@@ -1,10 +1,12 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { coerceTaste } from "./data/taste";
 import { coercePrefs } from "./data/prefs";
 import type { UserPrefs } from "./data/prefs";
+import { shouldAskForAd } from "./lib/ads-scheduler";
+import { SponsoredCard, type AdCardData } from "./components/SponsoredCard";
 import { authClient } from "./lib/auth-client";
 import { StoreProvider, useStore } from "./state/store";
 import { usePlayer } from "./audio/usePlayer";
@@ -17,7 +19,7 @@ import { SaveTargetSheet } from "./components/SaveTargetSheet";
 import { VolumeRail } from "./components/VolumeControl";
 import { ProfileScreen } from "./components/ProfileScreen";
 import { AccessGate, AccessPending } from "./components/AccessGate";
-// Staff-only screens. Split out so a listener never downloads the dashboards —
+// Staff-only screens. Split out so a listener never downloads the dashboards â€”
 // between them they're a third of the bundle and nobody on the deck opens them.
 const AdminDashboard = lazy(() =>
   import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })),
@@ -39,15 +41,15 @@ import {
 
 const ONBOARD_KEY = "hooked.onboarded.v1";
 // taste-first gate: anonymous visitors get a few free swipes, then the wall.
-// saves are gated immediately — keeping a song is the account's whole pitch.
+// saves are gated immediately â€” keeping a song is the account's whole pitch.
 const ANON_SWIPES_KEY = "hooked.anonSwipes.v1";
 const FREE_SWIPES = 5;
 
 const TOAST_FOR: Record<SwipeDir, { msg: string; icon: string } | null> = {
   up: null,
   down: null, // the playlist-box animation is the save feedback
-  right: { msg: "Finding more like this", icon: "✦" },
-  left: { msg: "Never again", icon: "✕" },
+  right: { msg: "Finding more like this", icon: "âœ¦" },
+  left: { msg: "Never again", icon: "âœ•" },
 };
 
 type View = "home" | "discover" | "profile" | "settings" | `library:${string}`;
@@ -135,7 +137,7 @@ function Shell() {
   );
   const [sheetOpen, setSheetOpen] = useState(false);
   const [newPlaylistOpen, setNewPlaylistOpen] = useState(false);
-  // bumped by ↩ — cancels any in-flight save animation in the deck
+  // bumped by â†© â€” cancels any in-flight save animation in the deck
   const [backToken, setBackToken] = useState(0);
   const [toast, setToast] = useState<{ key: number; msg: string; icon: string } | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
@@ -147,14 +149,14 @@ function Shell() {
   }, []);
 
   // Cloud writes used to fail in total silence (`.catch(() => undefined)`),
-  // which read as "the app ate my save". Surface it — throttled so a burst of
-  // failures shows one message, not eleven — while the local copy keeps the
+  // which read as "the app ate my save". Surface it â€” throttled so a burst of
+  // failures shows one message, not eleven â€” while the local copy keeps the
   // action alive for when connectivity returns.
   const lastSyncWarn = useRef(0);
   const syncFailed = useCallback(() => {
     if (Date.now() - lastSyncWarn.current < 15_000) return;
     lastSyncWarn.current = Date.now();
-    showToast("Cloud sync hiccuped — kept on this device", "⚠");
+    showToast("Cloud sync hiccuped â€” kept on this device", "âš ");
   }, [showToast]);
 
   // ----- cloud sync -----
@@ -216,7 +218,7 @@ function Shell() {
   );
 
   // keyed by user id, NOT by query nullability: a transient null frame from
-  // the reactive query (token refresh etc.) must not re-trigger hydration —
+  // the reactive query (token refresh etc.) must not re-trigger hydration â€”
   // a mid-session re-hydrate rebuilds the queue under the user's fingers
   const setReplayMutation = useMutation(api.library.setReplayContainer);
   /** Local first so the toggle is instant; the server is the record of truth. */
@@ -234,6 +236,8 @@ function Shell() {
   const unblockArtistMutation = useMutation(api.library.unblockArtist);
   const setTasteMutation = useMutation(api.library.setTaste);
   const setPrefsMutation = useMutation(api.library.setPrefs);
+  const recordAdEvent = useMutation(api.ads.recordEvent);
+
   const handleUnbury = useCallback(
     (trackId: string) => {
       unbury(trackId);
@@ -264,6 +268,7 @@ function Shell() {
           accentMode: merged.accentMode,
           accentColor: merged.accentColor,
           swipeSensitivity: merged.swipeSensitivity,
+          adsOptOut: merged.adsOptOut,
         }).catch(syncFailed);
       }, 600);
     },
@@ -300,7 +305,7 @@ function Shell() {
 
   useEffect(() => {
     // An empty server catalogue is a real state (admin hid everything, or the
-    // table is fresh) — honour it instead of dealing tracks the server buried.
+    // table is fresh) â€” honour it instead of dealing tracks the server buried.
     if (serverTracks !== undefined && serverTracks !== null) {
       // Full tracks, not just ids. Passing ids only meant the deck kept
       // dealing the bundled copies, so hooks, creator uploads and imported
@@ -310,6 +315,82 @@ function Shell() {
   }, [serverTracks, applyCatalog]);
 
   // ----- playback -----
+  // ----- house ads: server owns the caps, the deck owns the pacing -----
+  //
+  // A stable per-install key so anonymous visitors get a fair daily cap too.
+  const anonKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    let k = localStorage.getItem("hooked.anon");
+    if (!k) {
+      k = `anon-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+      localStorage.setItem("hooked.anon", k);
+    }
+    anonKeyRef.current = k;
+  }, []);
+
+  const adsConfig = useQuery(
+    api.ads.getConfig,
+    state.prefs.adsOptOut ? "skip" : {},
+  ) as
+    | { enabled: boolean; everyNSwipes: number; cooldownMinutes: number; maxPerDay: number }
+    | null
+    | undefined;
+
+  const swipeCounter = useRef(0);
+  const lastAdAt = useRef(0);
+  const [adDue, setAdDue] = useState(false);
+  const [activeAd, setActiveAd] = useState<AdCardData | null>(null);
+
+  const handleSwipeForAds = useCallback(() => {
+    swipeCounter.current += 1;
+    const due = shouldAskForAd({
+      swipesSinceAd: swipeCounter.current,
+      now: Date.now(),
+      lastAdAt: lastAdAt.current,
+      optedOut: state.prefs.adsOptOut,
+      config: adsConfig,
+    });
+    if (!due) return;
+    setAdDue(true); // nextAd query wakes up and decides authoritatively
+  }, [state.prefs.adsOptOut, adsConfig]);
+
+  // authoritative selection â€” null means any cap said no
+  const adCandidate = useQuery(
+    api.ads.nextAd,
+    adDue ? { userId: signedIn ? (sessionUid ?? undefined) : undefined, anonKey: anonKeyRef.current ?? undefined } : "skip",
+  );
+
+  useEffect(() => {
+    if (!adDue || adCandidate === undefined) return;
+    setAdDue(false);
+    if (adCandidate) {
+      lastAdAt.current = Date.now();
+      swipeCounter.current = 0;
+      setActiveAd(adCandidate as unknown as AdCardData);
+      void recordAdEvent({
+        adId: adCandidate.id as never,
+        kind: "impression",
+        userId: signedIn ? (sessionUid ?? undefined) : undefined,
+        anonKey: anonKeyRef.current ?? undefined,
+      }).catch(() => undefined);
+    }
+  }, [adDue, adCandidate, recordAdEvent, signedIn, sessionUid]);
+
+  const closeActiveAd = useCallback(
+    (kind: "click" | "skip") => {
+      if (activeAd) {
+        void recordAdEvent({
+          adId: activeAd.id as never,
+          kind,
+          userId: signedIn ? (sessionUid ?? undefined) : undefined,
+          anonKey: anonKeyRef.current ?? undefined,
+        }).catch(() => undefined);
+      }
+      setActiveAd(null);
+    },
+    [activeAd, recordAdEvent, signedIn, sessionUid],
+  );
+
   const onDeck = state.queue[0] ?? null;
   const next = state.queue[1] ?? null;
   const previous = state.history.length
@@ -327,12 +408,12 @@ function Shell() {
     inDiscover ? next : null,
     inDiscover,
     () => {
-      if (autoAdvanceRef.current) swipe("skip"); // preview ended → next song
+      if (autoAdvanceRef.current) swipe("skip"); // preview ended â†’ next song
     },
     // the player already auto-skips dead audio; this is where it gets reported
     (src) => {
       console.warn(`[audio] source failed: ${src}`);
-      showToast("That track's audio is gone — skipped", "⚠");
+      showToast("That track's audio is gone â€” skipped", "âš ");
     },
   );
 
@@ -340,12 +421,13 @@ function Shell() {
     (dir: SwipeDir) => {
       const t = TOAST_FOR[dir];
       if (t) showToast(t.msg, t.icon);
+      handleSwipeForAds();
       const track = onDeck;
       const action = DIR_TO_ACTION[dir];
       swipe(action);
       if (signedIn && track) {
         const playingHookId = hookRef.current?.id;
-        // only server-issued Convex ids may be credited — the baked catalog's
+        // only server-issued Convex ids may be credited â€” the baked catalog's
         // synthetic ids ("123:0") and the "whole" fallback would fail
         // validation and turn every swipe on a cold start into a sync error
         const validHookId =
@@ -359,7 +441,7 @@ function Shell() {
         }).catch(syncFailed);
       }
     },
-    [swipe, showToast, onDeck, signedIn, recordSwipe, syncFailed],
+    [swipe, showToast, onDeck, signedIn, recordSwipe, syncFailed, handleSwipeForAds],
   );
 
   const hookRef = useRef(hook);
@@ -369,7 +451,7 @@ function Shell() {
     if (!previous) return;
     back();
     setBackToken((t) => t + 1);
-    showToast("Brought back the last song", "↩");
+    showToast("Brought back the last song", "â†©");
     // a re-like of an already-saved song added nothing, so there's nothing
     // to revert server-side (reverting would wrongly delete the library row)
     const noopSave = previous.action === "save" && !previous.savedToLibrary;
@@ -401,7 +483,7 @@ function Shell() {
         }
       }
       createPlaylist({ id, name, accent, tracks: [] });
-      showToast(`Playlist "${name}" created`, "✦");
+      showToast(`Playlist "${name}" created`, "âœ¦");
       return id;
     },
     [signedIn, createPlaylistMutation, createPlaylist, showToast],
@@ -421,7 +503,7 @@ function Shell() {
     (container: LibraryContainer) => {
       handleSaveTarget(container as SaveTarget);
       setView("discover");
-      showToast("New saves land here now", "✦");
+      showToast("New saves land here now", "âœ¦");
     },
     [handleSaveTarget, showToast],
   );
@@ -444,8 +526,8 @@ function Shell() {
     [removeSong, signedIn, removeSongMutation, syncFailed],
   );
 
-  // The tutorial deals from cards 4–8. On a thin queue that slice can come
-  // back with fewer than four — or zero — and `index % 0` is NaN, which made
+  // The tutorial deals from cards 4â€“8. On a thin queue that slice can come
+  // back with fewer than four â€” or zero â€” and `index % 0` is NaN, which made
   // the demo card read `.artwork` of undefined and crash onboarding entirely.
   const demoTracks = useMemo(() => {
     const fromQueue = state.queue.slice(3, 8);
@@ -467,8 +549,8 @@ function Shell() {
     [jumpTo],
   );
 
-  // tint the whole room with the on-deck track's accent — or a fixed colour
-  // if they chose one in Settings → Appearance
+  // tint the whole room with the on-deck track's accent â€” or a fixed colour
+  // if they chose one in Settings â†’ Appearance
   const trackAccent = inDiscover && onDeck ? onDeck.accent : "#FF3D71";
   const accent =
     state.prefs.accentMode === "custom" ? state.prefs.accentColor : trackAccent;
@@ -542,7 +624,22 @@ function Shell() {
                 onNextHook={nextHook}
                 gateSwipe={gateSwipe}
                 sensitivity={state.prefs.swipeSensitivity}
+                motionPref={state.prefs.motion}
               />
+              {/* house ad between swipes â€” music keeps playing under it */}
+              <AnimatePresence>
+                {activeAd && (
+                  <SponsoredCard
+                    ad={activeAd}
+                    onSkip={() => closeActiveAd("skip")}
+                    onClick={() => closeActiveAd("click")}
+                    onWhy={() => {
+                      setActiveAd(null);
+                      setView("settings");
+                    }}
+                  />
+                )}
+              </AnimatePresence>
             </>
           )}
           {view === "profile" && (
@@ -562,6 +659,7 @@ function Shell() {
               onUnbury={handleUnbury}
               onUnblockArtist={handleUnblockArtist}
               onSetPrefs={handleSetPrefs}
+              adsConfig={adsConfig ?? null}
               volume={volume}
               onVolume={setVolume}
               onReplayTutorial={() => {
@@ -622,7 +720,7 @@ function Shell() {
               >
                 <AccessGate freeSwipes={FREE_SWIPES} />
                 <button className="gate-close" onClick={() => setGate(null)}>
-                  not now — just looking
+                  not now â€” just looking
                 </button>
               </motion.div>
             </motion.div>
@@ -670,12 +768,12 @@ function Shell() {
       </div>
       <VolumeRail volume={volume} onVolume={setVolume} visible={inDiscover} />
       </div>
-      {/* a hint about the deck, so it belongs only on the deck — it was
+      {/* a hint about the deck, so it belongs only on the deck â€” it was
           rendering at the app root and sitting over home, the library and
           settings, where it means nothing and overlaps real rows */}
       {inDiscover && (
         <p className="stage-caption">
-          drag the card · arrow keys work too · space to pause
+          drag the card Â· arrow keys work too Â· space to pause
         </p>
       )}
     </div>
@@ -694,10 +792,24 @@ export default function App() {
     const Screen = route.startsWith("#/admin") ? AdminDashboard : CreatorDashboard;
     return (
       <Suspense
-        fallback={<div className="admin admin-v2"><p className="admin-empty">Loading…</p></div>}
+        fallback={<div className="admin admin-v2"><p className="admin-empty">Loadingâ€¦</p></div>}
       >
         <Screen />
       </Suspense>
+    );
+  }
+  // anything else under #/ that isn't a real route gets the 404 — silently
+  // rendering the deck for a mistyped link hid the mistake
+  if (route.startsWith("#/") && route !== "#/" && route !== "#" && route !== "") {
+    return (
+      <div className="notfound">
+        <span className="wordmark">
+          hooked<span className="dot">.</span>
+        </span>
+        <h1>404</h1>
+        <p>That page doesn&apos;t exist. The songs are all still where you left them.</p>
+        <a className="notfound-home" href="#/">back to the deck</a>
+      </div>
     );
   }
 
