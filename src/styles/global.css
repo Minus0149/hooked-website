@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #08080c;
   --surface: #13131b;
   --surface-2: #1c1c26;
@@ -218,7 +218,7 @@ button {
   transition: transform 0.15s ease, opacity 0.2s ease, border-color 0.2s;
   position: relative;
   overflow: hidden;
-  /* was 42x42 — two pixels under the minimum target */
+  /* was 42x42 â€” two pixels under the minimum target */
   min-width: 44px;
   min-height: 44px;
 }
@@ -414,7 +414,7 @@ button {
   border-radius: 999px;
   background: var(--accent);
   box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent);
-  /* no background transition — --accent changes per card; scaleY for progress */
+  /* no background transition â€” --accent changes per card; scaleY for progress */
   transform: scaleY(var(--v, 1));
   transform-origin: bottom center;
 }
@@ -468,7 +468,7 @@ button {
   height: 152px;
   margin-left: -86px;
 }
-/* back panel — dark interior the disc dips into before being covered */
+/* back panel â€” dark interior the disc dips into before being covered */
 .sleeve2-back {
   position: absolute;
   inset: 0;
@@ -477,7 +477,7 @@ button {
   border: 1.5px solid #241f2b;
   box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.7);
 }
-/* front face — clipped below the slot line, prints the track's own artwork */
+/* front face â€” clipped below the slot line, prints the track's own artwork */
 .sleeve2-front {
   position: absolute;
   inset: 0;
@@ -668,8 +668,8 @@ button {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 /* once measured, the bar's pill+notch silhouette is drawn by the SVG path
-   (water-droplet notch) — the CSS box becomes invisible. border: none (not
-   just transparent) so the SVG's anchor box matches the bar exactly —
+   (water-droplet notch) â€” the CSS box becomes invisible. border: none (not
+   just transparent) so the SVG's anchor box matches the bar exactly â€”
    a leftover 1px border shifted the notch 1px off the button's center */
 .bottomnav.shaped {
   background: transparent;
@@ -684,7 +684,7 @@ button {
   position: relative;
   z-index: 1;
 }
-/* the + nests deeper into the bite — bigger button, tighter gap */
+/* the + nests deeper into the bite â€” bigger button, tighter gap */
 .nav-fab-host {
   position: absolute;
   left: 0;
@@ -702,10 +702,10 @@ button {
   width: 64px;
   flex-shrink: 0;
 }
-/* only the upper half renders — a border ARC above the bar, so the bar's
+/* only the upper half renders â€” a border ARC above the bar, so the bar's
    edge reads as curving open around the button. No ring inside the bar. */
 /* tabs sit NEXT to the center button instead of stretching to the bar's
-   edges — fixed width + centered bar keeps everything close together */
+   edges â€” fixed width + centered bar keeps everything close together */
 .nav-btn {
   flex: 0 0 auto;
   width: 92px;
@@ -723,7 +723,7 @@ button {
   font-size: 11.5px;
   letter-spacing: 0.02em;
 }
-/* active = accent icon + white label, like the reference — no boxes */
+/* active = accent icon + white label, like the reference â€” no boxes */
 .nav-btn.active { color: var(--text); }
 .nav-btn.active svg { color: var(--accent); transition: color 0.5s ease; }
 
@@ -973,7 +973,7 @@ button {
 }
 .ob-primary:active { transform: scale(0.97); }
 .ob-skip {
-  /* was a 16px-tall target — the text height and nothing else. Anything you
+  /* was a 16px-tall target â€” the text height and nothing else. Anything you
      are meant to be able to tap needs a finger's worth of box around it. */
   margin-top: 6px;
   padding: 14px 0;
@@ -1103,7 +1103,7 @@ button {
 .library-body {
   flex: 1;
   overflow-y: auto;
-  /* the last row was ending underneath the floating nav pill — the scroll
+  /* the last row was ending underneath the floating nav pill â€” the scroll
      area has to reserve the dock's height, not just its own padding */
   padding: 4px 20px 92px;
   scrollbar-width: none;
@@ -1988,9 +1988,9 @@ button {
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface) 88%, black);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), 0 0 60px color-mix(in srgb, var(--accent) 18%, transparent);
-  padding: 26px 4px 18px;
-  display: flex;
-  flex-direction: column;
+  /* real side padding â€” 4px used to rely on every child faking its own */
+  padding: 22px 20px 14px;
+  overscroll-behavior: contain;
 }
 .gate-kicker {
   font-family: var(--font-display);
@@ -1998,7 +1998,7 @@ button {
   font-size: 21px;
   text-align: center;
   letter-spacing: -0.01em;
-  padding: 0 26px;
+  padding: 0 6px;
 }
 .gate-copy {
   color: var(--muted);
@@ -2006,7 +2006,7 @@ button {
   line-height: 1.55;
   text-align: center;
   margin-top: 8px;
-  padding: 0 26px;
+  padding: 0 6px;
 }
 .gate-card .profile-body {
   flex: none;
@@ -2239,7 +2239,7 @@ button {
 }
 .creator-preview li { padding-left: 14px; position: relative; }
 .creator-preview li::before {
-  content: "›"; position: absolute; left: 0; opacity: .5;
+  content: "â€º"; position: absolute; left: 0; opacity: .5;
 }
 .creator-report {
   margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px;
@@ -2396,7 +2396,7 @@ button {
 
 /* ------------------------------------------------------------------
    Deep settings (Appearance / Playback / Gestures / Sound & taste /
-   Data & privacy) — chips, swatches and range inputs. */
+   Data & privacy) â€” chips, swatches and range inputs. */
 
 .prefs-block {
   display: flex; flex-direction: column; gap: 8px;
@@ -2489,7 +2489,7 @@ html[data-motion="off"] .drift,
 html[data-motion="reduced"] .drift { animation: none !important; }
 
 /* ------------------------------------------------------------------
-   Creator waveform hook editor — drag the window onto the part of the
+   Creator waveform hook editor â€” drag the window onto the part of the
    song you mean, audition it in a loop, then commit. */
 
 .hook-editor { margin: 10px 0; }
@@ -2644,9 +2644,22 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 .tile-mosaic .empty-solo { grid-column: 1 / -1; }
 
 /* gate form: breathing room between clusters, grouped secondary action */
-.access-form .prefs-block { margin-bottom: 2px; }
-.access-form .auth-submit { margin-top: 6px; }
-.gate-secondary {
-  display: flex; justify-content: center;
-  padding-top: 4px;
+.access-form .prefs-block { margin-bottom: 0; }
+
+/* the card is the scroll container, so the CTA rides it: sticky at the
+   bottom with a fade, always reachable no matter how long the form gets */
+.gate-actions {
+  position: sticky;
+  bottom: -14px;               /* cancels the card's bottom padding */
+  margin: 8px -20px -14px;     /* full-bleed across the card */
+  padding: 16px 20px 14px;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--surface) 92%, black) 72%,
+    color-mix(in srgb, var(--surface) 60%, black) 88%,
+    transparent
+  );
+  display: flex;
+  flex-direction: column;
 }
+

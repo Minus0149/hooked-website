@@ -226,10 +226,11 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
 
       {error && <p className="access-error">{error}</p>}
 
-      <button className="auth-submit" type="submit" disabled={busy}>
-        {busy ? "sending..." : "ask for access"}
-      </button>
-      <div className="gate-secondary">
+      {/* sticky action bar: the card scrolls, the button never leaves */}
+      <div className="gate-actions">
+        <button className="ob-primary" type="submit" disabled={busy}>
+          {busy ? "sending..." : "ask for access"}
+        </button>
         <button type="button" className="gate-close" onClick={() => setStage("signin")}>
           already approved? sign in
         </button>
