@@ -21,7 +21,7 @@ import {
 
 interface Props {
   tracks: Track[]; // [onDeck, next, nextNext]
-  backToken: number; // bumped by â†© â€” cancels any in-flight save FX
+  backToken: number; // bumped by ↩ — cancels any in-flight save FX
   playing: boolean;
   progress: number;
   remaining: number; // seconds left in the preview
@@ -33,11 +33,11 @@ interface Props {
   hookCount: number;
   hookLabel?: string;
   onNextHook: () => void;
-  // return false to refuse the swipe (login gate) â€” card snaps back, no FX
+  // return false to refuse the swipe (login gate) — card snaps back, no FX
   gateSwipe?: (dir: SwipeDir) => boolean;
-  // scales the drag distance a swipe needs (Settings â†’ Gestures)
+  // scales the drag distance a swipe needs (Settings → Gestures)
   sensitivity?: number;
-  // gates the save vinyl: off skips it, reduced downgrades cinematicâ†’fast
+  // gates the save vinyl: off skips it, reduced downgrades cinematic→fast
   motionPref?: "full" | "reduced" | "off";
 }
 
@@ -60,7 +60,7 @@ export function resolveDir(info: PanInfo, sensitivity = 1): SwipeDir | null {
 
 const EXIT: Record<SwipeDir, { x: number; y: number; rotate: number; scale: number }> = {
   up: { x: 0, y: -760, rotate: 0, scale: 1 },
-  down: { x: 0, y: 760, rotate: 0, scale: 1 }, // unused â€” "down" has its own sleeve path
+  down: { x: 0, y: 760, rotate: 0, scale: 1 }, // unused — "down" has its own sleeve path
   right: { x: 520, y: -40, rotate: 18, scale: 1 },
   left: { x: -520, y: -40, rotate: -18, scale: 1 },
 };
@@ -77,12 +77,12 @@ const cardVariants = {
   exit: (custom: ExitCustom | undefined) => {
     const dir = custom?.dir ?? "up";
     if (dir === "down") {
-      // the DiscFX overlay takes over from the exact release pose â€”
+      // the DiscFX overlay takes over from the exact release pose —
       // the real card just vanishes underneath it
       return { opacity: 0, transition: { duration: 0.01 } };
     }
     // fly past the MEASURED deck edge (plus margin) instead of a hardcoded
-    // pixel count â€” tall screens used to watch the card die mid-screen
+    // pixel count — tall screens used to watch the card die mid-screen
     const base = EXIT[dir];
     const far =
       dir === "up"
@@ -105,7 +105,7 @@ const cardVariants = {
 type FX = { type: "more" | "never"; key: number };
 
 /**
- * Segmented progress, one bar per hook â€” the Stories convention, because
+ * Segmented progress, one bar per hook — the Stories convention, because
  * everyone already knows what it means.
  *
  * Deliberately not swipeable: up/down/left/right are all spoken for, so moving
@@ -179,8 +179,8 @@ function ScrubBar({
 function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }) {
   const dialog = useDialog({ onClose });
   const q = encodeURIComponent(`${track.title} ${track.artist}`);
-  // Only a pure-numeric id is an iTunes item â€” creator uploads ("own:â€¦") and
-  // imports ("imp:â€¦") would 404 as /song/{id}. Those get a storefront search.
+  // Only a pure-numeric id is an iTunes item — creator uploads ("own:⬦") and
+  // imports ("imp:⬦") would 404 as /song/{id}. Those get a storefront search.
   const appleHref = /^\d+$/.test(track.id)
     ? `https://music.apple.com/us/song/${track.id}`
     : `https://music.apple.com/us/search?term=${q}`;
@@ -208,7 +208,7 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
       >
         <h3 className="sheet-title">Hear the whole thing</h3>
         <p className="sheet-sub">
-          "{track.title}" â€” {track.artist}. Previews stop at 30 seconds; pick where
+          "{track.title}" — {track.artist}. Previews stop at 30 seconds; pick where
           to keep listening.
         </p>
         {services.map((s) => (
@@ -220,9 +220,9 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
             rel="noreferrer"
             onClick={onClose}
           >
-            <span style={{ color: "var(--accent)" }}>â™ª</span>
+            <span style={{ color: "var(--accent)" }}>♪</span>
             {s.name}
-            <span className="check" style={{ opacity: 1 }}>â†—</span>
+            <span className="check" style={{ opacity: 1 }}>↗</span>
           </a>
         ))}
       </motion.div>
@@ -249,7 +249,7 @@ function SparkleFX() {
           animate={{ opacity: [0, 1, 0], x: p.dx, y: p.dy, scale: 0.3, rotate: p.rot }}
           transition={{ duration: 0.6, delay: p.delay, ease: "easeOut" }}
         >
-          âœ¦
+          ✦
         </motion.span>
       ))}
     </>
@@ -290,7 +290,7 @@ function TopCard({
   exitCustom: ExitCustom;
   onSeek: (fraction: number) => void;
   onSwipe: (dir: SwipeDir, release?: SaveRelease) => void;
-  /** scales the drag distance a swipe needs (Settings â†’ Gestures) */
+  /** scales the drag distance a swipe needs (Settings → Gestures) */
   sensitivity?: number;
 }) {
   const x = useMotionValue(0);
@@ -342,16 +342,16 @@ function TopCard({
       )}
 
       <motion.div className="stamp stamp-up" style={{ opacity: upOpacity }}>
-        skip â†‘
+        skip ↑
       </motion.div>
       <motion.div className="stamp stamp-down" style={{ opacity: downOpacity }}>
-        â™¥ saved
+        ♥ saved
       </motion.div>
       <motion.div className="stamp stamp-right" style={{ opacity: rightOpacity }}>
-        âœ¦ more like this
+        ✦ more like this
       </motion.div>
       <motion.div className="stamp stamp-left" style={{ opacity: leftOpacity }}>
-        âœ• never
+        ✕ never
       </motion.div>
 
       <div className="card-meta">
@@ -400,8 +400,8 @@ export function SwipeDeck({
   const saveCount = useRef(0);
   const longPress = useRef<{ timer?: number; fired: boolean }>({ fired: false });
 
-  // â†© cancels the save animation: the save it depicts was just reverted, and
-  // the song is back on deck â€” letting the disc finish would show it twice
+  // ↩ cancels the save animation: the save it depicts was just reverted, and
+  // the song is back on deck — letting the disc finish would show it twice
   useEffect(() => {
     if (backToken > 0) setSaveFx(null);
   }, [backToken]);
@@ -421,7 +421,7 @@ export function SwipeDeck({
   const handleSwipe = useCallback(
     (dir: SwipeDir, release?: SaveRelease) => {
       if (locked || !onDeck) return;
-      if (gateSwipe && !gateSwipe(dir)) return; // login wall â€” card snaps back untouched
+      if (gateSwipe && !gateSwipe(dir)) return; // login wall — card snaps back untouched
       lastDir.current = dir;
       setLocked(true);
       if (dir === "down") {
@@ -432,7 +432,7 @@ export function SwipeDeck({
           setSaveFx({
             key: Date.now(),
             track: onDeck,
-            from: release ?? { x: 0, y: 0, vx: 0, vy: 650 }, // â™¥ button: drop from center
+            from: release ?? { x: 0, y: 0, vx: 0, vy: 650 }, // ♥ button: drop from center
             mode:
               motionPref === "reduced" || saveCount.current % 5 !== 0
                 ? "fast"
@@ -481,7 +481,7 @@ export function SwipeDeck({
   return (
     <div className="deck-wrap">
       <div className="deck" ref={deckRef}>
-        {/* keyed by track so an <img> never swaps src in place â€” swapping
+        {/* keyed by track so an <img> never swaps src in place — swapping
             shows the old picture for a beat while the new one decodes */}
         {nextNext && (
           <div
@@ -506,7 +506,7 @@ export function SwipeDeck({
         <AnimatePresence custom={exitCustom}>
           {onDeck && (
             <TopCard
-              // backToken in the key: pressing â†© while the previous card is
+              // backToken in the key: pressing ↩ while the previous card is
               // still exiting would otherwise put two children with the same
               // key inside AnimatePresence ("same key found")
               key={`${onDeck.id}:${backToken}`}
@@ -536,7 +536,7 @@ export function SwipeDeck({
               transition={{ type: "spring", stiffness: 420, damping: 26 }}
               onClick={() => setFullSongOpen(true)}
             >
-              keep listening â–¸
+              keep listening ▸
             </motion.button>
           )}
         </AnimatePresence>
@@ -547,7 +547,7 @@ export function SwipeDeck({
             data={saveFx}
             deckW={deckW.current}
             deckH={deckH.current}
-            sticker={saveTarget === "liked" ? "â™¥" : "âœ“"}
+            sticker={saveTarget === "liked" ? "♥" : "✓"}
             onDone={() => setSaveFx(null)}
           />
         )}
@@ -565,7 +565,7 @@ export function SwipeDeck({
           style={{ color: "var(--never)" }}
           onClick={() => handleSwipe("left")}
           aria-label="Never play this again"
-          title="Never (â†)"
+          title="Never (←)"
         >
           <IconX />
         </button>
@@ -573,7 +573,7 @@ export function SwipeDeck({
           className="action-btn"
           onClick={() => handleSwipe("up")}
           aria-label="Skip"
-          title="Skip (â†‘)"
+          title="Skip (↑)"
         >
           <IconSkipUp />
         </button>
@@ -596,7 +596,7 @@ export function SwipeDeck({
           onPointerUp={() => window.clearTimeout(longPress.current.timer)}
           onPointerLeave={() => window.clearTimeout(longPress.current.timer)}
           aria-label={playing ? "Pause (hold for full song)" : "Play (hold for full song)"}
-          title="Tap: play/pause Â· Hold: full song"
+          title="Tap: play/pause · Hold: full song"
         >
           {playing ? <IconPause /> : <IconPlay />}
         </button>
@@ -605,7 +605,7 @@ export function SwipeDeck({
           style={{ color: "var(--save)" }}
           onClick={() => handleSwipe("down")}
           aria-label="Save"
-          title="Save (â†“)"
+          title="Save (↓)"
         >
           <IconHeart />
         </button>
@@ -614,7 +614,7 @@ export function SwipeDeck({
           style={{ color: "var(--more)" }}
           onClick={() => handleSwipe("right")}
           aria-label="More like this"
-          title="More like this (â†’)"
+          title="More like this (→)"
         >
           <IconSparkle />
         </button>
