@@ -52,7 +52,13 @@ const TOAST_FOR: Record<SwipeDir, { msg: string; icon: string } | null> = {
   left: { msg: "Never again", icon: "✕" },
 };
 
-type View = "home" | "discover" | "profile" | "settings" | `library:${string}`;
+type View =
+  | "home"
+  | "discover"
+  | "profile"
+  | "settings"
+  | `settings:${string}`
+  | `library:${string}`;
 
 interface ServerTrack {
   trackId: string;
@@ -396,16 +402,23 @@ function Shell() {
     : null;
 
   const inDiscover = view === "discover" && onboarded;
+  // the gate and the access screens sit OVER the deck, but the player's
+  // ended/error handlers fire regardless of what's on screen — without this,
+  // previews kept auto-advancing song after song behind the invite form
+  const listening = inDiscover && gate === null && accessBlock === null;
+  const listeningRef = useRef(listening);
+  listeningRef.current = listening;
   const autoAdvanceRef = useRef(state.autoAdvance);
   autoAdvanceRef.current = state.autoAdvance;
   const {
     playing, progress, remaining, volume, toggle, seek, setVolume,
     hookIndex, hookCount, hook, nextHook,
   } = usePlayer(
-    inDiscover ? onDeck : null,
-    inDiscover ? next : null,
-    inDiscover,
+    listening ? onDeck : null,
+    listening ? next : null,
+    listening,
     () => {
+      if (!listeningRef.current) return; // gate is up: nothing advances
       if (autoAdvanceRef.current) swipe("skip"); // preview ended → next song
     },
     // the player already auto-skips dead audio; this is where it gets reported
@@ -646,8 +659,16 @@ function Shell() {
               onBack={() => setView("home")}
             />
           )}
-          {view === "settings" && (
+          {(view === "settings" || view.startsWith("settings:")) && (
             <SettingsScreen
+              page={
+                view.startsWith("settings:")
+                  ? (view.slice(9) as import("./components/SettingsScreen").SettingsPage)
+                  : "hub"
+              }
+              onOpenPage={(p) =>
+                setView(p === "hub" ? "settings" : (`settings:${p}` as View))
+              }
               isAdmin={(library?.isAdmin || (library?.permissions?.length ?? 0) > 0) ?? false}
               onBack={() => setView("home")}
               onOpenProfile={() => setView("profile")}

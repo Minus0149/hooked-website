@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+﻿import { useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -7,7 +7,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
  * The ads studio: pacing rules on the left, campaigns on the right.
  *
  * The cadence presets exist because "1 per day" and "every 10 minutes" are how
- * humans describe ad load — the numbers underneath are an implementation
+ * humans describe ad load â€” the numbers underneath are an implementation
  * detail the panel happily accepts too (custom mode).
  */
 
@@ -30,20 +30,22 @@ type AdsConfig = {
   everyNSwipes: number;
   cooldownMinutes: number;
   maxPerDay: number;
+  maxPerWeek: number;
 };
 
 const PRESETS = [
-  { id: "daily", label: "One per day", cfg: { enabled: true, everyNSwipes: 12, cooldownMinutes: 60, maxPerDay: 1 } },
-  { id: "steady", label: "Every 10 minutes", cfg: { enabled: true, everyNSwipes: 12, cooldownMinutes: 10, maxPerDay: 6 } },
-  { id: "twice", label: "Twice a day", cfg: { enabled: true, everyNSwipes: 15, cooldownMinutes: 120, maxPerDay: 2 } },
-  { id: "off", label: "No ads", cfg: { enabled: false, everyNSwipes: 12, cooldownMinutes: 10, maxPerDay: 3 } },
+  { id: "daily", label: "One per day", cfg: { enabled: true, everyNSwipes: 12, cooldownMinutes: 60, maxPerDay: 1, maxPerWeek: 7 } },
+  { id: "steady", label: "Every 10 minutes", cfg: { enabled: true, everyNSwipes: 12, cooldownMinutes: 10, maxPerDay: 6, maxPerWeek: 30 } },
+  { id: "twice", label: "Twice a day", cfg: { enabled: true, everyNSwipes: 15, cooldownMinutes: 120, maxPerDay: 2, maxPerWeek: 14 } },
+  { id: "off", label: "No ads", cfg: { enabled: false, everyNSwipes: 12, cooldownMinutes: 10, maxPerDay: 3, maxPerWeek: 15 } },
 ] as const;
 
 function presetIdFor(cfg: AdsConfig): string {
   const hit = PRESETS.find((p) =>
     p.cfg.enabled === cfg.enabled &&
     p.cfg.maxPerDay === cfg.maxPerDay &&
-    p.cfg.cooldownMinutes === cfg.cooldownMinutes,
+    p.cfg.cooldownMinutes === cfg.cooldownMinutes &&
+    p.cfg.maxPerWeek === cfg.maxPerWeek,
   );
   return hit?.id ?? "custom";
 }
@@ -121,6 +123,14 @@ function CadenceCard({ config }: { config: AdsConfig }) {
             onChange={(e) => edit({ maxPerDay: Number(e.target.value) })}
           />
         </label>
+        <label className="field">
+          <span>max per listener per week</span>
+          <input
+            type="number" min={0} max={200} value={draft.maxPerWeek}
+            onChange={(e) => edit({ maxPerWeek: Number(e.target.value) })}
+          />
+          <small className="field-hint">floored at the daily cap server-side</small>
+        </label>
         <label className="check-field">
           <input
             type="checkbox" checked={draft.enabled}
@@ -131,7 +141,7 @@ function CadenceCard({ config }: { config: AdsConfig }) {
       </div>
       <footer className="admin-card-foot">
         <button className="aq-btn yes" disabled={!dirty || saving} onClick={() => void save()}>
-          {saving ? "pushing…" : dirty ? "Push live" : "Live"}
+          {saving ? "pushingâ€¦" : dirty ? "Push live" : "Live"}
         </button>
       </footer>
     </section>
@@ -221,7 +231,7 @@ function CampaignEditor({
   return (
     <section className="admin-card">
       <header className="admin-card-head">
-        <h3>{existing ? `Edit — ${existing.advertiser}` : "New campaign"}</h3>
+        <h3>{existing ? `Edit â€” ${existing.advertiser}` : "New campaign"}</h3>
         <p>The card listeners see between swipes. One clear offer works best.</p>
       </header>
       <div className="admin-grid">
@@ -247,7 +257,7 @@ function CampaignEditor({
         </label>
         <label className="field">
           <span>link (https)</span>
-          <input value={form.ctaUrl} placeholder="https://…" 
+          <input value={form.ctaUrl} placeholder="https://â€¦" 
             onChange={(e) => setForm({ ...form, ctaUrl: e.target.value })} />
         </label>
         <label className="field">
@@ -278,7 +288,7 @@ function CampaignEditor({
       {error && <p className="access-error">{error}</p>}
       <footer className="admin-card-foot">
         <button className="aq-btn yes" disabled={busy} onClick={() => void save()}>
-          {busy ? "saving…" : "save campaign"}
+          {busy ? "savingâ€¦" : "save campaign"}
         </button>
         <button className="aq-btn" onClick={onDone}>cancel</button>
       </footer>
@@ -296,7 +306,7 @@ export function AdsPanel() {
       <header className="admin-head">
         <h2>Ads</h2>
         <p>
-          First-party house cards only — no SDKs, no third-party tags. Pacing is
+          First-party house cards only â€” no SDKs, no third-party tags. Pacing is
           enforced server-side; the deck paces by swipes.
         </p>
       </header>
@@ -307,7 +317,7 @@ export function AdsPanel() {
         <CampaignEditor existing={editing} onDone={() => setEditing(null)} />
       ) : (
         <>
-          <CadenceCard config={config ?? { enabled: true, everyNSwipes: 12, cooldownMinutes: 10, maxPerDay: 3 }} />
+          <CadenceCard config={config ?? { enabled: true, everyNSwipes: 12, cooldownMinutes: 10, maxPerDay: 3, maxPerWeek: 15 }} />
 
           <section className="admin-card">
             <header className="admin-card-head row">
@@ -333,7 +343,7 @@ export function AdsPanel() {
                   <div className="campaign-meta">
                     <strong>{ad.advertiser}</strong>
                     <span>{ad.title}</span>
-                    <small>{ad.ctaLabel} → {ad.ctaUrl}</small>
+                    <small>{ad.ctaLabel} â†’ {ad.ctaUrl}</small>
                   </div>
                   <span className={`aq-tag ${ad.status === "live" ? "approved" : ad.status === "draft" ? "pending" : ""}`}>
                     {ad.status}
@@ -349,3 +359,4 @@ export function AdsPanel() {
     </div>
   );
 }
+

@@ -43,6 +43,8 @@ export const AdsConfig = v.object({
   cooldownMinutes: v.number(),
   /** hard ceiling per listener per UTC day */
   maxPerDay: v.number(),
+  /** the wider weekly ceiling — the daily cap is the floor, this is the roof */
+  maxPerWeek: v.number(),
 });
 
 export const DEFAULT_ADS_CONFIG = {
@@ -50,6 +52,7 @@ export const DEFAULT_ADS_CONFIG = {
   everyNSwipes: 12,
   cooldownMinutes: 10,
   maxPerDay: 3,
+  maxPerWeek: 15,
 };
 
 // ---------------------------------------------------------------- config
@@ -59,6 +62,7 @@ export interface AdsConfigValue {
   everyNSwipes: number;
   cooldownMinutes: number;
   maxPerDay: number;
+  maxPerWeek: number;
 }
 
 async function readConfig(ctx: QueryCtx): Promise<AdsConfigValue> {
@@ -77,6 +81,7 @@ async function readConfig(ctx: QueryCtx): Promise<AdsConfigValue> {
       24 * 60,
     ),
     maxPerDay: clamp(value?.maxPerDay ?? DEFAULT_ADS_CONFIG.maxPerDay, 0, 50),
+    maxPerWeek: clamp(value?.maxPerWeek ?? DEFAULT_ADS_CONFIG.maxPerWeek, 0, 200),
   };
 }
 
@@ -100,14 +105,18 @@ export const setConfig = mutation({
     everyNSwipes: v.number(),
     cooldownMinutes: v.number(),
     maxPerDay: v.number(),
+    maxPerWeek: v.number(),
   },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "ads.manage");
+    // the daily cap floors the weekly one — a week can't be tighter than a day
+    const maxPerDay = clamp(args.maxPerDay, 0, 50);
     const value = {
       enabled: args.enabled,
       everyNSwipes: clamp(args.everyNSwipes, 3, 200),
       cooldownMinutes: clamp(args.cooldownMinutes, 0, 24 * 60),
-      maxPerDay: clamp(args.maxPerDay, 0, 50),
+      maxPerDay,
+      maxPerWeek: Math.max(clamp(args.maxPerWeek, 0, 200), maxPerDay),
     };
     const existing = await ctx.db
       .query("appSettings")
@@ -226,20 +235,28 @@ export const nextAd = query({
     if (!userId && !anonKey) return null;
 
     const day = dayKey();
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
     const seen = userId
       ? await ctx.db
           .query("adEvents")
-          .withIndex("by_user_day", (q) => q.eq("userId", userId).eq("day", day))
+          .withIndex("by_user_day", (q) =>
+            q.eq("userId", userId).gte("day", weekAgo),
+          )
           .collect()
       : anonKey
         ? await ctx.db
             .query("adEvents")
-            .withIndex("by_anon_day", (q) => q.eq("anonKey", anonKey).eq("day", day))
+            .withIndex("by_anon_day", (q) =>
+              q.eq("anonKey", anonKey).gte("day", weekAgo),
+            )
             .collect()
         : [];
 
     const impressions = seen.filter((e) => e.kind === "impression");
-    if (impressions.length >= config.maxPerDay) return null;
+    if (impressions.length >= config.maxPerWeek) return null;
+    const todayKey = day;
+    const todayImpressions = impressions.filter((e) => e.day === todayKey);
+    if (todayImpressions.length >= config.maxPerDay) return null;
 
     // cooldown: no card within N minutes of the last impression
     if (config.cooldownMinutes > 0) {
