@@ -125,7 +125,7 @@ function NavRow({
         <small>{sub}</small>
       </span>
       <span className="settings-row-value" aria-hidden>
-        â€º
+        ›
       </span>
     </button>
   );
@@ -161,7 +161,7 @@ export function SettingsScreen({
   onUnbury: (trackId: string) => void;
   onUnblockArtist: (artist: string) => void;
   onSetPrefs: (p: Partial<import("../data/prefs").UserPrefs>) => void;
-  /** 0..1 â€” wired to the same player the deck uses */
+  /** 0..1 — wired to the same player the deck uses */
   volume: number;
   onVolume: (v: number) => void;
   /** live pacing rules; null while loading or when opted out */
@@ -188,7 +188,7 @@ export function SettingsScreen({
   // Google Play requires an in-app route to delete an account and its data.
   const removeAccount = async () => {
     if (!window.confirm("Delete your account and everything in it? This can't be undone.")) return;
-    if (!window.confirm("Last check â€” your library, playlists and swipe history all go. Continue?")) return;
+    if (!window.confirm("Last check — your library, playlists and swipe history all go. Continue?")) return;
     setDeleting(true);
     try {
       await deleteAccount({ confirm: "DELETE" });
@@ -202,7 +202,7 @@ export function SettingsScreen({
   };
 
   const exportData = () => {
-    // a real download of what this account holds â€” same shape the cloud has
+    // a real download of what this account holds — same shape the cloud has
     const payload = {
       exportedAt: new Date().toISOString(),
       taste,
@@ -281,7 +281,7 @@ export function SettingsScreen({
   const playbackPage = (
     <PageShell title="Playback" sub="How songs behave in the deck." onBack={() => onOpenPage("hub")}>
       <button className="settings-row" onClick={() => onAutoAdvance(!state.autoAdvance)}>
-        <span className="settings-row-icon" style={{ color: "var(--more)" }}>â–¶</span>
+        <span className="settings-row-icon" style={{ color: "var(--more)" }}>▶</span>
         <span className="settings-row-label">
           Auto-advance
           <small>jump to the next song when a preview ends</small>
@@ -291,7 +291,7 @@ export function SettingsScreen({
         </span>
       </button>
       <div className="settings-row" style={{ cursor: "default" }}>
-        <span className="settings-row-icon">â™ª</span>
+        <span className="settings-row-icon">♪</span>
         <span className="settings-row-label">
           Volume
           <small>{Math.round(volume * 100)}%</small>
@@ -304,7 +304,7 @@ export function SettingsScreen({
         />
       </div>
       <button className="settings-row" onClick={onOpenSaveTarget}>
-        <span className="settings-row-icon" style={{ color: "var(--save)" }}>â™¥</span>
+        <span className="settings-row-icon" style={{ color: "var(--save)" }}>♥</span>
         <span className="settings-row-label">
           Swipe down saves to
           <small>{targetLabel}</small>
@@ -317,7 +317,7 @@ export function SettingsScreen({
   const gesturesPage = (
     <PageShell title="Gestures" sub="Tune the four swipes to your wrist." onBack={() => onOpenPage("hub")}>
       <div className="settings-row" style={{ cursor: "default" }}>
-        <span className="settings-row-icon" style={{ color: "var(--save)" }}>âœ¥</span>
+        <span className="settings-row-icon" style={{ color: "var(--save)" }}>✥</span>
         <span className="settings-row-label">
           Swipe distance
           <small>
@@ -395,7 +395,7 @@ export function SettingsScreen({
         className="settings-row"
         onClick={() => onSetPrefs({ allowRepeats: !state.prefs.allowRepeats })}
       >
-        <span className="settings-row-icon" style={{ color: "var(--more)" }}>â†»</span>
+        <span className="settings-row-icon" style={{ color: "var(--more)" }}>↻</span>
         <span className="settings-row-label">
           Allow songs to reappear
           <small>saved songs can come back around</small>
@@ -408,7 +408,7 @@ export function SettingsScreen({
         className="settings-row"
         onClick={() => onSetPrefs({ includeBuried: !state.prefs.includeBuried })}
       >
-        <span className="settings-row-icon" style={{ color: "var(--never)" }}>âœ•</span>
+        <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>
         <span className="settings-row-label">
           Deal buried songs
           <small>songs you swiped left can return</small>
@@ -423,7 +423,7 @@ export function SettingsScreen({
           onSetPrefs({ includeBlockedArtists: !state.prefs.includeBlockedArtists })
         }
       >
-        <span className="settings-row-icon" style={{ color: "var(--never)" }}>âœ•</span>
+        <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>
         <span className="settings-row-label">
           Deal blocked artists
           <small>artists you blocked can return</small>
@@ -440,7 +440,7 @@ export function SettingsScreen({
         <>
           <Group>blocked artists</Group>
           <button className="settings-row" onClick={() => setShowBlocked((v) => !v)} aria-expanded={showBlocked}>
-            <span className="settings-row-icon" style={{ color: "var(--never)" }}>âœ•</span>
+            <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>
             <span className="settings-row-label">
               Blocked artists ({state.neverArtists.length})
               <small>their songs never reach your deck</small>
@@ -450,7 +450,7 @@ export function SettingsScreen({
           {showBlocked &&
             state.neverArtists.slice(0, 50).map((a) => (
               <button key={a} className="settings-row" onClick={() => onUnblockArtist(a)}>
-                <span className="settings-row-icon">Â·</span>
+                <span className="settings-row-icon">·</span>
                 <span className="settings-row-label">
                   {a}
                   <small>blocked</small>
@@ -475,7 +475,7 @@ export function SettingsScreen({
         <span className="prefs-label">House ads</span>
         <p className="prefs-hint" style={{ marginTop: 2 }}>
           {state.prefs.adsOptOut
-            ? "You've turned these off. Fair enough â€” they'll stay off until you change your mind."
+            ? "You've turned these off. Fair enough — they'll stay off until you change your mind."
             : adsConfig?.enabled
               ? `A small sponsored card every ~${adsConfig.everyNSwipes} swipes, at most ${adsConfig.maxPerDay} a day. Music never stops for one.`
               : "No cards are being shown right now."}
@@ -486,7 +486,7 @@ export function SettingsScreen({
             onClick={() => onSetPrefs({ adsOptOut: false })}
             aria-pressed={!state.prefs.adsOptOut}
           >
-            On â€” keep hooked independent
+            On — keep hooked independent
           </button>
           <button
             className={`prefs-chip ${state.prefs.adsOptOut ? "on" : ""}`}
@@ -504,13 +504,47 @@ export function SettingsScreen({
             <span className="prefs-label">How often</span>
             <Segmented
               options={AD_FREQUENCIES}
-              value={state.prefs.adFrequency}
-              onChange={(adFrequency) => onSetPrefs({ adFrequency })}
+              value={state.prefs.adEveryNSwipes === null ? state.prefs.adFrequency : "custom" as never}
+              onChange={(adFrequency) => onSetPrefs({ adFrequency: adFrequency as never, adEveryNSwipes: null })}
             />
-            <span className="prefs-hint">
-              your dial can only space cards further apart â€” the ceiling is set
-              by hooked, and music never stops for one
-            </span>
+            {/* the listener's own dial — every N swipes, set exactly */}
+            <div className="prefs-block" style={{ marginTop: 10 }}>
+              <span className="prefs-label">Your own pace</span>
+              <div className="ad-stepper">
+                <button
+                  type="button"
+                  className="prefs-chip"
+                  onClick={() =>
+                    onSetPrefs({
+                      adEveryNSwipes: Math.max(3, (state.prefs.adEveryNSwipes ?? 12) - 3),
+                    })
+                  }
+                  aria-label="fewer swipes between cards"
+                >
+                  −
+                </button>
+                <span className="ad-stepper-value">
+                  a card every{" "}
+                  <b>{state.prefs.adEveryNSwipes ?? 12}</b> swipes
+                </span>
+                <button
+                  type="button"
+                  className="prefs-chip"
+                  onClick={() =>
+                    onSetPrefs({
+                      adEveryNSwipes: Math.min(200, (state.prefs.adEveryNSwipes ?? 12) + 3),
+                    })
+                  }
+                  aria-label="more swipes between cards"
+                >
+                  +
+                </button>
+              </div>
+              <span className="prefs-hint">
+                your dial can only space cards further apart — the ceiling is set
+                by hooked, and music never stops for one
+              </span>
+            </div>
           </>
         )}
       </div>
@@ -524,7 +558,7 @@ export function SettingsScreen({
       onBack={() => onOpenPage("hub")}
     >
       <button className="settings-row" onClick={exportData}>
-        <span className="settings-row-icon" style={{ color: "var(--more)" }}>â†“</span>
+        <span className="settings-row-icon" style={{ color: "var(--more)" }}>↓</span>
         <span className="settings-row-label">
           Export my library
           <small>your lists and answers as JSON</small>
@@ -538,7 +572,7 @@ export function SettingsScreen({
         rel="noreferrer"
         style={{ textDecoration: "none" }}
       >
-        <span className="settings-row-icon" style={{ color: "var(--save)" }}>â†“</span>
+        <span className="settings-row-icon" style={{ color: "var(--save)" }}>↓</span>
         <span className="settings-row-label">
           Get it on your phone
           <small>join the android closed test</small>
@@ -546,7 +580,7 @@ export function SettingsScreen({
         <span className="settings-row-value">open</span>
       </a>
       <button className="settings-row" onClick={onReplayTutorial}>
-        <span className="settings-row-icon">â†»</span>
+        <span className="settings-row-icon">↻</span>
         <span className="settings-row-label">
           Replay the swipe tutorial
           <small>relearn the four gestures</small>
@@ -559,7 +593,7 @@ export function SettingsScreen({
         rel="noreferrer"
         style={{ textDecoration: "none" }}
       >
-        <span className="settings-row-icon">Â§</span>
+        <span className="settings-row-icon">§</span>
         <span className="settings-row-label">
           Privacy &amp; terms
           <small>what we store, and how to get it deleted</small>
@@ -575,7 +609,7 @@ export function SettingsScreen({
           }
         }}
       >
-        <span className="settings-row-icon" style={{ color: "var(--never)" }}>âœ•</span>
+        <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>
         <span className="settings-row-label" style={{ color: "var(--never)" }}>
           Reset local data
           <small>cloud library is untouched</small>
@@ -583,9 +617,9 @@ export function SettingsScreen({
       </button>
       {session.data && (
         <button className="settings-row" onClick={removeAccount} disabled={deleting}>
-          <span className="settings-row-icon" style={{ color: "var(--never)" }}>âœ•</span>
+          <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>
           <span className="settings-row-label" style={{ color: "var(--never)" }}>
-            {deleting ? "Deletingâ€¦" : "Delete my account"}
+            {deleting ? "Deleting…" : "Delete my account"}
             <small>removes your library, playlists and history for good</small>
           </span>
         </button>
@@ -614,34 +648,34 @@ export function SettingsScreen({
         </h2>
 
         <NavRow
-          icon="â—"
+          icon="◐"
           title="Appearance"
-          sub={`accent Â· motion ${state.prefs.motion}`}
+          sub={`accent · motion ${state.prefs.motion}`}
           onOpen={() => onOpenPage("appearance")}
         />
         <NavRow
-          icon="â–¶"
+          icon="▶"
           iconColor="var(--more)"
           title="Playback"
-          sub={`auto-advance ${state.autoAdvance ? "on" : "off"} Â· volume Â· save target`}
+          sub={`auto-advance ${state.autoAdvance ? "on" : "off"} · volume · save target`}
           onOpen={() => onOpenPage("playback")}
         />
         <NavRow
-          icon="âœ¥"
+          icon="✥"
           iconColor="var(--save)"
           title="Gestures"
-          sub={`swipe distance Â· haptics ${state.prefs.haptics}`}
+          sub={`swipe distance · haptics ${state.prefs.haptics}`}
           onOpen={() => onOpenPage("gestures")}
         />
         <NavRow
-          icon="â™«"
+          icon="♫"
           iconColor="var(--accent)"
           title="Sound & taste"
           sub="languages, genres, blocked artists, replays"
           onOpen={() => onOpenPage("sound")}
         />
         <NavRow
-          icon="â™¥"
+          icon="♥"
           iconColor={state.prefs.adsOptOut ? "var(--muted)" : "var(--accent)"}
           title="Support hooked"
           sub={state.prefs.adsOptOut ? "house ads off" : "house ads on"}
@@ -654,7 +688,7 @@ export function SettingsScreen({
           onOpen={onOpenProfile}
         />
         <NavRow
-          icon="Â§"
+          icon="§"
           title="Data & privacy"
           sub="export, reset, delete account"
           onOpen={() => onOpenPage("data")}
@@ -662,7 +696,7 @@ export function SettingsScreen({
 
         <Group>elsewhere</Group>
         <a className="settings-row" href="#/creator" style={{ textDecoration: "none" }}>
-          <span className="settings-row-icon" style={{ color: "var(--more)" }}>â™«</span>
+          <span className="settings-row-icon" style={{ color: "var(--more)" }}>♫</span>
           <span className="settings-row-label">
             Creator dashboard
             <small>put your own music in the deck</small>
@@ -689,7 +723,7 @@ export function SettingsScreen({
     <div className="library">
       {body}
 
-      {/* the ask when someone turns ads off â€” honest, not guilt-trippy */}
+      {/* the ask when someone turns ads off — honest, not guilt-trippy */}
       <AnimatePresence>
         {adsConfirm && (
           <>
@@ -707,11 +741,11 @@ export function SettingsScreen({
               exit={{ y: "110%" }}
               transition={{ type: "spring", stiffness: 380, damping: 34 }}
             >
-              <h3 className="sheet-title">Before you goâ€¦</h3>
+              <h3 className="sheet-title">Before you go…</h3>
               <p className="ad-ask-copy">
                 hooked has no investors and no label money. Those few quiet cards
                 between songs are what pay for the servers, the licences and the
-                hours this takes. Turning them off won't cost you anything â€” but
+                hours this takes. Turning them off won't cost you anything — but
                 if a few hundred people do, this deck goes quiet with them.
               </p>
               <p className="ad-ask-copy">
@@ -725,7 +759,7 @@ export function SettingsScreen({
                     onSetPrefs({ adsOptOut: false });
                   }}
                 >
-                  Keep them on â€” I get it
+                  Keep them on — I get it
                 </button>
                 <button
                   className="prefs-chip"

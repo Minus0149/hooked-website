@@ -84,6 +84,8 @@ export default defineSchema({
         adsOptOut: v.boolean(),
         /** listener's own ad dial — can only space cards further apart */
         adFrequency: v.string(),
+        /** the listener's own swipe gap; absent = follow the preset */
+        adEveryNSwipes: v.optional(v.number()),
         /** global discovery rules (per-playlist rules layer on top) */
         allowRepeats: v.boolean(),
         includeBuried: v.boolean(),

@@ -1,9 +1,9 @@
 ﻿/**
- * How the app should look and behave â€” the deeper Settings surface.
+ * How the app should look and behave — the deeper Settings surface.
  *
  * These are preferences, not taste: taste tilts the deck, prefs shape the room
  * around it. They live on the profile so a sign-in carries them across
- * devices, but every field is local-first â€” the UI never waits on the network
+ * devices, but every field is local-first — the UI never waits on the network
  * to look right.
  */
 
@@ -30,6 +30,9 @@ export interface UserPrefs {
   /** Listener's own ad dial — how often cards may appear. Never denser than
    * what the admin allows; this can only space them further apart. */
   adFrequency: AdFrequency;
+  /** The listener's own swipe gap. null = follow the adFrequency preset;
+   * a number here IS the dial (3–200), set from the custom stepper. */
+  adEveryNSwipes: number | null;
   /** Global discovery rules — the default strictness of the deck. Per-playlist
    * rules relax these further while that playlist is the save target. */
   allowRepeats: boolean;
@@ -52,6 +55,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   swipeSensitivity: 1,
   adsOptOut: false,
   adFrequency: "normal",
+  adEveryNSwipes: null,
   allowRepeats: false,
   includeBuried: false,
   includeBlockedArtists: false,
@@ -110,6 +114,13 @@ export function coercePrefs(raw: unknown): Partial<UserPrefs> {
     r.adFrequency === "often" || r.adFrequency === "rarely"
       ? r.adFrequency
       : DEFAULT_PREFS.adFrequency;
+  out.adEveryNSwipes =
+    typeof r.adEveryNSwipes === "number" &&
+    Number.isFinite(r.adEveryNSwipes) &&
+    r.adEveryNSwipes >= 3 &&
+    r.adEveryNSwipes <= 200
+      ? Math.round(r.adEveryNSwipes)
+      : null;
   out.allowRepeats = r.allowRepeats === true;
   out.includeBuried = r.includeBuried === true;
   out.includeBlockedArtists = r.includeBlockedArtists === true;

@@ -276,6 +276,7 @@ function Shell() {
           swipeSensitivity: merged.swipeSensitivity,
           adsOptOut: merged.adsOptOut,
           adFrequency: merged.adFrequency,
+          adEveryNSwipes: merged.adEveryNSwipes ?? undefined,
           allowRepeats: merged.allowRepeats,
           includeBuried: merged.includeBuried,
           includeBlockedArtists: merged.includeBlockedArtists,
@@ -355,8 +356,9 @@ function Shell() {
   const [activeAd, setActiveAd] = useState<AdCardData | null>(null);
 
   const handleSwipeForAds = useCallback(() => {
-    // the listener's dial can only space cards further apart — "often" halves
-    // the swipe gap (never below the 3-swipe floor), "rarely" doubles it
+    // the listener's dial: an explicit swipe gap wins; otherwise the preset
+    // scales the admin's gap. Either way it can only space cards FURTHER
+    // apart — the server's caps remain the ceiling.
     const scale =
       state.prefs.adFrequency === "often"
         ? 0.5
@@ -368,7 +370,9 @@ function Shell() {
         ? null
         : {
             ...adsConfig,
-            everyNSwipes: Math.max(3, Math.round(adsConfig.everyNSwipes * scale)),
+            everyNSwipes:
+              state.prefs.adEveryNSwipes ??
+              Math.max(3, Math.round(adsConfig.everyNSwipes * scale)),
           };
     swipeCounter.current += 1;
     const due = shouldAskForAd({
@@ -380,7 +384,7 @@ function Shell() {
     });
     if (!due) return;
     setAdDue(true); // nextAd query wakes up and decides authoritatively
-  }, [state.prefs.adsOptOut, state.prefs.adFrequency, adsConfig]);
+  }, [state.prefs.adsOptOut, state.prefs.adFrequency, state.prefs.adEveryNSwipes, adsConfig]);
 
   // authoritative selection — null means any cap said no
   const adCandidate = useQuery(

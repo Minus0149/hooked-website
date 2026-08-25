@@ -517,6 +517,7 @@ export const setPrefs = mutation({
     swipeSensitivity: v.number(),
     adsOptOut: v.boolean(),
     adFrequency: v.string(),
+    adEveryNSwipes: v.optional(v.number()),
     allowRepeats: v.boolean(),
     includeBuried: v.boolean(),
     includeBlockedArtists: v.boolean(),
@@ -543,6 +544,12 @@ export const setPrefs = mutation({
     const adFrequency = ["often", "normal", "rarely"].includes(args.adFrequency)
       ? args.adFrequency
       : "normal";
+    // the listener's own gap: clamped to the same 3–200 band the deck enforces
+    const adEveryNSwipes =
+      typeof args.adEveryNSwipes === "number" &&
+      Number.isFinite(args.adEveryNSwipes)
+        ? Math.min(Math.max(Math.round(args.adEveryNSwipes), 3), 200)
+        : undefined;
 
     await ctx.db.patch(profile._id, {
       prefs: {
@@ -553,6 +560,7 @@ export const setPrefs = mutation({
         swipeSensitivity: sensitivity,
         adsOptOut,
         adFrequency,
+        ...(adEveryNSwipes !== undefined ? { adEveryNSwipes } : {}),
         allowRepeats: args.allowRepeats === true,
         includeBuried: args.includeBuried === true,
         includeBlockedArtists: args.includeBlockedArtists === true,

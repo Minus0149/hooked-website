@@ -7,7 +7,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
  * The ads studio: pacing rules on the left, campaigns on the right.
  *
  * The cadence presets exist because "1 per day" and "every 10 minutes" are how
- * humans describe ad load â€” the numbers underneath are an implementation
+ * humans describe ad load — the numbers underneath are an implementation
  * detail the panel happily accepts too (custom mode).
  */
 
@@ -141,7 +141,7 @@ function CadenceCard({ config }: { config: AdsConfig }) {
       </div>
       <footer className="admin-card-foot">
         <button className="aq-btn yes" disabled={!dirty || saving} onClick={() => void save()}>
-          {saving ? "pushingâ€¦" : dirty ? "Push live" : "Live"}
+          {saving ? "pushing…" : dirty ? "Push live" : "Live"}
         </button>
       </footer>
     </section>
@@ -231,7 +231,7 @@ function CampaignEditor({
   return (
     <section className="admin-card">
       <header className="admin-card-head">
-        <h3>{existing ? `Edit â€” ${existing.advertiser}` : "New campaign"}</h3>
+        <h3>{existing ? `Edit — ${existing.advertiser}` : "New campaign"}</h3>
         <p>The card listeners see between swipes. One clear offer works best.</p>
       </header>
       <div className="admin-grid">
@@ -257,7 +257,7 @@ function CampaignEditor({
         </label>
         <label className="field">
           <span>link (https)</span>
-          <input value={form.ctaUrl} placeholder="https://â€¦" 
+          <input value={form.ctaUrl} placeholder="https://…" 
             onChange={(e) => setForm({ ...form, ctaUrl: e.target.value })} />
         </label>
         <label className="field">
@@ -288,7 +288,7 @@ function CampaignEditor({
       {error && <p className="access-error">{error}</p>}
       <footer className="admin-card-foot">
         <button className="aq-btn yes" disabled={busy} onClick={() => void save()}>
-          {busy ? "savingâ€¦" : "save campaign"}
+          {busy ? "saving…" : "save campaign"}
         </button>
         <button className="aq-btn" onClick={onDone}>cancel</button>
       </footer>
@@ -306,7 +306,7 @@ export function AdsPanel() {
       <header className="admin-head">
         <h2>Ads</h2>
         <p>
-          First-party house cards only â€” no SDKs, no third-party tags. Pacing is
+          First-party house cards only — no SDKs, no third-party tags. Pacing is
           enforced server-side; the deck paces by swipes.
         </p>
       </header>
@@ -343,7 +343,7 @@ export function AdsPanel() {
                   <div className="campaign-meta">
                     <strong>{ad.advertiser}</strong>
                     <span>{ad.title}</span>
-                    <small>{ad.ctaLabel} â†’ {ad.ctaUrl}</small>
+                    <small>{ad.ctaLabel} → {ad.ctaUrl}</small>
                   </div>
                   <span className={`aq-tag ${ad.status === "live" ? "approved" : ad.status === "draft" ? "pending" : ""}`}>
                     {ad.status}
