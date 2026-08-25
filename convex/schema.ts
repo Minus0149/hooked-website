@@ -262,7 +262,31 @@ export default defineSchema({
     imports: v.number(),
   }).index("by_day", ["day"]),
 
-  // -------------------------------------------------------- fingerprints
+  // ---------------------------------------------------------- error reports
+
+  /**
+   * Crash reports sent from the app's error screen. Public write (a crashed
+   * session may not have a working session), so: strict per-identity rate
+   * limits, hard size caps, and nothing here is trusted — it's a letter box,
+   * not an API.
+   */
+  errorReports: defineTable({
+    message: v.string(),
+    stack: v.optional(v.string()),
+    componentStack: v.optional(v.string()),
+    description: v.optional(v.string()),
+    platform: v.string(),
+    appVersion: v.optional(v.string()),
+    url: v.optional(v.string()),
+    /** the signed-in listener, when the session survived long enough */
+    userId: v.optional(v.string()),
+    userEmail: v.optional(v.string()),
+    /** stable per-install id for anonymous reports */
+    anonKey: v.optional(v.string()),
+    at: v.number(),
+  }),
+
+  // ---------------------------------------------------------- fingerprints
 
   /**
    * Inverted index for duplicate detection: one row per (landmark-pair hash,

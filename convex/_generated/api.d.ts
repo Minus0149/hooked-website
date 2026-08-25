@@ -15,6 +15,7 @@ import type * as analyzer from "../analyzer.js";
 import type * as auth from "../auth.js";
 import type * as creators from "../creators.js";
 import type * as crons from "../crons.js";
+import type * as errors from "../errors.js";
 import type * as hooks from "../hooks.js";
 import type * as http from "../http.js";
 import type * as imports from "../imports.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   creators: typeof creators;
   crons: typeof crons;
+  errors: typeof errors;
   hooks: typeof hooks;
   http: typeof http;
   imports: typeof imports;

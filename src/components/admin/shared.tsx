@@ -1,4 +1,4 @@
-/** Values every admin tab needs, and nothing else. */
+﻿/** Values every admin tab needs, and nothing else. */
 export const ACTION_COLOR: Record<string, string> = {
   skip: "#8E8C99",
   save: "var(--save)",
@@ -21,6 +21,7 @@ export type Tab =
   | "users"
   | "catalog"
   | "ads"
+  | "reports"
   | "config"
   | "feed";
 
@@ -34,3 +35,4 @@ export function timeAgo(ts: number | null): string {
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
 }
+

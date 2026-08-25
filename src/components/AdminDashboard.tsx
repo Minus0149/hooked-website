@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { motion } from "motion/react";
 import { api } from "../../convex/_generated/api";
@@ -12,6 +12,7 @@ import { UsersPanel } from "./admin/Users";
 import { CatalogPanel } from "./admin/Catalog";
 import { AdsPanel } from "./admin/AdsPanel";
 import { ConfigPanel } from "./admin/ConfigPanel";
+import { ReportsPanel } from "./admin/ReportsPanel";
 import { FeedPanel } from "./admin/Feed";
 
 /**
@@ -58,6 +59,7 @@ export function AdminDashboard() {
       t.push({ id: "ads", label: "Ads", icon: "▣" });
     if (access?.permissions.includes("config.manage") || access?.isAdmin)
       t.push({ id: "config", label: "Config", icon: "⚙" });
+    t.push({ id: "reports", label: "Reports", icon: "⚠" });
     if (stats !== null) t.push({ id: "feed", label: "Live feed", icon: "≋" });
     return t;
   }, [stats, userData, catalog, requests, analytics, creatorData, access]);
@@ -194,6 +196,7 @@ export function AdminDashboard() {
           />
         )}
         {activeTab === "feed" && stats && <FeedPanel recent={stats.recent} />}
+        {activeTab === "reports" && <ReportsPanel />}
         {activeTab === "ads" && <AdsPanel />}
         {activeTab === "config" && <ConfigPanel />}
       </motion.main>
@@ -202,3 +205,4 @@ export function AdminDashboard() {
 }
 
 /* ---------------- overview ---------------- */
+

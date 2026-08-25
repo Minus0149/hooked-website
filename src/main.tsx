@@ -22,9 +22,14 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
+    {/* outer boundary: catches provider-level crashes (no reporting — the
+        convex client itself is what died) */}
     <AppErrorBoundary>
       <ConvexBetterAuthProvider client={convex} authClient={authClient}>
-        <App />
+        {/* inner boundary: the app's crashes get the full report panel */}
+        <AppErrorBoundary reportable>
+          <App />
+        </AppErrorBoundary>
       </ConvexBetterAuthProvider>
     </AppErrorBoundary>
   </StrictMode>,

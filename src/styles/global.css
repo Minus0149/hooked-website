@@ -2730,3 +2730,40 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 .settings-row { transition: border-color 0.15s ease, transform 0.12s ease; }
 .settings-row:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
 .settings-row:active { transform: scale(0.99); }
+
+/* crash report panel on the fatal screen */
+.report-panel {
+  margin-top: 16px;
+  width: 100%;
+  display: flex; flex-direction: column; gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.report-notes {
+  width: 100%; resize: vertical;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 12px; font: inherit; font-size: 13px;
+}
+.report-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.report-actions .prefs-chip { text-decoration: none; }
+.report-done { color: var(--save); font-size: 13px; margin: 0; }
+.report-note { color: var(--muted); font-size: 11.5px; margin: 0; }
+.report-dismiss {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 12px; text-decoration: underline dotted; padding: 4px;
+}
+
+/* error report details in the admin inbox */
+.report-detail {
+  width: 100%; margin-top: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.report-detail pre {
+  white-space: pre-wrap; word-break: break-word;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px; font-size: 11px;
+  color: var(--muted); max-height: 260px; overflow-y: auto;
+  margin: 0;
+}
+.report-detail b { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
