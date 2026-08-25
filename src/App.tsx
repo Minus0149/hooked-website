@@ -275,6 +275,10 @@ function Shell() {
           accentColor: merged.accentColor,
           swipeSensitivity: merged.swipeSensitivity,
           adsOptOut: merged.adsOptOut,
+          adFrequency: merged.adFrequency,
+          allowRepeats: merged.allowRepeats,
+          includeBuried: merged.includeBuried,
+          includeBlockedArtists: merged.includeBlockedArtists,
         }).catch(syncFailed);
       }, 600);
     },
@@ -297,6 +301,9 @@ function Shell() {
           id: String(p.id),
           name: p.name,
           accent: p.accent,
+          allowRepeats: p.allowRepeats,
+          includeBuried: p.includeBuried,
+          includeBlockedArtists: p.includeBlockedArtists,
           tracks: p.songs.map(toLocal),
         })),
         neverArtists: library.neverArtists,
@@ -348,17 +355,32 @@ function Shell() {
   const [activeAd, setActiveAd] = useState<AdCardData | null>(null);
 
   const handleSwipeForAds = useCallback(() => {
+    // the listener's dial can only space cards further apart — "often" halves
+    // the swipe gap (never below the 3-swipe floor), "rarely" doubles it
+    const scale =
+      state.prefs.adFrequency === "often"
+        ? 0.5
+        : state.prefs.adFrequency === "rarely"
+          ? 2
+          : 1;
+    const effective =
+      adsConfig == null
+        ? null
+        : {
+            ...adsConfig,
+            everyNSwipes: Math.max(3, Math.round(adsConfig.everyNSwipes * scale)),
+          };
     swipeCounter.current += 1;
     const due = shouldAskForAd({
       swipesSinceAd: swipeCounter.current,
       now: Date.now(),
       lastAdAt: lastAdAt.current,
       optedOut: state.prefs.adsOptOut,
-      config: adsConfig,
+      config: effective,
     });
     if (!due) return;
     setAdDue(true); // nextAd query wakes up and decides authoritatively
-  }, [state.prefs.adsOptOut, adsConfig]);
+  }, [state.prefs.adsOptOut, state.prefs.adFrequency, adsConfig]);
 
   // authoritative selection — null means any cap said no
   const adCandidate = useQuery(
@@ -484,16 +506,24 @@ function Shell() {
   );
 
   const handleCreatePlaylist = useCallback(
-    async (name: string, accent: string): Promise<string> => {
+    async (
+      name: string,
+      accent: string,
+      rules?: {
+        allowRepeats?: boolean;
+        includeBuried?: boolean;
+        includeBlockedArtists?: boolean;
+      },
+    ): Promise<string> => {
       let id = `local-${Date.now()}`;
       if (signedIn) {
         try {
-          id = String(await createPlaylistMutation({ name, accent }));
+          id = String(await createPlaylistMutation({ name, accent, ...rules }));
         } catch {
           /* keep local id */
         }
       }
-      createPlaylist({ id, name, accent, tracks: [] });
+      createPlaylist({ id, name, accent, tracks: [], ...rules });
       showToast(`Playlist "${name}" created`, "✦");
       return id;
     },

@@ -1,9 +1,9 @@
-/**
- * How the app should look and behave — the deeper Settings surface.
+﻿/**
+ * How the app should look and behave â€” the deeper Settings surface.
  *
  * These are preferences, not taste: taste tilts the deck, prefs shape the room
  * around it. They live on the profile so a sign-in carries them across
- * devices, but every field is local-first — the UI never waits on the network
+ * devices, but every field is local-first â€” the UI never waits on the network
  * to look right.
  */
 
@@ -27,7 +27,22 @@ export interface UserPrefs {
   swipeSensitivity: number;
   /** The listener asked to stop seeing house ads (reversible, with a word). */
   adsOptOut: boolean;
+  /** Listener's own ad dial — how often cards may appear. Never denser than
+   * what the admin allows; this can only space them further apart. */
+  adFrequency: AdFrequency;
+  /** Global discovery rules — the default strictness of the deck. Per-playlist
+   * rules relax these further while that playlist is the save target. */
+  allowRepeats: boolean;
+  includeBuried: boolean;
+  includeBlockedArtists: boolean;
 }
+
+export type AdFrequency = "often" | "normal" | "rarely";
+export const AD_FREQUENCIES: { id: AdFrequency; label: string }[] = [
+  { id: "often", label: "Often" },
+  { id: "normal", label: "Normal" },
+  { id: "rarely", label: "Rarely" },
+];
 
 export const DEFAULT_PREFS: UserPrefs = {
   motion: "full",
@@ -36,6 +51,10 @@ export const DEFAULT_PREFS: UserPrefs = {
   accentColor: "#FF3D71",
   swipeSensitivity: 1,
   adsOptOut: false,
+  adFrequency: "normal",
+  allowRepeats: false,
+  includeBuried: false,
+  includeBlockedArtists: false,
 };
 
 export const MOTION_LEVELS: { id: MotionLevel; label: string }[] = [
@@ -87,5 +106,13 @@ export function coercePrefs(raw: unknown): Partial<UserPrefs> {
       ? Math.round(r.swipeSensitivity * 100) / 100
       : DEFAULT_PREFS.swipeSensitivity;
   out.adsOptOut = r.adsOptOut === true;
+  out.adFrequency =
+    r.adFrequency === "often" || r.adFrequency === "rarely"
+      ? r.adFrequency
+      : DEFAULT_PREFS.adFrequency;
+  out.allowRepeats = r.allowRepeats === true;
+  out.includeBuried = r.includeBuried === true;
+  out.includeBlockedArtists = r.includeBlockedArtists === true;
   return out;
 }
+

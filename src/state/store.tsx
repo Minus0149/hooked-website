@@ -52,6 +52,13 @@ export interface AppState {
   taste: TastePrefs;
   // how the app should look and behave (Settings → synced to the profile)
   prefs: UserPrefs;
+  /**
+   * The deck's memory: per track, when it was last dealt and how many times
+   * it was skipped. Two skips auto-bury the song (song only — the artist is
+   * untouched); anything seen in the last 7 days waits its turn. This is the
+   * difference between "the deck forgot me" and "the deck knows me".
+   */
+  deckMemory: Record<string, { seen: number; skips: number }>;
 }
 
 type Action =
@@ -63,6 +70,13 @@ type Action =
   | { type: "SET_REPLAY"; container: string; allow: boolean }
   | { type: "UNBURY"; trackId: string }
   | { type: "UNBLOCK_ARTIST"; artist: string }
+  | {
+      type: "PLAYLIST_RULES";
+      id: string;
+      allowRepeats?: boolean;
+      includeBuried?: boolean;
+      includeBlockedArtists?: boolean;
+    }
   | { type: "SET_PREFS"; prefs: Partial<UserPrefs> }
   | { type: "SET_TASTE"; taste: TastePrefs }
   | { type: "CREATE_PLAYLIST"; playlist: Playlist }
@@ -114,6 +128,7 @@ function loadPersisted() {
         | "saveTarget"
         | "boostGenres"
         | "autoAdvance"
+        | "deckMemory"
       >
     > & { prefs?: Partial<UserPrefs> };
   } catch {
@@ -191,12 +206,17 @@ function blockedIds(
   state: Pick<
     AppState,
     "liked" | "discoveries" | "playlists" | "neverTracks" | "replayContainers"
-  >,
+  > & { prefs?: Partial<UserPrefs> | null },
 ): Set<string> {
   const allow = new Set(state.replayContainers);
+  // global discovery rules relax the defaults for everyone
+  const prefs = (state.prefs ?? {}) as Partial<UserPrefs>;
+  if (prefs.includeBuried) return allow;
   const blocked = new Set(state.neverTracks);
-  if (!allow.has("liked")) for (const t of state.liked) blocked.add(t.id);
-  if (!allow.has("discoveries")) for (const t of state.discoveries) blocked.add(t.id);
+  if (!prefs.allowRepeats) {
+    if (!allow.has("liked")) for (const t of state.liked) blocked.add(t.id);
+    if (!allow.has("discoveries")) for (const t of state.discoveries) blocked.add(t.id);
+  }
   for (const p of state.playlists) {
     if (allow.has(`pl:${p.id}`)) continue;
     for (const t of p.tracks) blocked.add(t.id);
@@ -263,6 +283,7 @@ function initState(): AppState {
     saveTarget: saved?.saveTarget ?? "liked",
     autoAdvance: saved?.autoAdvance ?? true,
     allowedIds: null,
+    deckMemory: saved?.deckMemory ?? {},
   };
 }
 
@@ -327,13 +348,37 @@ function reducer(state: AppState, action: Action): AppState {
       // recently seen songs — re-dealing the same card right back was the
       // "old image appears again" glitch (and, with ↩, duplicate queue ids)
       if (rest.length < 3) {
-        const blocked = blockedIds({
-          liked,
-          discoveries,
-          playlists,
-          neverTracks,
-          replayContainers: state.replayContainers,
-        });
+        // per-playlist + global discovery rules: while THIS playlist is the
+        // save target, its toggles relax the deck's exclusions; the global
+        // Settings toggles are the default strictness for everything else
+        const targetId = state.saveTarget.startsWith("pl:")
+          ? state.saveTarget.slice(3)
+          : null;
+        const targetPl = targetId
+          ? playlists.find((p) => p.id === targetId)
+          : null;
+        const repeatsOk =
+          state.replayContainers.includes(state.saveTarget) ||
+          (targetPl?.allowRepeats ?? false) ||
+          state.prefs.allowRepeats;
+        const buriedOk =
+          (targetPl?.includeBuried ?? false) || state.prefs.includeBuried;
+        const artistsOk =
+          (targetPl?.includeBlockedArtists ?? false) ||
+          state.prefs.includeBlockedArtists;
+
+        // library exclusions, honouring global replay rules and the target's
+        const libraryBlock = new Set<string>();
+        if (!state.replayContainers.includes("liked"))
+          for (const t of liked) libraryBlock.add(t.id);
+        if (!state.replayContainers.includes("discoveries"))
+          for (const t of discoveries) libraryBlock.add(t.id);
+        for (const p of playlists) {
+          if (targetPl && p.id === targetPl.id && p.allowRepeats) continue;
+          if (state.replayContainers.includes(`pl:${p.id}`)) continue;
+          for (const t of p.tracks) libraryBlock.add(t.id);
+        }
+
         const allowed = state.allowedIds ? new Set(state.allowedIds) : null;
         const avoid = new Set([
           current.id,
@@ -341,15 +386,25 @@ function reducer(state: AppState, action: Action): AppState {
           ...state.history.slice(-12).map((h) => h.track.id),
         ]);
         // Refills skip admin-hidden tracks, buried songs and anything the
-        // listener already keeps. The old fallbacks dropped that last filter
-        // when fresh material ran short, which is why saved songs came back.
-        // Running low is a reason to relax *recency*, never those.
-        const pickable = state.catalog.filter(
-          (t) =>
-            (!allowed || allowed.has(t.id)) &&
-            !blocked.has(t.id) &&
-            !neverArtists.includes(t.artist),
+        // listener already keeps — unless rules say otherwise. ALSO: anything
+        // dealt in the last 7 days waits its turn (deck memory); if that
+        // starves the deck, recency relaxes first, never the hard filters.
+        const WEEK = 7 * 86_400_000;
+        const baseFilters = (t: Track) =>
+          (!allowed || allowed.has(t.id)) &&
+          (buriedOk || !neverTracks.includes(t.id)) &&
+          (artistsOk || !neverArtists.includes(t.artist)) &&
+          (repeatsOk || !libraryBlock.has(t.id));
+        const seenTooRecently = (t: Track) => {
+          const m = state.deckMemory[t.id];
+          return m !== undefined && Date.now() - m.seen < WEEK;
+        };
+        let pickable = state.catalog.filter(
+          (t) => baseFilters(t) && !seenTooRecently(t),
         );
+        if (pickable.length < 3) {
+          pickable = state.catalog.filter(baseFilters);
+        }
         const fresh = pickable.filter((t) => !avoid.has(t.id));
         const pool = fresh.length >= 3 ? fresh : pickable.filter((t) => t.id !== current.id);
         // Refills honour the steer and the taste answers too — otherwise a
@@ -363,6 +418,27 @@ function reducer(state: AppState, action: Action): AppState {
               : shuffle(pool)),
         ];
       }
+      // deck memory: every dealt card is remembered — skips count toward the
+      // two-strike auto-bury (song only; the artist stays dealable)
+      const mem: typeof state.deckMemory = {};
+      for (const [id, m] of Object.entries(state.deckMemory)) {
+        if (Date.now() - m.seen < 90 * 86_400_000) mem[id] = m; // prune >90d
+      }
+      const prev = mem[current.id] ?? { seen: 0, skips: 0 };
+      mem[current.id] = {
+        seen: Date.now(),
+        skips: action.action === "skip" ? prev.skips + 1 : prev.skips,
+      };
+      if (
+        action.action === "skip" &&
+        mem[current.id].skips >= 2 &&
+        !neverTracks.includes(current.id)
+      ) {
+        // skipped twice: that's the listener voting with their thumb. Bury the
+        // SONG — it lands in the Buried list where it can be unburied.
+        neverTracks = [...neverTracks, current.id];
+      }
+
       return {
         ...state,
         queue: spreadAlbums(uniqueById(rest)),
@@ -376,6 +452,7 @@ function reducer(state: AppState, action: Action): AppState {
         neverArtists,
         neverTracks,
         boostGenres,
+        deckMemory: mem,
       };
     }
 
@@ -457,6 +534,11 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         neverTracks: state.neverTracks.filter((id) => id !== action.trackId),
+        // forgive the memory too, or the two-strike rule re-buries it
+        deckMemory: {
+          ...state.deckMemory,
+          [action.trackId]: { seen: 0, skips: 0 },
+        },
       };
 
     case "UNBLOCK_ARTIST":
@@ -466,6 +548,16 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         neverArtists: state.neverArtists.filter((a) => a !== action.artist),
       };
+
+    case "PLAYLIST_RULES": {
+      const { id, ...rules } = action;
+      return {
+        ...state,
+        playlists: state.playlists.map((p) =>
+          p.id === id ? { ...p, ...rules } : p,
+        ),
+      };
+    }
 
     case "SET_PREFS": {
       // merge only the keys actually present — coercePrefs fills defaults,
@@ -602,6 +694,7 @@ interface StoreValue {
   setPrefs: (prefs: Partial<UserPrefs>) => void;
   unbury: (trackId: string) => void;
   unblockArtist: (artist: string) => void;
+  updatePlaylistRules: (id: string, rules: { allowRepeats?: boolean; includeBuried?: boolean; includeBlockedArtists?: boolean }) => void;
   hydrateRemote: (payload: {
     liked: Track[];
     discoveries: Track[];
@@ -626,9 +719,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const { liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, prefs, saveTarget, boostGenres, autoAdvance } = state;
     localStorage.setItem(
       PERSIST_KEY,
-      JSON.stringify({ liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, prefs, saveTarget, boostGenres, autoAdvance }),
+      JSON.stringify({ liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, prefs, saveTarget, boostGenres, autoAdvance, deckMemory: state.deckMemory }),
     );
-  }, [state.liked, state.discoveries, state.playlists, state.neverArtists, state.neverTracks, state.replayContainers, state.taste, state.prefs, state.saveTarget, state.boostGenres, state.autoAdvance]);
+  }, [state.liked, state.discoveries, state.playlists, state.neverArtists, state.neverTracks, state.replayContainers, state.taste, state.prefs, state.saveTarget, state.boostGenres, state.autoAdvance, state.deckMemory]);
 
   // CRITICAL: actions are memoized once (dispatch is stable). They must NOT
   // be recreated per state change — effects depend on these functions, and
@@ -648,6 +741,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "SET_REPLAY", container, allow }),
       unbury: (trackId: string) => dispatch({ type: "UNBURY", trackId }),
       unblockArtist: (artist: string) => dispatch({ type: "UNBLOCK_ARTIST", artist }),
+      updatePlaylistRules: (id: string, rules: { allowRepeats?: boolean; includeBuried?: boolean; includeBlockedArtists?: boolean }) => dispatch({ type: "PLAYLIST_RULES", id, ...rules }),
       setTaste: (taste: TastePrefs) => dispatch({ type: "SET_TASTE", taste }),
       setPrefs: (prefs: Partial<UserPrefs>) => dispatch({ type: "SET_PREFS", prefs }),
       hydrateRemote: (payload: {

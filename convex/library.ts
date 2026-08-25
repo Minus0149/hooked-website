@@ -30,10 +30,8 @@ export const ensureProfile = mutation({
     const user = await requireUser(ctx);
     await enforceRateLimit(ctx, `profile:${user.id}`, 20, 60_000);
     const existing = await getProfile(ctx, user.id);
-    if (existing) return existing;
 
     const email = (user.email ?? "").toLowerCase();
-
     // Admins come from an explicit allowlist. The old rule was "first account
     // ever becomes admin", which on an empty production database handed the
     // dashboard to whichever stranger signed up first.
@@ -43,6 +41,16 @@ export const ensureProfile = mutation({
       .map((entry) => entry.trim().toLowerCase())
       .filter(Boolean);
     const isAdmin = email.length > 0 && admins.includes(email);
+
+    // adding an email to the allowlist promotes an EXISTING profile too —
+    // only ever upward, so this can't be used to demote or lock anyone out
+    if (existing) {
+      if (isAdmin && !existing.isAdmin) {
+        await ctx.db.patch(existing._id, { isAdmin: true });
+        return { ...existing, isAdmin: true };
+      }
+      return existing;
+    }
 
     if (!isAdmin) {
       const request = email
@@ -105,6 +113,9 @@ export const getLibrary = query({
         id: p._id,
         name: p.name,
         accent: p.accent,
+        allowRepeats: p.allowRepeats ?? false,
+        includeBuried: p.includeBuried ?? false,
+        includeBlockedArtists: p.includeBlockedArtists ?? false,
         songs: songs.filter((s) => s.playlistId === p._id),
       })),
       neverArtists: never.map((n) => n.artist),
@@ -121,8 +132,14 @@ export const getLibrary = query({
 });
 
 export const createPlaylist = mutation({
-  args: { name: v.string(), accent: v.string() },
-  handler: async (ctx, { name, accent }) => {
+  args: {
+    name: v.string(),
+    accent: v.string(),
+    allowRepeats: v.optional(v.boolean()),
+    includeBuried: v.optional(v.boolean()),
+    includeBlockedArtists: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { name, accent, allowRepeats, includeBuried, includeBlockedArtists }) => {
     const user = await requireUser(ctx);
     const profile = await getProfile(ctx, user.id);
     ensureActiveProfile(profile);
@@ -133,8 +150,37 @@ export const createPlaylist = mutation({
       userId: user.id,
       name: trimmed,
       accent: cleanAccent(accent),
+      allowRepeats: allowRepeats === true,
+      includeBuried: includeBuried === true,
+      includeBlockedArtists: includeBlockedArtists === true,
     });
     return id;
+  },
+});
+
+/**
+ * Flip a playlist's discovery rules. Ownership is re-verified — rules are per
+ * playlist, not per request.
+ */
+export const updatePlaylistRules = mutation({
+  args: {
+    playlistId: v.id("playlists"),
+    allowRepeats: v.optional(v.boolean()),
+    includeBuried: v.optional(v.boolean()),
+    includeBlockedArtists: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { playlistId, ...rules }) => {
+    const user = await requireUser(ctx);
+    const profile = await getProfile(ctx, user.id);
+    ensureActiveProfile(profile);
+    await enforceRateLimit(ctx, `playlist:rules:${user.id}`, 60, 60_000);
+    const playlist = await ctx.db.get(playlistId);
+    if (!playlist || playlist.userId !== user.id) throw new Error("Not your playlist");
+    const patch: Record<string, boolean> = {};
+    for (const key of ["allowRepeats", "includeBuried", "includeBlockedArtists"] as const) {
+      if (rules[key] !== undefined) patch[key] = rules[key] === true;
+    }
+    if (Object.keys(patch).length > 0) await ctx.db.patch(playlistId, patch);
   },
 });
 
@@ -470,6 +516,10 @@ export const setPrefs = mutation({
     accentColor: v.string(),
     swipeSensitivity: v.number(),
     adsOptOut: v.boolean(),
+    adFrequency: v.string(),
+    allowRepeats: v.boolean(),
+    includeBuried: v.boolean(),
+    includeBlockedArtists: v.boolean(),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -490,9 +540,23 @@ export const setPrefs = mutation({
       Math.min(Math.max(args.swipeSensitivity, 0.6), 1.4) * 100,
     ) / 100;
     const adsOptOut = args.adsOptOut === true;
+    const adFrequency = ["often", "normal", "rarely"].includes(args.adFrequency)
+      ? args.adFrequency
+      : "normal";
 
     await ctx.db.patch(profile._id, {
-      prefs: { motion, haptics, accentMode, accentColor, swipeSensitivity: sensitivity, adsOptOut },
+      prefs: {
+        motion,
+        haptics,
+        accentMode,
+        accentColor,
+        swipeSensitivity: sensitivity,
+        adsOptOut,
+        adFrequency,
+        allowRepeats: args.allowRepeats === true,
+        includeBuried: args.includeBuried === true,
+        includeBlockedArtists: args.includeBlockedArtists === true,
+      },
     });
   },
 });

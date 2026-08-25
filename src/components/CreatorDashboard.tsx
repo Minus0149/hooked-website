@@ -27,28 +27,39 @@ const clock = (ms: number) => {
 
 
 export function CreatorDashboard() {
-  const data = useQuery(api.creators.dashboard);
-  const apply = useMutation(api.creators.apply);
   const session = authClient.useSession();
+  const authed = session.data?.user != null;
+  // gated on the session: the query throws "Not signed in" for logged-out
+  // visitors, and a throwing query never resolves — which used to park this
+  // screen on "Loading…" forever
+  const data = useQuery(api.creators.dashboard, authed ? {} : "skip");
+  const apply = useMutation(api.creators.apply);
 
   const [artistName, setArtistName] = useState("");
   const [bio, setBio] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (data === undefined) {
-    return <div className="admin admin-v2"><p className="admin-empty">Loading…</p></div>;
-  }
-
-  if (!session.data) {
+  if (session.isPending || !session.data) {
     return (
       <div className="admin admin-v2">
         <div className="admin-empty">
-          <p>Sign in first — the creator dashboard is tied to your account.</p>
-          <a className="admin-back" href="#/">← back to the app</a>
+          {session.isPending ? (
+            <p>Loading…</p>
+          ) : (
+            <>
+              <p>Sign in first — the creator dashboard is tied to your account.</p>
+              <a className="admin-back" href="#/">← back to the app</a>
+            </>
+          )}
         </div>
       </div>
     );
+  }
+
+  // authed → the query is live; past this point data is defined
+  if (data === undefined) {
+    return <div className="admin admin-v2"><p className="admin-empty">Loading…</p></div>;
   }
 
   // not a creator yet, and not a curator → the application form

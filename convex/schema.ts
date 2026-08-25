@@ -82,6 +82,12 @@ export default defineSchema({
         swipeSensitivity: v.number(),
         /** the listener asked to stop seeing house ads */
         adsOptOut: v.boolean(),
+        /** listener's own ad dial — can only space cards further apart */
+        adFrequency: v.string(),
+        /** global discovery rules (per-playlist rules layer on top) */
+        allowRepeats: v.boolean(),
+        includeBuried: v.boolean(),
+        includeBlockedArtists: v.boolean(),
       }),
     ),
   }).index("by_userId", ["userId"]),
@@ -90,6 +96,17 @@ export default defineSchema({
     userId: v.string(),
     name: v.string(),
     accent: v.string(),
+    /**
+     * Per-playlist discovery rules. While this playlist is the swipe-down
+     * target, its rules decide what the deck may deal:
+     *   allowRepeats         — songs already in this playlist can come round
+     *   includeBuried        — songs buried with a left swipe become dealable
+     *   includeBlockedArtists — blocked artists become dealable
+     * All default to false: the deck stays as strict as the global rules.
+     */
+    allowRepeats: v.optional(v.boolean()),
+    includeBuried: v.optional(v.boolean()),
+    includeBlockedArtists: v.optional(v.boolean()),
   }).index("by_user", ["userId"]),
 
   swipes: defineTable({

@@ -2688,3 +2688,14 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 .phone *::-webkit-scrollbar-thumb:hover { background: #3a3a46; }
 .phone *::-webkit-scrollbar-button { display: none; }
 .phone *::-webkit-scrollbar-corner { background: transparent; }
+
+/* ------------------------------------------------------------------
+   Spacing rhythm pass — one consistent scale across every settings
+   surface, instead of each page drifting to its own tightness. */
+.settings-group { margin-top: 26px; margin-bottom: 10px; }
+.settings-row { margin-bottom: 10px; }
+.prefs-block { gap: 12px; padding: 16px; }
+.prefs-block .prefs-label { margin-bottom: 2px; }
+.prefs-segmented { gap: 8px; }
+.access-form { gap: 12px; }
+.library-body .prefs-hint { line-height: 1.55; }

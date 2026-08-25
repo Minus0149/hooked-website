@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { useStore } from "../state/store";
 import type { LibraryContainer, Track } from "../types";
 import { art } from "../lib/art";
@@ -43,13 +46,20 @@ export function LibraryScreen({
   onDeletePlaylist: (id: string) => void;
   onDiscoverInto: (container: LibraryContainer) => void;
 }) {
-  const { state } = useStore();
+  const { state, updatePlaylistRules } = useStore();
+  const updateRulesOnServer = useMutation(api.library.updatePlaylistRules);
+  const [showRules, setShowRules] = useState(false);
 
   let title: string;
   let tracks: Track[];
   let accent = "#FF3D71";
   let playlistId: string | null = null;
   let icon = <IconFolder size={15} />;
+  let rules: {
+    allowRepeats: boolean;
+    includeBuried: boolean;
+    includeBlockedArtists: boolean;
+  } | null = null;
 
   if (container === "liked") {
     title = "Liked Songs";
@@ -66,6 +76,11 @@ export function LibraryScreen({
     title = pl?.name ?? "Playlist";
     tracks = pl?.tracks ?? [];
     accent = pl?.accent ?? accent;
+    rules = {
+      allowRepeats: pl?.allowRepeats ?? false,
+      includeBuried: pl?.includeBuried ?? false,
+      includeBlockedArtists: pl?.includeBlockedArtists ?? false,
+    };
   }
 
   const collage = tracks.slice(0, 4);
@@ -148,6 +163,68 @@ export function LibraryScreen({
             <IconSparkle size={15} /> Discover into this
           </button>
         </motion.div>
+
+        {playlistId && rules && (
+          <motion.div variants={rise}>
+            <button
+              className="settings-row"
+              onClick={() => setShowRules((v) => !v)}
+              aria-expanded={showRules}
+            >
+              <span className="settings-row-icon" style={{ color: "var(--accent)" }}>⚙</span>
+              <span className="settings-row-label">
+                Discovery rules
+                <small>
+                  {rules.allowRepeats || rules.includeBuried || rules.includeBlockedArtists
+                    ? [
+                        rules.allowRepeats && "repeats",
+                        rules.includeBuried && "buried",
+                        rules.includeBlockedArtists && "blocked",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") + " allowed"
+                    : "strict — no repeats, no buried, no blocked"}
+                </small>
+              </span>
+              <span className="settings-row-value">{showRules ? "hide" : "edit"}</span>
+            </button>
+            {showRules && (
+              <>
+                {(
+                  [
+                    ["allowRepeats", "Allow songs to reappear", "saved songs can come back around"],
+                    ["includeBuried", "Deal buried songs", "left-swiped songs can return"],
+                    ["includeBlockedArtists", "Deal blocked artists", "blocked artists can return"],
+                  ] as const
+                ).map(([key, label, sub]) => (
+                  <button
+                    key={key}
+                    className="settings-row"
+                    onClick={() => {
+                      const next = !rules[key];
+                      updatePlaylistRules(playlistId!, { [key]: next });
+                      void updateRulesOnServer({ playlistId, [key]: next } as never).catch(
+                        () => undefined,
+                      );
+                    }}
+                    aria-pressed={rules[key]}
+                  >
+                    <span className="settings-row-label">
+                      {label}
+                      <small>{sub}</small>
+                    </span>
+                    <span className={`toggle ${rules[key] ? "on" : ""}`}>
+                      <span className="toggle-knob" />
+                    </span>
+                  </button>
+                ))}
+                <p className="settings-hint" style={{ margin: "4px 2px 0" }}>
+                  Applies while this playlist is your swipe-down target.
+                </p>
+              </>
+            )}
+          </motion.div>
+        )}
 
         {tracks.length === 0 ? (
           <motion.div className="library-empty" variants={rise}>

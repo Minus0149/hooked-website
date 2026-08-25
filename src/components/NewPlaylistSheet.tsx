@@ -3,15 +3,22 @@ import { motion } from "motion/react";
 
 const SWATCHES = ["#FF3D71", "#7C5CFF", "#00C2FF", "#00E5A0", "#FFB627", "#FF6B35", "#E040FB"];
 
+export interface PlaylistRules {
+  allowRepeats?: boolean;
+  includeBuried?: boolean;
+  includeBlockedArtists?: boolean;
+}
+
 export function NewPlaylistSheet({
   onCreate,
   onClose,
 }: {
-  onCreate: (name: string, accent: string) => Promise<unknown> | void;
+  onCreate: (name: string, accent: string, rules?: PlaylistRules) => Promise<unknown> | void;
   onClose: () => void;
 }) {
   const [name, setName] = useState("");
   const [accent, setAccent] = useState(SWATCHES[1]);
+  const [rules, setRules] = useState<PlaylistRules>({});
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -31,10 +38,31 @@ export function NewPlaylistSheet({
     const trimmed = name.trim();
     if (!trimmed || busy) return;
     setBusy(true);
-    await onCreate(trimmed, accent);
+    await onCreate(trimmed, accent, rules);
     setBusy(false);
     onClose();
   };
+
+  const ruleRow = (
+    key: keyof PlaylistRules,
+    title: string,
+    sub: string,
+  ) => (
+    <button
+      type="button"
+      className="settings-row"
+      onClick={() => setRules((r) => ({ ...r, [key]: !r[key] }))}
+      aria-pressed={!!rules[key]}
+    >
+      <span className="settings-row-label">
+        {title}
+        <small>{sub}</small>
+      </span>
+      <span className={`toggle ${rules[key] ? "on" : ""}`}>
+        <span className="toggle-knob" />
+      </span>
+    </button>
+  );
 
   return (
     <>
@@ -77,6 +105,14 @@ export function NewPlaylistSheet({
             />
           ))}
         </div>
+
+        <p className="settings-group" style={{ margin: "6px 0 8px" }}>
+          discovery rules
+        </p>
+        {ruleRow("allowRepeats", "Allow songs to reappear", "saved songs can come back around")}
+        {ruleRow("includeBuried", "Deal buried songs", "songs you swiped left can return")}
+        {ruleRow("includeBlockedArtists", "Deal blocked artists", "artists you blocked can return")}
+
         <button
           className="ob-primary"
           style={{ background: accent, color: "#0b0b10" }}

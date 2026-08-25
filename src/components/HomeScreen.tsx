@@ -45,19 +45,37 @@ export function HomeScreen({
   const { liked, discoveries, playlists, boostGenres, queue } = state;
 
   const becauseRows = useMemo(() => {
+    // the same song reaching the screen twice reads as a glitch — dedupe by
+    // normalized title+artist (catches chart+import twins with different ids)
+    // and never deal a song that's already visible in the queue below
+    const norm = (t: Track) =>
+      `${t.title}·${t.artist}`.toLowerCase().replace(/\(.*?\)/g, "").trim();
+    const queueIds = new Set(queue.map((t) => t.id));
     const genres =
       boostGenres.length > 0
         ? boostGenres
         : [...new Set(liked.map((t) => t.genre))].slice(0, 2);
     return genres
-      .map((genre) => ({
-        genre,
-        tracks: catalog
-          .filter((t) => t.genre === genre && !liked.some((l) => l.id === t.id))
-          .slice(0, 8),
-      }))
+      .map((genre) => {
+        const seen = new Set<string>();
+        const tracks = catalog
+          .filter(
+            (t) =>
+              t.genre === genre &&
+              !liked.some((l) => l.id === t.id) &&
+              !queueIds.has(t.id),
+          )
+          .filter((t) => {
+            const key = norm(t);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .slice(0, 8);
+        return { genre, tracks };
+      })
       .filter((r) => r.tracks.length > 0);
-  }, [boostGenres, liked, catalog]);
+  }, [boostGenres, liked, catalog, queue]);
 
   const fresh = useMemo(() => queue.slice(0, 10), [queue]);
 
