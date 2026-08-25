@@ -258,10 +258,32 @@ export const nextAd = query({
     const todayImpressions = impressions.filter((e) => e.day === todayKey);
     if (todayImpressions.length >= config.maxPerDay) return null;
 
-    // cooldown: no card within N minutes of the last impression
-    if (config.cooldownMinutes > 0) {
+    // cooldown: the admin's spacing is the default, but a signed-in listener's
+    // own time cadence (minutes/hours/per-day) takes over — the daily and
+    // weekly caps above stay the hard ceiling, so denser cadences are still
+    // bounded. One minute is the anti-spam floor.
+    let cooldownMinutes = config.cooldownMinutes;
+    if (userId) {
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .unique();
+      const cadence = profile?.prefs?.adCadence as
+        | { unit: string; value: number }
+        | undefined;
+      if (cadence && cadence.unit !== "swipes" && cadence.value > 0) {
+        const cadenceMin =
+          cadence.unit === "minutes"
+            ? cadence.value
+            : cadence.unit === "hours"
+              ? cadence.value * 60
+              : Math.max(60, Math.round((24 * 60) / Math.max(1, cadence.value)));
+        cooldownMinutes = Math.max(1, Math.min(cadenceMin, 24 * 60));
+      }
+    }
+    if (cooldownMinutes > 0) {
       const last = impressions.reduce((m, e) => Math.max(m, e.at), 0);
-      if (Date.now() - last < config.cooldownMinutes * 60_000) return null;
+      if (Date.now() - last < cooldownMinutes * 60_000) return null;
     }
 
     const live = await ctx.db

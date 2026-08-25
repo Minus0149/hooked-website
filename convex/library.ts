@@ -518,6 +518,9 @@ export const setPrefs = mutation({
     adsOptOut: v.boolean(),
     adFrequency: v.string(),
     adEveryNSwipes: v.optional(v.number()),
+    adCadence: v.optional(
+      v.object({ unit: v.string(), value: v.number() }),
+    ),
     allowRepeats: v.boolean(),
     includeBuried: v.boolean(),
     includeBlockedArtists: v.boolean(),
@@ -550,6 +553,23 @@ export const setPrefs = mutation({
       Number.isFinite(args.adEveryNSwipes)
         ? Math.min(Math.max(Math.round(args.adEveryNSwipes), 3), 200)
         : undefined;
+    // exact cadence: validated per unit, or dropped entirely
+    let adCadence: { unit: string; value: number } | undefined;
+    if (args.adCadence) {
+      const bounds: Record<string, [number, number]> = {
+        swipes: [3, 200],
+        minutes: [1, 1440],
+        hours: [1, 72],
+        day: [1, 10],
+      };
+      const b = bounds[args.adCadence.unit];
+      if (b && Number.isFinite(args.adCadence.value)) {
+        adCadence = {
+          unit: args.adCadence.unit,
+          value: Math.min(Math.max(Math.round(args.adCadence.value), b[0]), b[1]),
+        };
+      }
+    }
 
     await ctx.db.patch(profile._id, {
       prefs: {
@@ -561,6 +581,7 @@ export const setPrefs = mutation({
         adsOptOut,
         adFrequency,
         ...(adEveryNSwipes !== undefined ? { adEveryNSwipes } : {}),
+        ...(adCadence !== undefined ? { adCadence } : {}),
         allowRepeats: args.allowRepeats === true,
         includeBuried: args.includeBuried === true,
         includeBlockedArtists: args.includeBlockedArtists === true,

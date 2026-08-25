@@ -8,6 +8,8 @@ import { useStore } from "../state/store";
 import {
   ACCENT_SWATCHES,
   AD_FREQUENCIES,
+  AD_UNITS,
+  AD_UNIT_BOUNDS,
   HAPTICS_LEVELS,
   MOTION_LEVELS,
   type AccentMode,
@@ -433,7 +435,7 @@ export function SettingsScreen({
         </span>
       </button>
 
-      <Group>what comes back</Group>
+      {/* ReplayRules carries its own "what comes back" heading */}
       <ReplayRules state={state} onReplay={onReplay} onUnbury={onUnbury} />
 
       {state.neverArtists.length > 0 && (
@@ -504,45 +506,83 @@ export function SettingsScreen({
             <span className="prefs-label">How often</span>
             <Segmented
               options={AD_FREQUENCIES}
-              value={state.prefs.adEveryNSwipes === null ? state.prefs.adFrequency : "custom" as never}
-              onChange={(adFrequency) => onSetPrefs({ adFrequency: adFrequency as never, adEveryNSwipes: null })}
+              value={state.prefs.adCadence === null ? state.prefs.adFrequency : ("custom" as never)}
+              onChange={(adFrequency) =>
+                onSetPrefs({ adFrequency: adFrequency as never, adCadence: null })
+              }
             />
-            {/* the listener's own dial — every N swipes, set exactly */}
+
+            {/* the listener's exact dial: pick the unit, set the number */}
             <div className="prefs-block" style={{ marginTop: 10 }}>
               <span className="prefs-label">Your own pace</span>
-              <div className="ad-stepper">
-                <button
-                  type="button"
-                  className="prefs-chip"
-                  onClick={() =>
-                    onSetPrefs({
-                      adEveryNSwipes: Math.max(3, (state.prefs.adEveryNSwipes ?? 12) - 3),
-                    })
-                  }
-                  aria-label="fewer swipes between cards"
-                >
-                  −
-                </button>
-                <span className="ad-stepper-value">
-                  a card every{" "}
-                  <b>{state.prefs.adEveryNSwipes ?? 12}</b> swipes
-                </span>
-                <button
-                  type="button"
-                  className="prefs-chip"
-                  onClick={() =>
-                    onSetPrefs({
-                      adEveryNSwipes: Math.min(200, (state.prefs.adEveryNSwipes ?? 12) + 3),
-                    })
-                  }
-                  aria-label="more swipes between cards"
-                >
-                  +
-                </button>
-              </div>
+              <Segmented
+                options={AD_UNITS}
+                value={state.prefs.adCadence?.unit ?? ("none" as never)}
+                onChange={(unit) => {
+                  const defaults: Record<string, number> = {
+                    swipes: 12, minutes: 30, hours: 2, day: 1,
+                  };
+                  onSetPrefs({
+                    adCadence: {
+                      unit: unit as never,
+                      value: defaults[unit as string] ?? 12,
+                    },
+                  });
+                }}
+              />
+              {state.prefs.adCadence && (
+                <div className="ad-stepper">
+                  <button
+                    type="button"
+                    className="prefs-chip"
+                    onClick={() => {
+                      const b = AD_UNIT_BOUNDS[state.prefs.adCadence!.unit];
+                      onSetPrefs({
+                        adCadence: {
+                          unit: state.prefs.adCadence!.unit,
+                          value: Math.max(b.min, state.prefs.adCadence!.value - b.step),
+                        },
+                      });
+                    }}
+                    aria-label="less frequent"
+                  >
+                    −
+                  </button>
+                  <span className="ad-stepper-value">
+                    {state.prefs.adCadence.unit === "swipes" && (
+                      <>a card every <b>{state.prefs.adCadence.value}</b> swipes</>
+                    )}
+                    {state.prefs.adCadence.unit === "minutes" && (
+                      <>a card every <b>{state.prefs.adCadence.value}</b> minutes</>
+                    )}
+                    {state.prefs.adCadence.unit === "hours" && (
+                      <>a card every <b>{state.prefs.adCadence.value}</b> hours</>
+                    )}
+                    {state.prefs.adCadence.unit === "day" && (
+                      <><b>{state.prefs.adCadence.value}</b> card{state.prefs.adCadence.value > 1 ? "s" : ""} a day</>
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    className="prefs-chip"
+                    onClick={() => {
+                      const b = AD_UNIT_BOUNDS[state.prefs.adCadence!.unit];
+                      onSetPrefs({
+                        adCadence: {
+                          unit: state.prefs.adCadence!.unit,
+                          value: Math.min(b.max, state.prefs.adCadence!.value + b.step),
+                        },
+                      });
+                    }}
+                    aria-label="more frequent"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
               <span className="prefs-hint">
-                your dial can only space cards further apart — the ceiling is set
-                by hooked, and music never stops for one
+                pick a unit, set the number — the daily and weekly ceilings set
+                by hooked always hold, and music never stops for a card
               </span>
             </div>
           </>
@@ -778,4 +818,5 @@ export function SettingsScreen({
     </div>
   );
 }
+
 

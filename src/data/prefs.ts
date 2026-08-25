@@ -30,9 +30,9 @@ export interface UserPrefs {
   /** Listener's own ad dial — how often cards may appear. Never denser than
    * what the admin allows; this can only space them further apart. */
   adFrequency: AdFrequency;
-  /** The listener's own swipe gap. null = follow the adFrequency preset;
-   * a number here IS the dial (3–200), set from the custom stepper. */
-  adEveryNSwipes: number | null;
+  /** The listener's exact cadence: per swipes, per minutes, per hours, or N
+   * per day. null = follow the adFrequency preset. */
+  adCadence: { unit: AdUnit; value: number } | null;
   /** Global discovery rules — the default strictness of the deck. Per-playlist
    * rules relax these further while that playlist is the save target. */
   allowRepeats: boolean;
@@ -47,6 +47,35 @@ export const AD_FREQUENCIES: { id: AdFrequency; label: string }[] = [
   { id: "rarely", label: "Rarely" },
 ];
 
+export type AdUnit = "swipes" | "minutes" | "hours" | "day";
+export const AD_UNITS: { id: AdUnit; label: string }[] = [
+  { id: "swipes", label: "Swipes" },
+  { id: "minutes", label: "Minutes" },
+  { id: "hours", label: "Hours" },
+  { id: "day", label: "Per day" },
+];
+/** bounds + stepper step per unit */
+export const AD_UNIT_BOUNDS: Record<AdUnit, { min: number; max: number; step: number }> = {
+  swipes: { min: 3, max: 200, step: 3 },
+  minutes: { min: 1, max: 720, step: 5 },
+  hours: { min: 1, max: 48, step: 1 },
+  day: { min: 1, max: 10, step: 1 },
+};
+
+export function coerceAdCadence(raw: unknown): { unit: AdUnit; value: number } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as { unit?: unknown; value?: unknown };
+  if (
+    (r.unit === "swipes" || r.unit === "minutes" || r.unit === "hours" || r.unit === "day") &&
+    typeof r.value === "number" &&
+    Number.isFinite(r.value)
+  ) {
+    const b = AD_UNIT_BOUNDS[r.unit];
+    return { unit: r.unit, value: Math.min(Math.max(Math.round(r.value), b.min), b.max) };
+  }
+  return null;
+}
+
 export const DEFAULT_PREFS: UserPrefs = {
   motion: "full",
   haptics: "subtle",
@@ -55,7 +84,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   swipeSensitivity: 1,
   adsOptOut: false,
   adFrequency: "normal",
-  adEveryNSwipes: null,
+  adCadence: null,
   allowRepeats: false,
   includeBuried: false,
   includeBlockedArtists: false,
@@ -114,13 +143,7 @@ export function coercePrefs(raw: unknown): Partial<UserPrefs> {
     r.adFrequency === "often" || r.adFrequency === "rarely"
       ? r.adFrequency
       : DEFAULT_PREFS.adFrequency;
-  out.adEveryNSwipes =
-    typeof r.adEveryNSwipes === "number" &&
-    Number.isFinite(r.adEveryNSwipes) &&
-    r.adEveryNSwipes >= 3 &&
-    r.adEveryNSwipes <= 200
-      ? Math.round(r.adEveryNSwipes)
-      : null;
+  out.adCadence = coerceAdCadence(r.adCadence);
   out.allowRepeats = r.allowRepeats === true;
   out.includeBuried = r.includeBuried === true;
   out.includeBlockedArtists = r.includeBlockedArtists === true;

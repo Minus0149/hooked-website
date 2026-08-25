@@ -86,6 +86,10 @@ export default defineSchema({
         adFrequency: v.string(),
         /** the listener's own swipe gap; absent = follow the preset */
         adEveryNSwipes: v.optional(v.number()),
+        /** the listener's exact cadence: per swipes / minutes / hours / day */
+        adCadence: v.optional(
+          v.object({ unit: v.string(), value: v.number() }),
+        ),
         /** global discovery rules (per-playlist rules layer on top) */
         allowRepeats: v.boolean(),
         includeBuried: v.boolean(),

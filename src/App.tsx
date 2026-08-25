@@ -138,6 +138,31 @@ function Shell() {
   const stateRef = useRef(state);
   stateRef.current = state;
   const [view, setView] = useState<View>("home");
+  // browser back must walk the app's screens, not leave the site — every
+  // view change gets a history entry, and popstate restores the previous one
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const v = (e.state?.view as View | undefined) ?? "home";
+      setViewNoHistory(v);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const viewRef = useRef<View>("home");
+  viewRef.current = view;
+  const setViewNoHistory = useCallback((v: View) => {
+    setView(v);
+  }, []);
+  const setViewWithHistory = useCallback((v: View) => {
+    if (v === viewRef.current) return;
+    setView(v);
+    try {
+      window.history.pushState({ view: v }, "");
+    } catch {
+      /* history unavailable — navigation still works */
+    }
+  }, []);
   const [onboarded, setOnboarded] = useState(
     () => localStorage.getItem(ONBOARD_KEY) === "1",
   );
@@ -276,7 +301,7 @@ function Shell() {
           swipeSensitivity: merged.swipeSensitivity,
           adsOptOut: merged.adsOptOut,
           adFrequency: merged.adFrequency,
-          adEveryNSwipes: merged.adEveryNSwipes ?? undefined,
+          adCadence: merged.adCadence ?? undefined,
           allowRepeats: merged.allowRepeats,
           includeBuried: merged.includeBuried,
           includeBlockedArtists: merged.includeBlockedArtists,
@@ -356,24 +381,38 @@ function Shell() {
   const [activeAd, setActiveAd] = useState<AdCardData | null>(null);
 
   const handleSwipeForAds = useCallback(() => {
-    // the listener's dial: an explicit swipe gap wins; otherwise the preset
-    // scales the admin's gap. Either way it can only space cards FURTHER
-    // apart — the server's caps remain the ceiling.
+    // the listener's dial: an exact cadence (swipes/minutes/hours/per-day)
+    // wins; otherwise the preset scales the admin's gap. Either way the
+    // server's daily/weekly caps remain the ceiling.
+    const cadence = state.prefs.adCadence;
     const scale =
       state.prefs.adFrequency === "often"
         ? 0.5
         : state.prefs.adFrequency === "rarely"
           ? 2
           : 1;
-    const effective =
-      adsConfig == null
-        ? null
-        : {
-            ...adsConfig,
-            everyNSwipes:
-              state.prefs.adEveryNSwipes ??
-              Math.max(3, Math.round(adsConfig.everyNSwipes * scale)),
-          };
+    let effective: Parameters<typeof shouldAskForAd>[0]["config"] = null;
+    if (adsConfig != null) {
+      if (!cadence) {
+        effective = {
+          ...adsConfig,
+          everyNSwipes: Math.max(3, Math.round(adsConfig.everyNSwipes * scale)),
+        };
+      } else if (cadence.unit === "swipes") {
+        effective = { ...adsConfig, everyNSwipes: cadence.value };
+      } else if (cadence.unit === "minutes") {
+        effective = { ...adsConfig, everyNSwipes: 1, cooldownMinutes: cadence.value };
+      } else if (cadence.unit === "hours") {
+        effective = { ...adsConfig, everyNSwipes: 1, cooldownMinutes: cadence.value * 60 };
+      } else {
+        // N per day → even spacing across the day
+        effective = {
+          ...adsConfig,
+          everyNSwipes: 1,
+          cooldownMinutes: Math.max(60, Math.round((24 * 60) / Math.max(1, cadence.value))),
+        };
+      }
+    }
     swipeCounter.current += 1;
     const due = shouldAskForAd({
       swipesSinceAd: swipeCounter.current,
@@ -384,7 +423,7 @@ function Shell() {
     });
     if (!due) return;
     setAdDue(true); // nextAd query wakes up and decides authoritatively
-  }, [state.prefs.adsOptOut, state.prefs.adFrequency, state.prefs.adEveryNSwipes, adsConfig]);
+  }, [state.prefs.adsOptOut, state.prefs.adFrequency, state.prefs.adCadence, adsConfig]);
 
   // authoritative selection — null means any cap said no
   const adCandidate = useQuery(
@@ -547,7 +586,7 @@ function Shell() {
   const handleDiscoverInto = useCallback(
     (container: LibraryContainer) => {
       handleSaveTarget(container as SaveTarget);
-      setView("discover");
+      setViewWithHistory("discover");
       showToast("New saves land here now", "✦");
     },
     [handleSaveTarget, showToast],
@@ -589,7 +628,7 @@ function Shell() {
   const goDiscover = useCallback(
     (trackId?: string) => {
       if (trackId) jumpTo(trackId);
-      setView("discover");
+      setViewWithHistory("discover");
     },
     [jumpTo],
   );
@@ -621,7 +660,7 @@ function Shell() {
               <header className="topbar">
                 <button
                   className="topbar-btn"
-                  onClick={() => setView("profile")}
+                  onClick={() => setViewWithHistory("profile")}
                   aria-label="Profile"
                   style={signedIn ? { color: "var(--accent)" } : undefined}
                 >
@@ -632,7 +671,7 @@ function Shell() {
                 </span>
                 <button
                   className="topbar-btn"
-                  onClick={() => setView("settings")}
+                  onClick={() => setViewWithHistory("settings")}
                   aria-label="Settings"
                 >
                   <IconSettings />
@@ -640,7 +679,7 @@ function Shell() {
               </header>
               <HomeScreen
                 onDiscover={goDiscover}
-                onOpenLibrary={(c) => setView(`library:${c}`)}
+                onOpenLibrary={(c) => setViewWithHistory(`library:${c}`)}
                 onNewPlaylist={() => setNewPlaylistOpen(true)}
               />
             </>
@@ -680,7 +719,7 @@ function Shell() {
                     onClick={() => closeActiveAd("click")}
                     onWhy={() => {
                       setActiveAd(null);
-                      setView("settings");
+                      setViewWithHistory("settings");
                     }}
                   />
                 )}
@@ -690,7 +729,7 @@ function Shell() {
           {view === "profile" && (
             <ProfileScreen
               isAdmin={library?.isAdmin ?? false}
-              onBack={() => setView("home")}
+              onBack={() => setViewWithHistory("home")}
             />
           )}
           {(view === "settings" || view.startsWith("settings:")) && (
@@ -701,11 +740,11 @@ function Shell() {
                   : "hub"
               }
               onOpenPage={(p) =>
-                setView(p === "hub" ? "settings" : (`settings:${p}` as View))
+                setViewWithHistory(p === "hub" ? "settings" : (`settings:${p}` as View))
               }
               isAdmin={(library?.isAdmin || (library?.permissions?.length ?? 0) > 0) ?? false}
-              onBack={() => setView("home")}
-              onOpenProfile={() => setView("profile")}
+              onBack={() => setViewWithHistory("home")}
+              onOpenProfile={() => setViewWithHistory("profile")}
               onOpenSaveTarget={() => setSheetOpen(true)}
               onAutoAdvance={setAutoAdvance}
               onReplay={handleReplay}
@@ -724,7 +763,7 @@ function Shell() {
           {view.startsWith("library:") && (
             <LibraryScreen
               container={view.slice(8) as LibraryContainer}
-              onBack={() => setView("home")}
+              onBack={() => setViewWithHistory("home")}
               onPlay={(id) => goDiscover(id)}
               onRemove={handleRemoveSong}
               onDeletePlaylist={handleDeletePlaylist}
@@ -734,7 +773,7 @@ function Shell() {
           <BottomNav
             view={view === "discover" ? "discover" : "home"}
             showCreate={view === "home"}
-            onChange={(v) => setView(v)}
+            onChange={(v) => setViewWithHistory(v)}
             onCreate={() => setNewPlaylistOpen(true)}
           />
         </div>
@@ -813,7 +852,7 @@ function Shell() {
                 setTaste(taste);
                 if (signedIn) void setTasteMutation(taste).catch(syncFailed);
                 setOnboarded(true);
-                setView("discover"); // this tap unlocks audio autoplay
+                setViewWithHistory("discover"); // this tap unlocks audio autoplay
               }}
             />
           )}
@@ -872,4 +911,6 @@ export default function App() {
     </StoreProvider>
   );
 }
+
+
 

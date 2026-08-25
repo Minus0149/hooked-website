@@ -43,14 +43,38 @@ describe("shouldAskForAd", () => {
     ).toBe(true);
   });
 
-  it("never gets denser than one card per three swipes", () => {
+  it("never gets denser than one card per three swipes in swipe mode", () => {
     const tight = { enabled: true, everyNSwipes: 1, cooldownMinutes: 0 };
-    // everyN=1 is clamped to 3 by contract
+    // everyNSwipes 1 means TIME mode — for swipe pacing use >= 3
     expect(
-      shouldAskForAd({ swipesSinceAd: 2, now: NOW, lastAdAt: 0, optedOut: false, config: tight }),
+      shouldAskForAd({ swipesSinceAd: 2, now: NOW, lastAdAt: 0, optedOut: false, config: { ...tight, everyNSwipes: 3 } }),
     ).toBe(false);
     expect(
-      shouldAskForAd({ swipesSinceAd: 3, now: NOW, lastAdAt: 0, optedOut: false, config: tight }),
+      shouldAskForAd({ swipesSinceAd: 3, now: NOW, lastAdAt: 0, optedOut: false, config: { ...tight, everyNSwipes: 3 } }),
     ).toBe(true);
+  });
+
+  it("time mode: the cooldown is the whole cadence — no swipe count needed", () => {
+    const every30min = { enabled: true, everyNSwipes: 1, cooldownMinutes: 30 };
+    // only two swipes, but 31 minutes have passed → due
+    expect(
+      shouldAskForAd({
+        swipesSinceAd: 2,
+        now: NOW,
+        lastAdAt: NOW - 31 * 60_000,
+        optedOut: false,
+        config: every30min,
+      }),
+    ).toBe(true);
+    // twenty swipes, but only 10 minutes → not due
+    expect(
+      shouldAskForAd({
+        swipesSinceAd: 20,
+        now: NOW,
+        lastAdAt: NOW - 10 * 60_000,
+        optedOut: false,
+        config: every30min,
+      }),
+    ).toBe(false);
   });
 });

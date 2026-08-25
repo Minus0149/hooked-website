@@ -30,6 +30,13 @@ export function shouldAskForAd({
 }: AdPacingInput): boolean {
   if (optedOut) return false;
   if (!config?.enabled) return false;
+
+  // time-driven mode (everyNSwipes === 1): the cooldown IS the cadence —
+  // "every 30 minutes" needs no swipe count, only the clock
+  if (config.everyNSwipes <= 1) {
+    return now - lastAdAt >= config.cooldownMinutes * 60_000;
+  }
+
   const gap = Math.max(3, config.everyNSwipes); // never denser than 1-in-3
   if (swipesSinceAd < gap || swipesSinceAd === 0) return false;
   return now - lastAdAt >= config.cooldownMinutes * 60_000;
