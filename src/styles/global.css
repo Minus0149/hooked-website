@@ -1988,10 +1988,21 @@ button {
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface) 88%, black);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), 0 0 60px color-mix(in srgb, var(--accent) 18%, transparent);
-  /* real side padding â€” 4px used to rely on every child faking its own */
+  /* real side padding — 4px used to rely on every child faking its own */
   padding: 22px 20px 14px;
   overscroll-behavior: contain;
+  /* a hairline thumb, not Windows' white arcade scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a35 transparent;
 }
+.gate-card::-webkit-scrollbar { width: 6px; }
+.gate-card::-webkit-scrollbar-track { background: transparent; }
+.gate-card::-webkit-scrollbar-thumb {
+  background: #2a2a35;
+  border-radius: 999px;
+}
+.gate-card::-webkit-scrollbar-thumb:hover { background: #3a3a46; }
+.gate-card::-webkit-scrollbar-button { display: none; }
 .gate-kicker {
   font-family: var(--font-display);
   font-weight: 900;
@@ -2652,11 +2663,11 @@ html[data-motion="reduced"] .drift { animation: none !important; }
   position: sticky;
   bottom: -14px;               /* cancels the card's bottom padding */
   margin: 8px -20px -14px;     /* full-bleed across the card */
-  padding: 16px 20px 14px;
+  padding: 22px 20px 14px;
   background: linear-gradient(
     to top,
-    color-mix(in srgb, var(--surface) 92%, black) 72%,
-    color-mix(in srgb, var(--surface) 60%, black) 88%,
+    color-mix(in srgb, var(--surface) 96%, black) 58%,
+    color-mix(in srgb, var(--surface) 88%, black) 78%,
     transparent
   );
   display: flex;
@@ -2664,3 +2675,16 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 }
 
 
+
+/* thin dark scrollbars everywhere inside the phone — the native white ones
+   (with arrow buttons!) read as a browser bug inside the dark frame */
+.phone * {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a35 transparent;
+}
+.phone *::-webkit-scrollbar { width: 6px; height: 6px; }
+.phone *::-webkit-scrollbar-track { background: transparent; }
+.phone *::-webkit-scrollbar-thumb { background: #2a2a35; border-radius: 999px; }
+.phone *::-webkit-scrollbar-thumb:hover { background: #3a3a46; }
+.phone *::-webkit-scrollbar-button { display: none; }
+.phone *::-webkit-scrollbar-corner { background: transparent; }
