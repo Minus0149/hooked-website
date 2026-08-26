@@ -2767,3 +2767,23 @@ html[data-motion="reduced"] .drift { animation: none !important; }
   margin: 0;
 }
 .report-detail b { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+
+/* ------------------------------------------------------------------
+   Auth/profile form layout: the form was align-items:center, which
+   shrink-wrapped every cluster to its content width — ragged, uneven
+   blocks floating mid-screen. Stretch everything to one column instead,
+   cap the column width, and center only the text. */
+.profile-body {
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  align-items: stretch;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px 24px 20px;
+}
+.profile-body .ob-headline,
+.profile-body .ob-copy { align-self: center; }
+.profile-body .prefs-block { width: 100%; }
+.profile-body .prefs-hint { line-height: 1.5; }
+.profile-body .ob-skip { margin-top: 2px; }

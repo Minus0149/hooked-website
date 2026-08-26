@@ -61,6 +61,20 @@ type View =
   | `settings:${string}`
   | `library:${string}`;
 
+/** The URL is the truth: "#/", "#/profile", "#/settings/appearance", … */
+function viewFromHash(): View {
+  if (typeof window === "undefined") return "home";
+  const h = window.location.hash.replace(/^#\/?/, "");
+  if (!h) return "home";
+  const [head, sub] = h.split("/");
+  if (head === "settings" && sub) return `settings:${sub}` as View;
+  if (head === "library" && sub) return `library:${sub}` as View;
+  if (head === "home" || head === "discover" || head === "profile" || head === "settings") {
+    return head as View;
+  }
+  return "home";
+}
+
 interface ServerTrack {
   trackId: string;
   title: string;
@@ -138,13 +152,14 @@ function Shell() {
   // prefs push below reads state.prefs at fire time, not capture time)
   const stateRef = useRef(state);
   stateRef.current = state;
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>(() => viewFromHash());
   // browser back must walk the app's screens, not leave the site — every
-  // view change gets a history entry, and popstate restores the previous one
+  // view change gets a real URL (#/profile, #/settings/appearance, …) so the
+  // address is honest, a refresh stays where you were, and back/forward walk
+  // the screens
   useEffect(() => {
-    const onPop = (e: PopStateEvent) => {
-      const v = (e.state?.view as View | undefined) ?? "home";
-      setViewNoHistory(v);
+    const onPop = () => {
+      setViewNoHistory(viewFromHash());
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -158,8 +173,9 @@ function Shell() {
   const setViewWithHistory = useCallback((v: View) => {
     if (v === viewRef.current) return;
     setView(v);
+    const hash = v === "home" ? "#/" : `#/${v.replace(":", "/")}`;
     try {
-      window.history.pushState({ view: v }, "");
+      window.history.pushState({ view: v }, "", hash);
     } catch {
       /* history unavailable — navigation still works */
     }
@@ -959,8 +975,16 @@ export default function App() {
     );
   }
   // anything else under #/ that isn't a real route gets the 404 — silently
-  // rendering the deck for a mistyped link hid the mistake
-  if (route.startsWith("#/") && route !== "#/" && route !== "#" && route !== "") {
+  // rendering the deck for a mistyped link hid the mistake. Real views are
+  // known: profile, settings (+ sub-pages), library containers.
+  const KNOWN_VIEW = /^#\/(home|discover|profile|settings(\/[a-z]+)?|library\/[^\s]+)\/?$/;
+  if (
+    route.startsWith("#/") &&
+    route !== "#/" &&
+    route !== "#" &&
+    route !== "" &&
+    !KNOWN_VIEW.test(route)
+  ) {
     return (
       <div className="notfound">
         <span className="wordmark">
