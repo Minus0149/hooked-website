@@ -342,6 +342,18 @@ export const recordEvent = mutation({
     const cleanAnon = anonKey ? cleanText(anonKey, 64) : undefined;
     if (!user && !cleanAnon) throw new Error("No identity");
 
+    // anonymous identities are free to mint, so per-key limits alone can't
+    // bound total writes — a global hourly dam for anon-originated events.
+    // Signed-in events keep their own per-user bucket and skip this check.
+    if (!user) {
+      const recent = await ctx.db.query("adEvents").order("desc").take(2000);
+      const hourAgo = Date.now() - 60 * 60_000;
+      const anonInHour = recent.filter(
+        (e) => e.at >= hourAgo && e.userId === undefined,
+      ).length;
+      if (anonInHour >= 2000) return; // silently dropped — ads aren't critical
+    }
+
     // one bucket per identity: an anon key that spams this still trips its own
     // limit without touching anyone else's
     const capKey = `ad-event:${user ? String(user._id) : cleanAnon}`;

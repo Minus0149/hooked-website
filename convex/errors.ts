@@ -46,6 +46,15 @@ export const report = mutation({
     const identity = user ? String(user._id) : `anon:${anonKey}`;
     await enforceRateLimit(ctx, `err-report:${identity}`, 10, 60 * 60_000);
 
+    // the dam: anon identities are free to mint, so per-identity limits alone
+    // can't bound total writes. 300 reports/hour across ALL identities is
+    // far above any real crash volume and far below a flooding budget.
+    const recent = await ctx.db.query("errorReports").order("desc").take(300);
+    const hourAgo = Date.now() - 60 * 60_000;
+    if (recent.filter((r) => r.at >= hourAgo).length >= 300) {
+      throw new Error("Report queue is full right now — please try again later");
+    }
+
     let userEmail: string | undefined;
     if (user) {
       userEmail = user.email ?? undefined;
