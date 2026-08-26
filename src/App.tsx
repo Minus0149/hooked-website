@@ -6,6 +6,7 @@ import { coerceTaste } from "./data/taste";
 import { coercePrefs } from "./data/prefs";
 import type { UserPrefs } from "./data/prefs";
 import { shouldAskForAd } from "./lib/ads-scheduler";
+import { enqueue, flush } from "./lib/outbox";
 import { SponsoredCard, type AdCardData } from "./components/SponsoredCard";
 import { authClient } from "./lib/auth-client";
 import { StoreProvider, useStore } from "./state/store";
@@ -257,7 +258,7 @@ function Shell() {
     (container: string, allow: boolean) => {
       setReplay(container, allow);
       if (signedIn) {
-        void setReplayMutation({ container, allow }).catch(syncFailed);
+        syncWrite("setReplayContainer", { container, allow }, setReplayMutation);
       }
     },
     [setReplay, signedIn, setReplayMutation, syncFailed],
@@ -269,17 +270,76 @@ function Shell() {
   const setPrefsMutation = useMutation(api.library.setPrefs);
   const recordAdEvent = useMutation(api.ads.recordEvent);
 
+  // the web mirror of the mobile outbox: failed cloud writes queue in
+  // localStorage and drain on the next session/online moment — a dead
+  // network on this tab must not eat actions the phone already kept
+  const flushOutbox = useCallback(async () => {
+    if (!signedIn) return;
+    await flush(async (item) => {
+      const fn = {
+        recordSwipe: recordSwipe,
+        revertSwipe: revertSwipe,
+        setSaveTarget: saveTargetMutation,
+        removeSong: removeSongMutation,
+        unburyTrack: unburyMutation,
+        unblockArtist: unblockArtistMutation,
+        setReplayContainer: setReplayMutation,
+        setTaste: setTasteMutation,
+        setPrefs: setPrefsMutation,
+        deletePlaylist: deletePlaylistMutation,
+      }[item.fn];
+      await fn(item.args as never);
+    });
+  }, [
+    signedIn,
+    recordSwipe,
+    revertSwipe,
+    saveTargetMutation,
+    removeSongMutation,
+    unburyMutation,
+    unblockArtistMutation,
+    setReplayMutation,
+    setTasteMutation,
+    setPrefsMutation,
+    deletePlaylistMutation,
+  ]);
+
+  useEffect(() => {
+    if (signedIn) void flushOutbox();
+  }, [signedIn, flushOutbox]);
+
+  useEffect(() => {
+    const onOnline = () => void flushOutbox();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [flushOutbox]);
+
+  /** Queue-or-send: fire-and-forget that never actually forgets. */
+  const syncWrite = useCallback(
+    (
+      fn: Parameters<typeof enqueue>[0]["fn"],
+      args: Record<string, unknown>,
+      mutate: (a: never) => Promise<unknown>,
+    ) => {
+      mutate(args as never).catch(() => {
+        void enqueue({ fn, args } as Parameters<typeof enqueue>[0]);
+        syncFailed();
+      });
+    },
+    [syncFailed],
+  );
+
   const handleUnbury = useCallback(
     (trackId: string) => {
       unbury(trackId);
-      if (signedIn) void unburyMutation({ trackId }).catch(syncFailed);
+      if (signedIn) syncWrite("unburyTrack", { trackId }, unburyMutation);
     },
     [unbury, signedIn, unburyMutation, syncFailed],
   );
   const handleUnblockArtist = useCallback(
     (artist: string) => {
       unblockArtist(artist);
-      if (signedIn) void unblockArtistMutation({ artist }).catch(syncFailed);
+      if (signedIn) syncWrite("unblockArtist", { artist }, unblockArtistMutation);
     },
     [unblockArtist, signedIn, unblockArtistMutation, syncFailed],
  );
@@ -293,22 +353,26 @@ function Shell() {
       window.clearTimeout(prefsTimer.current);
       prefsTimer.current = window.setTimeout(() => {
         const merged = { ...stateRef.current.prefs, ...p };
-        void setPrefsMutation({
-          motion: merged.motion,
-          haptics: merged.haptics,
-          accentMode: merged.accentMode,
-          accentColor: merged.accentColor,
-          swipeSensitivity: merged.swipeSensitivity,
-          adsOptOut: merged.adsOptOut,
-          adFrequency: merged.adFrequency,
-          adCadence: merged.adCadence ?? undefined,
-          allowRepeats: merged.allowRepeats,
-          includeBuried: merged.includeBuried,
-          includeBlockedArtists: merged.includeBlockedArtists,
-        }).catch(syncFailed);
+        syncWrite(
+          "setPrefs",
+          {
+            motion: merged.motion,
+            haptics: merged.haptics,
+            accentMode: merged.accentMode,
+            accentColor: merged.accentColor,
+            swipeSensitivity: merged.swipeSensitivity,
+            adsOptOut: merged.adsOptOut,
+            adFrequency: merged.adFrequency,
+            adCadence: merged.adCadence ?? undefined,
+            allowRepeats: merged.allowRepeats,
+            includeBuried: merged.includeBuried,
+            includeBlockedArtists: merged.includeBlockedArtists,
+          },
+          setPrefsMutation,
+        );
       }, 600);
     },
-    [setPrefs, signedIn, setPrefsMutation, syncFailed],
+    [setPrefs, signedIn, setPrefsMutation, syncWrite],
   );
 
   const hydratedFor = useRef<string | null>(null);
@@ -510,14 +574,14 @@ function Shell() {
           playingHookId && /^[a-z0-9]{20,}$/.test(playingHookId)
             ? (playingHookId as never)
             : undefined;
-        void recordSwipe({
-          track: toServer(track),
-          action,
-          hookId: validHookId,
-        }).catch(syncFailed);
+        syncWrite(
+          "recordSwipe",
+          { track: toServer(track), action, hookId: validHookId },
+          recordSwipe,
+        );
       }
     },
-    [swipe, showToast, onDeck, signedIn, recordSwipe, syncFailed, handleSwipeForAds],
+    [swipe, showToast, onDeck, signedIn, recordSwipe, syncWrite, handleSwipeForAds],
   );
 
   const hookRef = useRef(hook);
@@ -532,20 +596,24 @@ function Shell() {
     // to revert server-side (reverting would wrongly delete the library row)
     const noopSave = previous.action === "save" && !previous.savedToLibrary;
     if (signedIn && !noopSave) {
-      void revertSwipe({
-        trackId: previous.track.id,
-        artist: previous.track.artist,
-        action: previous.action,
-      }).catch(syncFailed);
+      syncWrite(
+        "revertSwipe",
+        {
+          trackId: previous.track.id,
+          artist: previous.track.artist,
+          action: previous.action,
+        },
+        revertSwipe,
+      );
     }
-  }, [back, previous, showToast, signedIn, revertSwipe, syncFailed]);
+  }, [back, previous, showToast, signedIn, revertSwipe, syncWrite]);
 
   const handleSaveTarget = useCallback(
     (target: SaveTarget) => {
       setSaveTarget(target);
-      if (signedIn) void saveTargetMutation({ target }).catch(syncFailed);
+      if (signedIn) syncWrite("setSaveTarget", { target }, saveTargetMutation);
     },
-    [setSaveTarget, signedIn, saveTargetMutation, syncFailed],
+    [setSaveTarget, signedIn, saveTargetMutation, syncWrite],
   );
 
   const handleCreatePlaylist = useCallback(
@@ -596,7 +664,7 @@ function Shell() {
     (id: string) => {
       deletePlaylist(id);
       if (signedIn && !id.startsWith("local-")) {
-        void deletePlaylistMutation({ playlistId: id as never }).catch(syncFailed);
+        syncWrite("deletePlaylist", { playlistId: id }, deletePlaylistMutation);
       }
     },
     [deletePlaylist, signedIn, deletePlaylistMutation, syncFailed],
@@ -605,7 +673,7 @@ function Shell() {
   const handleRemoveSong = useCallback(
     (trackId: string) => {
       removeSong(trackId);
-      if (signedIn) void removeSongMutation({ trackId }).catch(syncFailed);
+      if (signedIn) syncWrite("removeSong", { trackId }, removeSongMutation);
     },
     [removeSong, signedIn, removeSongMutation, syncFailed],
   );
@@ -850,7 +918,7 @@ function Shell() {
                 // apply locally first so the very first deck is already tilted;
                 // the server copy is for the next device they sign in on
                 setTaste(taste);
-                if (signedIn) void setTasteMutation(taste).catch(syncFailed);
+                if (signedIn) syncWrite("setTaste", { ...taste }, setTasteMutation);
                 setOnboarded(true);
                 setViewWithHistory("discover"); // this tap unlocks audio autoplay
               }}
@@ -911,6 +979,8 @@ export default function App() {
     </StoreProvider>
   );
 }
+
+
 
 
 
