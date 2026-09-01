@@ -1402,11 +1402,32 @@ button {
 }
 .toggle.on .toggle-knob { translate: 17px 0; }
 
+/* "+ new playlist" was a bare pink word: 80x15, less than the 24px floor a
+   target has to clear, and the smallest thing on the home screen. A
+   pseudo-element could have grown the hit area invisibly, but the honest
+   problem is that the app's only other way of saying "this is pressable" is a
+   pill, and this wasn't wearing one. So it gets the pill — a real target, and
+   it now reads as a button before you touch it.
+
+   `align-self` overrides the row's baseline alignment: a padded box on a
+   baseline sits low against a display-weight heading. */
 .section-action {
+  align-self: center;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   font-size: 12.5px;
   font-weight: 700;
   color: var(--accent);
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
 }
+.section-action:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.section-action:active { transform: scale(0.96); }
 .sheet-options { max-height: 38vh; overflow-y: auto; }
 .sheet-create {
   display: flex;
@@ -2452,7 +2473,10 @@ button {
 
 input[type="range"].prefs-range {
   appearance: none; -webkit-appearance: none;
-  width: 150px; height: 22px; background: transparent; cursor: pointer;
+  /* 44 tall so a thumb can be caught with a thumb, pulled back out of the
+     layout by the negative margin so nothing below it moves. The visible
+     track is drawn by ::-webkit-slider-runnable-track and stays 6px. */
+  width: 150px; height: 44px; margin: -11px 0; background: transparent; cursor: pointer;
 }
 input[type="range"].prefs-range::-webkit-slider-runnable-track {
   height: 6px; border-radius: 3px;
