@@ -18,7 +18,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: mojibake guard
-        run: node scripts/check-mojibake.mjs src convex index.html
+        run: node scripts/check-mojibake.mjs src convex scripts index.html
       - name: typecheck
         run: npx tsc -b
       - name: tests

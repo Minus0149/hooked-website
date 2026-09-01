@@ -6,7 +6,13 @@
  * Usage: node scripts/check-mojibake.mjs [rootDirs...]
  */
 import { readdirSync, statSync } from "node:fs";
-import { join, extname } from "node:path";
+import { join, extname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// This file is the one place the pattern is allowed to appear: it has to spell
+// out what it is looking for. Scanning itself is why `scripts/` was never in
+// the CI roots, which is how five corrupted comments sat in build-catalog.mjs.
+const SELF = fileURLToPath(import.meta.url);
 
 const ROOTS = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ["src", "convex", "App.tsx", "index.html"];
 const EXT_OK = new Set([".ts", ".tsx", ".css", ".html", ".json", ".mjs", ".js", ".svg", ".txt", ".xml", ".webmanifest"]);
@@ -34,6 +40,7 @@ while (stack.length) {
     continue;
   }
   if (!EXT_OK.has(extname(cur))) continue;
+  if (resolve(cur) === SELF) continue;
   let text;
   try {
     text = await import("node:fs").then((fs) => fs.readFileSync(cur, "utf8"));

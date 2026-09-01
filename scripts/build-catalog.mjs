@@ -8,8 +8,8 @@
  *    `npx convex import`, so the deck can grow without growing the bundle.
  *
  * 2. Every track gets three hooks rather than one 30-second block. The windows
- *    come from lib/hook-detector.mjs â€” loudness, transients AND phrase-level
- *    repetition, so choruses lead â€” and are also baked into both clients'
+ *    come from lib/hook-detector.mjs — loudness, transients AND phrase-level
+ *    repetition, so choruses lead — and are also baked into both clients'
  *    src/data/catalog.json (see --bake), so a cold start plays measured hooks
  *    instead of "the whole preview from 0s".
  *
@@ -36,7 +36,7 @@ const OUT = flag("out", join(web, "catalog-out"));
 const BAKE = Number(flag("bake", 100)); // 0 disables the client catalogs
 
 // Charts are per storefront, so spreading the countries is what keeps the deck
-// from being one market's top 40. India and the Gulf are deliberate â€” that's
+// from being one market's top 40. India and the Gulf are deliberate — that's
 // who this is being built for first.
 const COUNTRIES = ["in", "us", "gb", "ae", "sa", "ca", "au", "ng", "kr", "br"];
 
@@ -93,8 +93,8 @@ async function chartIds() {
 
   const ids = new Map(); // id -> how many charts it shows up in
   // Which storefronts a song charts in is the only language signal these feeds
-  // carry. Apple's genre taxonomy is mostly Western â€” an entire Bollywood chart
-  // comes back as "worldwide" â€” so charting in `in` is what tells us a track is
+  // carry. Apple's genre taxonomy is mostly Western — an entire Bollywood chart
+  // comes back as "worldwide" — so charting in `in` is what tells us a track is
   // likely Hindi, and `sa`/`ae` Arabic.
   const markets = new Map();
   const answered = await pool(feeds, 8, async ({ url, country }) => {
