@@ -21,6 +21,7 @@ type RuntimeConfig = {
   recsStrength: number;
   recsMinRaters: number;
   recsMinSupport: number;
+  chartFeedsPerRun: number;
 };
 
 const GROUPS: {
@@ -61,6 +62,13 @@ const GROUPS: {
     ],
   },
   {
+    title: "Catalogue",
+    lede: "The nightly pull from Apple's charts. Each run takes the next few of a hundred feeds, so a full sweep is about ten days — new songs arrive with provisional hooks until scripts/analyze-hooks.mjs has measured their audio.",
+    fields: [
+      { key: "chartFeedsPerRun", label: "chart feeds per night", hint: "0 stops the job entirely", min: 0, max: 100 },
+    ],
+  },
+  {
     title: "Imports",
     lede: "When a browser import run is declared dead.",
     fields: [
@@ -74,6 +82,7 @@ export function ConfigPanel() {
   const setRuntime = useMutation(api.runtime.set);
   const refreshAnalytics = useMutation(api.admin.refreshAnalytics);
   const rebuildRecs = useMutation(api.recommend.refresh);
+  const pullCharts = useMutation(api.charts.refreshNow);
   const [draft, setDraft] = useState<Partial<RuntimeConfig>>({});
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -176,6 +185,21 @@ export function ConfigPanel() {
           }}
         >
           Rebuild recommendations now
+        </button>
+        <button
+          className="aq-btn"
+          disabled={saving}
+          onClick={() => {
+            void pullCharts()
+              .then(() =>
+                setNote(
+                  "Pulling the next few chart feeds — new songs appear in the catalogue as they land.",
+                ),
+              )
+              .catch((e: Error) => setNote(e.message));
+          }}
+        >
+          Pull from the charts now
         </button>
         {note && <span className="config-note">{note}</span>}
       </footer>

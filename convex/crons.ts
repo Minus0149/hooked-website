@@ -76,4 +76,19 @@ crons.interval(
   internal.recommend.rebuild,
 );
 
+/**
+ * Keep the catalogue current.
+ *
+ * Nightly and deliberately partial: each run takes the next handful of Apple's
+ * hundred chart feeds, so a full sweep takes about ten days and no single run
+ * can be the one that fails. Anything new arrives with provisional hooks until
+ * scripts/analyze-hooks.mjs measures its audio.
+ */
+crons.daily(
+  "pull new songs from the charts",
+  { hourUTC: 5, minuteUTC: 23 },
+  internal.charts.refresh,
+  {},
+);
+
 export default crons;

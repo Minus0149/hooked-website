@@ -13,6 +13,7 @@ import type * as admin from "../admin.js";
 import type * as ads from "../ads.js";
 import type * as analyzer from "../analyzer.js";
 import type * as auth from "../auth.js";
+import type * as charts from "../charts.js";
 import type * as collab from "../collab.js";
 import type * as creators from "../creators.js";
 import type * as crons from "../crons.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   ads: typeof ads;
   analyzer: typeof analyzer;
   auth: typeof auth;
+  charts: typeof charts;
   collab: typeof collab;
   creators: typeof creators;
   crons: typeof crons;

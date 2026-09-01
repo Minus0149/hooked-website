@@ -41,6 +41,12 @@ export const RUNTIME_DEFAULTS = {
   recsMinRaters: 3,
   /** listeners who must link a pair before that pair is published */
   recsMinSupport: 2,
+  /**
+   * Apple chart feeds pulled per scheduled catalogue refresh. There are 100
+   * of them, so 10 covers the lot every ten runs. Zero stops the job — the
+   * off switch for the only thing in here that reaches outside on a timer.
+   */
+  chartFeedsPerRun: 10,
 } as const;
 
 export type RuntimeKey = keyof typeof RUNTIME_DEFAULTS;
@@ -56,6 +62,7 @@ const BOUNDS: Record<RuntimeKey, [number, number]> = {
   recsStrength: [0, 40],
   recsMinRaters: [2, 50],
   recsMinSupport: [1, 50],
+  chartFeedsPerRun: [0, 100],
 };
 
 export type RuntimeConfig = Record<RuntimeKey, number>;
@@ -101,6 +108,7 @@ export const set = mutation({
     recsStrength: v.optional(v.number()),
     recsMinRaters: v.optional(v.number()),
     recsMinSupport: v.optional(v.number()),
+    chartFeedsPerRun: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "config.manage");
