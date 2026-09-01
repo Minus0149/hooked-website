@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b && tsc --noEmit -p convex",
+    "test": "vitest run",
+    "audit:ui": "python scripts/ui-audit.py",
     "preview": "vite preview"
   },
   "dependencies": {

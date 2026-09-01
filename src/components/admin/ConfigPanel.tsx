@@ -18,6 +18,9 @@ type RuntimeConfig = {
   bestHookMinPlays: number;
   sessionGapMinutes: number;
   analyticsSpanDays: number;
+  recsStrength: number;
+  recsMinRaters: number;
+  recsMinSupport: number;
 };
 
 const GROUPS: {
@@ -37,6 +40,15 @@ const GROUPS: {
     lede: "How much evidence a hook needs before it outranks its creator's order.",
     fields: [
       { key: "hookRankMinPlays", label: "min plays to re-rank", hint: "save-rate ranking threshold", min: 1, max: 10000 },
+    ],
+  },
+  {
+    title: "Recommendations",
+    lede: "\"People who reacted to this reacted to that\", learned from the swipe log. The two floors are a privacy setting as much as a quality one — nothing is published until several separate listeners have linked a pair.",
+    fields: [
+      { key: "recsStrength", label: "how hard it pulls", hint: "places a song may jump; 0 switches the recommender off", min: 0, max: 40 },
+      { key: "recsMinRaters", label: "min listeners per track", hint: "before a track can be modelled at all", min: 2, max: 50 },
+      { key: "recsMinSupport", label: "min listeners per pair", hint: "before a link between two songs is published", min: 1, max: 50 },
     ],
   },
   {
@@ -61,6 +73,7 @@ export function ConfigPanel() {
   const config = useQuery(api.runtime.get) as RuntimeConfig | null | undefined;
   const setRuntime = useMutation(api.runtime.set);
   const refreshAnalytics = useMutation(api.admin.refreshAnalytics);
+  const rebuildRecs = useMutation(api.recommend.refresh);
   const [draft, setDraft] = useState<Partial<RuntimeConfig>>({});
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -146,6 +159,23 @@ export function ConfigPanel() {
           }}
         >
           Recompute analytics now
+        </button>
+        <button
+          className="aq-btn"
+          disabled={saving}
+          onClick={() => {
+            void rebuildRecs()
+              .then((r) =>
+                setNote(
+                  r
+                    ? `Model rebuilt from ${r.read} swipes: ${r.rated} tracks had enough listeners, ${r.linked} ended up linked.`
+                    : "Not permitted.",
+                ),
+              )
+              .catch((e: Error) => setNote(e.message));
+          }}
+        >
+          Rebuild recommendations now
         </button>
         {note && <span className="config-note">{note}</span>}
       </footer>

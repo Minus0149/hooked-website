@@ -62,4 +62,18 @@ crons.daily(
   internal.ads.sweepOldEvents,
 );
 
+/**
+ * Rebuild "people who reacted to this reacted to that" from the swipe log.
+ *
+ * Six-hourly rather than hourly: unlike hook ranking, one more listener's
+ * afternoon barely moves a cosine, and the run reads history rather than a
+ * counters table. Offset from the others so the heavy jobs never share a
+ * minute.
+ */
+crons.interval(
+  "rebuild the recommendation model",
+  { hours: 6 },
+  internal.recommend.rebuild,
+);
+
 export default crons;

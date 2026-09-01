@@ -31,6 +31,16 @@ export const RUNTIME_DEFAULTS = {
   sessionGapMinutes: 30,
   /** analytics snapshot window in days */
   analyticsSpanDays: 30,
+  /**
+   * How hard "people who liked this liked that" pulls on the deck, in places
+   * a song may jump. Zero switches the recommender off without a deploy —
+   * which is the whole reason it is a dial and not a constant.
+   */
+  recsStrength: 9,
+  /** listeners who must have reacted to a track before it can be modelled */
+  recsMinRaters: 3,
+  /** listeners who must link a pair before that pair is published */
+  recsMinSupport: 2,
 } as const;
 
 export type RuntimeKey = keyof typeof RUNTIME_DEFAULTS;
@@ -43,6 +53,9 @@ const BOUNDS: Record<RuntimeKey, [number, number]> = {
   bestHookMinPlays: [1, 10_000],
   sessionGapMinutes: [5, 12 * 60],
   analyticsSpanDays: [7, 90],
+  recsStrength: [0, 40],
+  recsMinRaters: [2, 50],
+  recsMinSupport: [1, 50],
 };
 
 export type RuntimeConfig = Record<RuntimeKey, number>;
@@ -85,6 +98,9 @@ export const set = mutation({
     bestHookMinPlays: v.optional(v.number()),
     sessionGapMinutes: v.optional(v.number()),
     analyticsSpanDays: v.optional(v.number()),
+    recsStrength: v.optional(v.number()),
+    recsMinRaters: v.optional(v.number()),
+    recsMinSupport: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "config.manage");

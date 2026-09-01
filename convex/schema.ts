@@ -424,4 +424,24 @@ export default defineSchema({
   })
     .index("by_key", ["key"])
     .index("by_windowStart", ["windowStart"]),
+
+  /**
+   * "People who reacted to this song reacted to those." One row per track,
+   * rebuilt on a schedule from the swipe log by `recommend.rebuild`.
+   *
+   * The shape is chosen so recommending is a *lookup*, not a computation: a
+   * listener's deck needs the neighbours of the few dozen songs they have
+   * answered, which is a handful of indexed reads. Nothing here is derived at
+   * request time and nothing here is per-listener, so the rows are shared,
+   * cacheable, and small.
+   *
+   * A pair only lands here once several separate listeners have linked it (see
+   * collab.ts) — that floor is what stops an aggregate from being readable as
+   * one person's library.
+   */
+  trackNeighbors: defineTable({
+    trackId: v.string(),
+    neighbors: v.array(v.object({ trackId: v.string(), score: v.number() })),
+    computedAt: v.string(),
+  }).index("by_trackId", ["trackId"]),
 });
