@@ -216,3 +216,49 @@ describe("the listener's own vector", () => {
     expect(vector.has("c")).toBe(false);
   });
 });
+
+/**
+ * The three pieces meet in exactly one place — a listener's swipes go in, a
+ * deck order comes out — and each of them is tested alone above. This is the
+ * seam: a sign error in scoreCandidates or a mismatched track id between the
+ * model and the catalogue would pass every test so far and still hand someone
+ * a deck ranked backwards.
+ */
+describe("end to end: a crowd, then one listener's deck", () => {
+  const indie = ["indie-a", "indie-b", "indie-c"];
+  const metal = ["metal-a", "metal-b"];
+
+  /** Twelve listeners who agree with themselves: indie fans, and metal fans. */
+  const crowd: Interaction[] = [];
+  for (let i = 0; i < 6; i++) {
+    for (const t of indie) crowd.push(swipe(`indie${i}`, t, "save"));
+    for (const t of metal) crowd.push(swipe(`indie${i}`, t, "never"));
+  }
+  for (let i = 0; i < 6; i++) {
+    for (const t of metal) crowd.push(swipe(`metal${i}`, t, "save"));
+    for (const t of indie) crowd.push(swipe(`metal${i}`, t, "never"));
+  }
+
+  const model = buildNeighbors(crowd).neighbors;
+
+  it("recommends the rest of the taste from two songs", () => {
+    // a newcomer who saved two indie tracks and has never met the third
+    const scores = scoreCandidates(model, userVector([
+      swipe("new", "indie-a", "save"),
+      swipe("new", "indie-b", "save"),
+    ]));
+    expect(scores.get("indie-c")).toBeGreaterThan(0);
+    for (const t of metal) expect(scores.get(t)).toBeLessThan(0);
+  });
+
+  it("reads a bury as a bury, not just a weaker save", () => {
+    const scores = scoreCandidates(model, userVector([swipe("new", "indie-a", "never")]));
+    expect(scores.get("indie-c")).toBeLessThan(0);
+    expect(scores.get("metal-a")).toBeGreaterThan(0);
+  });
+
+  it("says nothing at all about a track nobody has reached yet", () => {
+    const scores = scoreCandidates(model, userVector([swipe("new", "indie-a", "save")]));
+    expect(scores.has("brand-new-single")).toBe(false);
+  });
+});
