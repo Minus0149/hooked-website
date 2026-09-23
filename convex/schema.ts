@@ -191,6 +191,8 @@ export default defineSchema({
      * a trained classifier; the other half (how happy it sounds) is inferred.
      */
     energy: v.optional(v.number()),
+    /** which calibration of the energy scale produced `energy` (hook-detector.mjs) */
+    energyCal: v.optional(v.number()),
     /**
      * When the external analyzer last measured this track's audio and wrote
      * real hooks (see scripts/analyze-hooks.mjs). Absent means "still waiting

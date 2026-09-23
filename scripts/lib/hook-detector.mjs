@@ -280,21 +280,37 @@ const clamp01 = (v) => Math.min(Math.max(v, 0), 1);
  * How activating this recording sounds, 0..1 — the arousal axis of the mood
  * plane, measured rather than guessed from the genre string.
  *
- * Free, because both curves are already computed to find hooks. Two parts:
+ * Free, because both curves are already computed to find hooks.
  *
- *   loudness — the median second in dBFS, mapped across the range real masters
- *              actually occupy. Median, not mean, so one clipped transient or a
- *              silent intro doesn't decide it.
- *   rhythm   — onsets per second, counted as peaks in the onset envelope. The
- *              envelope is normalised per track, so its heights don't compare
- *              across songs, but its PEAK RATE does: that is tempo and density,
- *              not volume, which is why it earns a term of its own.
+ * Calibrated against 36 real chart previews rather than guessed. The first
+ * version mapped -34..-8 dBFS and 70% of the catalogue landed in the loudest
+ * band, because commercially mastered music all lives near the top of that
+ * range. What the measurements actually showed:
  *
- * What this is NOT is valence. Nothing here can tell a joyful song from a
- * devastating one at the same tempo — that needs a trained classifier
- * (Essentia's mood models, or a decision model run offline over the catalogue).
- * Mood inference treats a missing value as missing rather than as neutral.
+ *   loudness — the median second, in dBFS, is the one feature here that tracks
+ *              how activating a song is. Real masters span roughly -21 (a
+ *              devotional stotram, a quiet ballad) to -9 (a Tamil mass number,
+ *              club electronic), so that is the scale. Median, not mean, so an
+ *              intro or one clipped transient doesn't decide it.
+ *   rhythm   — onset peaks per second. Weighted lightly because it is mostly
+ *              noise as measured: the envelope is normalised per track, so a
+ *              quiet recording grows lots of small "peaks" — a chant scored
+ *              8.7/s where a hip-hop track scored 2.9/s.
+ *
+ * The caveat worth knowing: loudness also tracks MASTERING ERA. A 1983 pop
+ * single measures quiet because it was mastered in 1983, not because it is
+ * calm. That is why energy carries the smallest weight of the three mood
+ * signals (see moodFit), and why valence — happy or sad — is not attempted at
+ * all; that needs a trained model listening to the audio.
  */
+/**
+ * Which version of the scale above produced a stored energy. Bump it whenever
+ * the mapping changes: the backend keeps the number next to each measurement,
+ * and `analyze-hooks.mjs --energy-only` re-measures everything older without
+ * touching hooks (re-writing hooks would orphan their play and save counts).
+ */
+export const ENERGY_CALIBRATION = 2;
+
 export function trackEnergy(profile) {
   const rms = profile?.rms ?? [];
   const env = profile?.onsets ?? [];
@@ -303,16 +319,16 @@ export function trackEnergy(profile) {
   const sorted = [...rms].sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)] / 32768;
   const db = 20 * Math.log10(Math.max(median, 1e-5));
-  const loud = clamp01((db + 34) / 26); // -34 dBFS reads as 0, -8 as 1
+  const loud = clamp01((db + 21) / 12); // -21 dBFS reads as 0, -9 as 1
 
   const fps = SR / HOP;
   let peaks = 0;
   for (let i = 1; i < env.length - 1; i++) {
     if (env[i] > 0.18 && env[i] >= env[i - 1] && env[i] > env[i + 1]) peaks++;
   }
-  const busy = clamp01(peaks / (env.length / fps) / 4.5);
+  const busy = clamp01((peaks / (env.length / fps) - 2) / 12);
 
-  return Math.round((0.6 * loud + 0.4 * busy) * 1000) / 1000;
+  return Math.round((0.85 * loud + 0.15 * busy) * 1000) / 1000;
 }
 
 /**

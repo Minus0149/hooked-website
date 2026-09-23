@@ -14,8 +14,13 @@
  *
  * Usage:
  *   node scripts/analyze-hooks.mjs [--limit 50] [--base https://cnx.hookedcue.com]
+ *   node scripts/analyze-hooks.mjs --energy-only   # re-measure energy after a recalibration
+ *
+ * --energy-only asks for tracks whose energy came from an older calibration
+ * (ENERGY_CALIBRATION in lib/hook-detector.mjs) and replaces only that number.
+ * Hooks are left alone on purpose: rewriting them would orphan their stats.
  */
-import { analyzeUrl } from "./lib/hook-detector.mjs";
+import { analyzeUrl, ENERGY_CALIBRATION } from "./lib/hook-detector.mjs";
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -26,6 +31,7 @@ const flag = (name, fallback) => {
 const BASE = (flag("base", "https://cnx.hookedcue.com")).replace(/\/+$/, "");
 const LIMIT = Number(flag("limit", 50));
 const KEY = process.env.HOOK_ANALYZE_KEY;
+const ENERGY_ONLY = args.includes("--energy-only");
 
 if (!KEY) {
   console.error("Set HOOK_ANALYZE_KEY first (same value as the backend's).");
@@ -36,7 +42,8 @@ if (!KEY) {
 const headers = { "x-analyzer-key": KEY };
 
 const res = await fetch(
-  `${BASE}/analyzer/pending?limit=${encodeURIComponent(LIMIT)}`,
+  `${BASE}/analyzer/pending?limit=${encodeURIComponent(LIMIT)}` +
+    (ENERGY_ONLY ? `&energyCal=${ENERGY_CALIBRATION}` : ""),
   { headers },
 );
 if (!res.ok) {
@@ -44,7 +51,11 @@ if (!res.ok) {
   process.exit(1);
 }
 const { tracks } = await res.json();
-console.log(`${tracks.length} track(s) waiting for analysis`);
+console.log(
+  ENERGY_ONLY
+    ? `${tracks.length} track(s) with energy older than calibration ${ENERGY_CALIBRATION}`
+    : `${tracks.length} track(s) waiting for analysis`,
+);
 
 let done = 0;
 let scored = 0;
@@ -53,13 +64,17 @@ const results = [];
 for (const t of tracks) {
   try {
     const measured = await analyzeUrl(t.previewUrl, t.durationMs || 30000);
-    if (measured) {
+    if (ENERGY_ONLY) {
+      if (measured) scored++;
+      results.push({ trackId: t.trackId, energyOnly: true, energy: measured?.energy ?? null, energyCal: ENERGY_CALIBRATION });
+    } else if (measured) {
       scored++;
       results.push({
         trackId: t.trackId,
         analyzedAt: new Date().toISOString(),
         windows: measured.windows.map((w) => ({ startMs: w.startMs, durationMs: w.durationMs })),
         energy: measured.energy,
+        energyCal: ENERGY_CALIBRATION,
       });
     } else {
       // mark so we don't retry a dead preview forever

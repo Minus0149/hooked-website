@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error - the analyser is plain ESM for node; tests aren't typechecked
-import { trackEnergy } from "../scripts/lib/hook-detector.mjs";
+import { ENERGY_CALIBRATION, trackEnergy } from "../scripts/lib/hook-detector.mjs";
 
 /**
  * Energy is the one half of the mood plane that can be measured instead of
@@ -39,10 +39,19 @@ describe("measuring how activating a track sounds", () => {
     expect(energy).toBeLessThan(0.2);
   });
 
-  it("puts a normal pop master in the middle, not at an extreme", () => {
-    const energy = trackEnergy({ rms: loudness(-20), onsets: onsets(2.5) });
-    expect(energy).toBeGreaterThan(0.25);
-    expect(energy).toBeLessThan(0.75);
+  it("spreads real masters across the range instead of calling them all loud", () => {
+    // Anchors measured from real chart previews during calibration. The first
+    // mapping put 70% of the catalogue in the loudest band because it assumed
+    // music spans -34..-8 dBFS; mastered music actually spans about -21..-9.
+    const stotram = trackEnergy({ rms: loudness(-20.5), onsets: onsets(8.7) });
+    const ballad = trackEnergy({ rms: loudness(-18.2), onsets: onsets(2.6) });
+    const acoustic = trackEnergy({ rms: loudness(-15.1), onsets: onsets(2.4) });
+    const massNumber = trackEnergy({ rms: loudness(-9.1), onsets: onsets(12.5) });
+    expect(stotram).toBeLessThan(0.2);
+    expect(ballad).toBeLessThan(0.3);
+    expect(acoustic).toBeGreaterThan(0.3);
+    expect(acoustic).toBeLessThan(0.6);
+    expect(massNumber).toBeGreaterThan(0.85);
   });
 
   it("rises with loudness, everything else held still", () => {
@@ -53,10 +62,16 @@ describe("measuring how activating a track sounds", () => {
     expect(mid).toBeLessThan(loud);
   });
 
-  it("rises with rhythm at the same volume — that's a separate axis", () => {
-    const still = trackEnergy({ rms: loudness(-18), onsets: onsets(0.4) });
-    const busy = trackEnergy({ rms: loudness(-18), onsets: onsets(5) });
-    expect(busy).toBeGreaterThan(still + 0.15);
+  it("lets rhythm nudge it, but never outvote loudness", () => {
+    // Onset rate is weighted lightly on purpose: measured on real previews it
+    // was mostly noise — a devotional chant scored 8.7 onsets/s, a hip-hop
+    // track 2.9 — because the envelope is normalised per track.
+    const still = trackEnergy({ rms: loudness(-15), onsets: onsets(0.4) });
+    const busy = trackEnergy({ rms: loudness(-15), onsets: onsets(12) });
+    expect(busy).toBeGreaterThan(still);
+    const quietButBusy = trackEnergy({ rms: loudness(-19), onsets: onsets(14) });
+    const loudButStill = trackEnergy({ rms: loudness(-11), onsets: onsets(1) });
+    expect(quietButBusy).toBeLessThan(loudButStill);
   });
 
   it("ignores one clipped transient in an otherwise quiet track", () => {
@@ -75,6 +90,19 @@ describe("measuring how activating a track sounds", () => {
         expect(energy).toBeLessThanOrEqual(1);
       }
     }
+  });
+
+  it("can't change scale without saying so", () => {
+    // Stored energies are only comparable within one calibration. If this
+    // fingerprint moves, bump ENERGY_CALIBRATION in hook-detector.mjs, update
+    // both numbers here, and run `analyze-hooks.mjs --energy-only` everywhere.
+    const fingerprint = [-20, -15, -11].map((db) =>
+      trackEnergy({ rms: loudness(db), onsets: onsets(3) }),
+    );
+    expect({ ENERGY_CALIBRATION, fingerprint }).toEqual({
+      ENERGY_CALIBRATION: 2,
+      fingerprint: [0.083, 0.437, 0.72],
+    });
   });
 
   it("says it doesn't know rather than guessing", () => {

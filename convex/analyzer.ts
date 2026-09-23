@@ -41,6 +41,54 @@ export const pendingTracks = internalQuery({
 });
 
 /**
+ * Tracks whose energy was measured on an older scale, or never measured.
+ *
+ * Only already-analysed tracks: a track still waiting for hooks gets its
+ * energy from that first pass anyway.
+ */
+export const staleEnergyTracks = internalQuery({
+  args: { limit: v.number(), cal: v.number() },
+  handler: async (ctx, { limit, cal }) => {
+    const all = await ctx.db.query("tracks").collect();
+    return all
+      .filter(
+        (t) =>
+          t.hidden !== true &&
+          t.analyzedAt !== undefined &&
+          !!t.previewUrl &&
+          t.energyCal !== cal,
+      )
+      .slice(0, Math.min(Math.max(limit, 1), 500))
+      .map((t) => ({
+        trackId: t.trackId,
+        title: t.title,
+        artist: t.artist,
+        previewUrl: t.previewUrl,
+        audioUrl: null as string | null,
+        durationMs: t.durationMs,
+      }));
+  },
+});
+
+/** Replace a track's energy alone — its hooks, and their stats, stay put. */
+export const ingestEnergy = internalMutation({
+  args: { trackId: v.string(), energy: v.union(v.number(), v.null()), cal: v.number() },
+  handler: async (ctx, { trackId, energy, cal }) => {
+    const track = await ctx.db
+      .query("tracks")
+      .withIndex("by_trackId", (q) => q.eq("trackId", cleanText(trackId, 120)))
+      .unique();
+    if (!track) return { ok: false as const, reason: "no track" };
+    const safe =
+      typeof energy === "number" && Number.isFinite(energy) ? Math.min(Math.max(energy, 0), 1) : undefined;
+    // stamped even when the audio wouldn't decode, so a dead preview isn't
+    // downloaded again on every run
+    await ctx.db.patch(track._id, { energy: safe, energyCal: cal });
+    return { ok: true as const, written: 0, energy: safe ?? null };
+  },
+});
+
+/**
  * Write measured windows for one track.
  *
  * Replaces hooks the system generated before (provisional thirds, previous
@@ -59,8 +107,10 @@ export const ingestHooks = internalMutation({
     ),
     /** measured arousal 0..1; absent when the preview couldn't be decoded */
     energy: v.optional(v.union(v.number(), v.null())),
+    /** the energy scale's calibration version, from the analyser */
+    energyCal: v.optional(v.number()),
   },
-  handler: async (ctx, { trackId, analyzedAt, windows, energy }) => {
+  handler: async (ctx, { trackId, analyzedAt, windows, energy, energyCal }) => {
     const track = await ctx.db
       .query("tracks")
       .withIndex("by_trackId", (q) => q.eq("trackId", cleanText(trackId, 120)))
@@ -78,7 +128,7 @@ export const ingestHooks = internalMutation({
       typeof energy === "number" && Number.isFinite(energy)
         ? Math.min(Math.max(energy, 0), 1)
         : undefined;
-    if (safeEnergy !== undefined) await ctx.db.patch(track._id, { energy: safeEnergy });
+    if (safeEnergy !== undefined) await ctx.db.patch(track._id, { energy: safeEnergy, energyCal });
 
     const safeWindows = windows
       .slice(0, MAX_WINDOWS)
@@ -88,6 +138,10 @@ export const ingestHooks = internalMutation({
       }))
       .filter((w) => w.startMs + w.durationMs <= (track.audioDurationMs ?? track.durationMs ?? 60_000) + 2_000);
     if (safeWindows.length === 0) {
+      // marked as looked-at: the analyser posts an empty list for a preview
+      // that wouldn't decode precisely so it isn't downloaded again every run,
+      // and without this stamp it was
+      await ctx.db.patch(track._id, { analyzedAt: stamp });
       return { ok: false as const, reason: "no usable windows" };
     }
 

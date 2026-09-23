@@ -195,10 +195,15 @@ http.route({
     if (!secret || !safeEqual(provided, secret)) {
       return new Response("forbidden", { status: 403 });
     }
-    const limit = Number(new URL(request.url).searchParams.get("limit") ?? 50);
-    const tracks = await ctx.runQuery(internal.analyzer.pendingTracks, {
-      limit: Number.isFinite(limit) ? limit : 50,
-    });
+    const params = new URL(request.url).searchParams;
+    const limit = Number(params.get("limit") ?? 50);
+    const safeLimit = Number.isFinite(limit) ? limit : 50;
+    // ?energyCal=N asks for tracks whose energy predates calibration N
+    const cal = Number(params.get("energyCal"));
+    const tracks =
+      params.has("energyCal") && Number.isInteger(cal) && cal > 0
+        ? await ctx.runQuery(internal.analyzer.staleEnergyTracks, { limit: safeLimit, cal })
+        : await ctx.runQuery(internal.analyzer.pendingTracks, { limit: safeLimit });
     return Response.json({ ok: true, tracks }, { status: 200 });
   }),
 });
@@ -237,6 +242,24 @@ http.route({
       const rec = item as Record<string, unknown>;
       const trackId = str(rec.trackId);
       const analyzedAt = str(rec.analyzedAt) || new Date().toISOString();
+      const cal = typeof rec.energyCal === "number" && Number.isInteger(rec.energyCal) ? rec.energyCal : undefined;
+      if (trackId && rec.energyOnly === true && cal !== undefined) {
+        try {
+          const result = await ctx.runMutation(internal.analyzer.ingestEnergy, {
+            trackId,
+            energy: typeof rec.energy === "number" ? rec.energy : null,
+            cal,
+          });
+          results.push(
+            result.ok
+              ? { trackId, ok: true, written: 0, energy: result.energy }
+              : { trackId, ok: false, reason: result.reason },
+          );
+        } catch {
+          results.push({ trackId, ok: false, reason: "write failed" });
+        }
+        continue;
+      }
       if (!trackId || !Array.isArray(rec.windows)) continue;
       try {
         const result = await ctx.runMutation(internal.analyzer.ingestHooks, {
@@ -244,6 +267,7 @@ http.route({
           analyzedAt,
           windows: rec.windows as { startMs: number; durationMs: number }[],
           energy: typeof rec.energy === "number" ? rec.energy : undefined,
+          energyCal: cal,
         });
         results.push(
           result.ok
