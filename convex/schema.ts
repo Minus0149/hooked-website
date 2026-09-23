@@ -90,6 +90,8 @@ export default defineSchema({
         adCadence: v.optional(
           v.object({ unit: v.string(), value: v.number() }),
         ),
+        /** how much say the clock gets: "off" | "suggest" | "always" */
+        moodByTime: v.optional(v.string()),
         /** global discovery rules (per-playlist rules layer on top) */
         allowRepeats: v.boolean(),
         includeBuried: v.boolean(),
@@ -181,6 +183,14 @@ export default defineSchema({
      * makes the onboarding "the hits / take me deep" answer do anything.
      */
     heat: v.optional(v.number()),
+    /**
+     * Measured arousal, 0..1 — how activating the recording sounds. Written by
+     * the same analyser run that finds hooks, from loudness and onset density
+     * it already computes, so it costs one extra field and no extra work. This
+     * is the one half of the mood plane that can be measured from audio without
+     * a trained classifier; the other half (how happy it sounds) is inferred.
+     */
+    energy: v.optional(v.number()),
     /**
      * When the external analyzer last measured this track's audio and wrote
      * real hooks (see scripts/analyze-hooks.mjs). Absent means "still waiting
@@ -439,6 +449,38 @@ export default defineSchema({
    * collab.ts) — that floor is what stops an aggregate from being readable as
    * one person's library.
    */
+  /**
+   * "What does this song feel like?" — one row per listener per track.
+   *
+   * Kept separate from the aggregate below for the same reason hookStats is
+   * kept out of hooks: this row changes when one person presses a face, and
+   * nothing the deck subscribes to may depend on it. It also makes a vote
+   * changeable — pressing a different face moves the count rather than adding
+   * a second one, which is what stops one enthusiastic listener from becoming
+   * a consensus.
+   */
+  moodVotes: defineTable({
+    userId: v.string(),
+    trackId: v.string(),
+    mood: v.string(),
+    at: v.string(),
+  })
+    .index("by_user_track", ["userId", "trackId"])
+    .index("by_trackId", ["trackId"]),
+
+  /**
+   * The tally, one row per track that anyone has ever labelled.
+   *
+   * Read by every client once per session and never on the swipe path. Only
+   * moods that cleared the floor leave the server (see moods.crowd): on a small
+   * catalogue a count of one is not an aggregate, it is a person.
+   */
+  trackMoods: defineTable({
+    trackId: v.string(),
+    counts: v.array(v.object({ mood: v.string(), n: v.number() })),
+    updatedAt: v.string(),
+  }).index("by_trackId", ["trackId"]),
+
   trackNeighbors: defineTable({
     trackId: v.string(),
     neighbors: v.array(v.object({ trackId: v.string(), score: v.number() })),

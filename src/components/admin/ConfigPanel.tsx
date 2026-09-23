@@ -22,6 +22,9 @@ type RuntimeConfig = {
   recsMinRaters: number;
   recsMinSupport: number;
   chartFeedsPerRun: number;
+  moodStrength: number;
+  moodMinVotes: number;
+  modelStrength: number;
 };
 
 const GROUPS: {
@@ -50,6 +53,15 @@ const GROUPS: {
       { key: "recsStrength", label: "how hard it pulls", hint: "places a song may jump; 0 switches the recommender off", min: 0, max: 40 },
       { key: "recsMinRaters", label: "min listeners per track", hint: "before a track can be modelled at all", min: 2, max: 50 },
       { key: "recsMinSupport", label: "min listeners per pair", hint: "before a link between two songs is published", min: 1, max: 50 },
+    ],
+  },
+  {
+    title: "Moods & the local model",
+    lede: "The two signals that work with no backend at all — a face someone pressed, and the model each device trains on its own listener's swipes. Both are client-side, so a change here reaches a deck the next time it loads the config; both default to on, because they work offline and for a signed-out guest.",
+    fields: [
+      { key: "moodStrength", label: "how hard a mood pulls", hint: "places a matching song may jump; 0 makes the faces decoration", min: 0, max: 40 },
+      { key: "moodMinVotes", label: "min listeners per mood tag", hint: "before \"this song feels like that\" is published to everyone", min: 1, max: 50 },
+      { key: "modelStrength", label: "how hard the local model pulls", hint: "its ceiling once there is evidence; it damps itself before that", min: 0, max: 40 },
     ],
   },
   {

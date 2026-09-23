@@ -1,5 +1,7 @@
 import type { Track } from "../types";
-import { genreBoostScore, tasteScore, type TastePrefs } from "./taste";
+import { EMPTY_TASTE, genreBoostScore, tasteScore, type TastePrefs } from "./taste";
+import { moodFitFor, type CrowdMoods, type MoodId } from "./mood";
+import { likeBias, type TasteModel } from "./predict";
 
 /**
  * How the deck decides what comes next.
@@ -29,6 +31,41 @@ export type Steer = {
   boostGenres: string[];
   affinity: Record<string, number>;
   affinityStrength: number;
+  /** The face they picked, or null. An instruction about now, not about them. */
+  mood: MoodId | null;
+  /** How far a mood match may pull a track forward, in places. */
+  moodStrength: number;
+  /** What other listeners said tracks feel like. Sparse; usually empty. */
+  crowdMoods: CrowdMoods;
+  /** What this device learned from their own swipes, or null before evidence. */
+  model: TasteModel | null;
+  /** How far that model may pull a track, in places. */
+  modelStrength: number;
+};
+
+/**
+ * Client defaults for the two signals that work with no backend at all.
+ *
+ * Unlike affinity — which is the server's opinion and worth exactly nothing
+ * without it — a mood and a locally-trained model are fully available offline,
+ * to a signed-out guest, on the baked catalogue. So they default to on here and
+ * the runtime config overrides them, rather than defaulting to off and waiting
+ * for a server that may never answer.
+ */
+export const MOOD_PLACES = 16;
+export const MODEL_PLACES = 12;
+
+/** A steer that changes nothing, for tests and for the first render. */
+export const NO_STEER: Steer = {
+  taste: EMPTY_TASTE,
+  boostGenres: [],
+  affinity: {},
+  affinityStrength: 0,
+  mood: null,
+  moodStrength: MOOD_PLACES,
+  crowdMoods: {},
+  model: null,
+  modelStrength: MODEL_PLACES,
 };
 
 export function shuffle<T>(arr: T[]): T[] {
@@ -49,16 +86,28 @@ export function shuffle<T>(arr: T[]): T[] {
  * things they said they wanted.
  *
  * The weights are an order of confidence, and they are meant to be read that
- * way. What someone *told* us carries most (12). What the catalogue's other
- * listeners imply carries less (9 by default, and an admin can take it to
- * zero) — that is inference, and it is only ever as good as how many people
- * have swiped. A right-swipe's genre steer carries least (6): one gesture, a
- * nudge, not a stated preference. None of them can outrun the shuffle by more
- * than a couple of dozen places, which is what keeps a deck from turning into
- * a playlist.
+ * way:
+ *
+ *   16  the mood they just picked. Highest, because it is the only term about
+ *       *now* — someone tapping the sleepy face at 1am is not describing their
+ *       taste, they are giving an instruction.
+ *   12  what they told us at onboarding. Stated, durable, and theirs.
+ *   12  what this device learned from their own swipes, scaled by how much
+ *       evidence there is: near zero in a first session, full weight once they
+ *       have kept ten songs and buried ten.
+ *    9  what the catalogue's other listeners imply (an admin can zero it).
+ *    6  a right-swipe's genre steer: one gesture, a nudge.
+ *
+ * None of them can outrun the shuffle by more than a couple of dozen places,
+ * which is what keeps a deck from turning into a playlist. That is also why a
+ * mood is a bias and not a filter: pick "party" and the party songs come
+ * first, but the deck is still a deck, and the next thing you have never heard
+ * is still in it.
  */
 export function rankPool(pool: Track[], steer: Steer): Track[] {
   const useAffinity = steer.affinityStrength > 0;
+  const useMood = steer.mood !== null && steer.moodStrength > 0;
+  const useModel = steer.model !== null && steer.modelStrength > 0;
   const scored = shuffle(pool).map((t, i) => ({
     t,
     // index keeps the shuffle meaningful; score is worth a few places, not all
@@ -66,7 +115,11 @@ export function rankPool(pool: Track[], steer: Steer): Track[] {
       i -
       tasteScore(t, steer.taste) * 12 -
       (useAffinity ? (steer.affinity[t.id] ?? 0) * steer.affinityStrength : 0) -
-      genreBoostScore(t, steer.boostGenres) * 6,
+      genreBoostScore(t, steer.boostGenres) * 6 -
+      (useMood ? moodFitFor(t, steer.mood, steer.crowdMoods) * steer.moodStrength : 0) -
+      // already damped by the model's own confidence, so an untrained one
+      // contributes exactly zero rather than noise
+      (useModel ? likeBias(steer.model, t, steer.crowdMoods) * steer.modelStrength : 0),
   }));
   scored.sort((a, b) => a.key - b.key);
   return scored.map((s) => s.t);

@@ -24,6 +24,13 @@ export interface Track {
   markets?: string[];
   /** play count normalised 0..1 against the catalogue's leader (hourly job) */
   heat?: number;
+  /**
+   * Measured arousal, 0..1: how activating the recording sounds. Written by the
+   * offline analyser from the loudness and onset curves it already computes to
+   * find hooks, so it costs nothing extra and is a real measurement rather than
+   * a guess from the genre string. Absent until a track has been analysed.
+   */
+  energy?: number;
 }
 
 export type SwipeAction = "skip" | "save" | "more" | "never";

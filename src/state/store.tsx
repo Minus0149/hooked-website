@@ -12,12 +12,16 @@ import { EMPTY_TASTE, genreBoostScore, tasteScore, type TastePrefs } from "../da
 import { coercePrefs, DEFAULT_PREFS, type UserPrefs } from "../data/prefs";
 import {
   buildQueue,
+  MODEL_PLACES,
+  MOOD_PLACES,
   rankPool,
   shuffle,
   spreadAlbums,
   uniqueById,
   type Steer,
 } from "../data/ranking";
+import { coerceMood, type CrowdMoods, type MoodId } from "../data/mood";
+import { trainFromHistory, type TasteModel } from "../data/predict";
 
 /**
  * Songs shipped inside the bundle. They are the offline fallback and the very
@@ -27,6 +31,15 @@ import {
  */
 const BAKED = catalogJson as Track[];
 const PERSIST_KEY = "hooked.library.v2";
+
+/**
+ * How long a picked mood outlives the session that picked it.
+ *
+ * Long enough that closing a tab or dropping a call doesn't silently undo what
+ * someone asked for; short enough that Friday night's "party" is not still on
+ * the deck at Monday breakfast. Six hours is roughly one listening occasion.
+ */
+const MOOD_TTL = 6 * 60 * 60 * 1000;
 
 export interface HistoryEntry {
   track: Track;
@@ -79,6 +92,25 @@ export interface AppState {
    * deploy. Zero here and the deck is exactly what it was before.
    */
   affinityStrength: number;
+  /**
+   * The face they picked: a lens over the deck, and the only signal here about
+   * *now* rather than about them. Null is the normal state.
+   */
+  mood: MoodId | null;
+  /**
+   * When it was picked. A mood is momentary — Friday night's "party" restored
+   * into Monday morning would be the app confidently misreading the room — so
+   * a stored lens is only honoured for a few hours.
+   */
+  moodSetAt: number;
+  /** What THIS listener said each track feels like: trackId -> mood. */
+  moodPicks: Record<string, MoodId>;
+  /** What everyone else said, once enough of them agreed. Sparse. */
+  crowdMoods: CrowdMoods;
+  /** How far a mood may move a track, in places (runtime config). */
+  moodStrength: number;
+  /** How far the locally-trained model may move a track (runtime config). */
+  modelStrength: number;
 }
 
 type Action =
@@ -126,16 +158,68 @@ type Action =
       type: "APPLY_AFFINITY";
       scores: Record<string, number>;
       strength: number;
-    };
+    }
+  // a face was pressed: on the deck (trackId set) it also labels that song
+  | { type: "SET_MOOD"; mood: MoodId | null; trackId?: string }
+  // the catalogue's published mood tags arrived
+  | { type: "APPLY_CROWD_MOODS"; crowd: CrowdMoods }
+  // this listener's own labels, from the profile rather than this device
+  | { type: "APPLY_MOOD_PICKS"; picks: Record<string, MoodId> }
+  // the admin's dials for the two client-side signals
+  | { type: "SET_STRENGTHS"; mood: number; model: number };
 
-function steerOf(
-  state: Pick<AppState, "taste" | "boostGenres" | "affinity" | "affinityStrength">,
-): Steer {
+/**
+ * The trained model, rebuilt only when the evidence behind it changed.
+ *
+ * Training costs a couple of milliseconds, which is nothing once and quite a
+ * lot on every swipe of a long session. The key is a signature of everything
+ * buildExamples reads; anything that moves it retrains, anything that doesn't
+ * reuses. (Swapping one saved track for another of the same count would fool
+ * it — that can't happen without a save or a remove, both of which change a
+ * length.)
+ */
+let modelCache: { key: string; model: TasteModel | null } | null = null;
+
+function modelFor(state: AppState): TasteModel | null {
+  const skipped = Object.keys(state.deckMemory).filter(
+    (id) => state.deckMemory[id].skips > 0,
+  );
+  const key = [
+    state.liked.length,
+    state.discoveries.length,
+    state.playlists.map((p) => p.tracks.length).join(","),
+    state.neverTracks.length,
+    skipped.length,
+    state.catalog.length,
+    Object.keys(state.crowdMoods).length,
+  ].join("|");
+  if (modelCache && modelCache.key === key) return modelCache.model;
+  const model = trainFromHistory({
+    saved: [
+      ...state.liked,
+      ...state.discoveries,
+      ...state.playlists.flatMap((p) => p.tracks),
+    ],
+    buried: state.neverTracks,
+    skipped,
+    catalog: state.catalog,
+    crowd: state.crowdMoods,
+  });
+  modelCache = { key, model };
+  return model;
+}
+
+function steerOf(state: AppState): Steer {
   return {
     taste: state.taste,
     boostGenres: state.boostGenres,
     affinity: state.affinity,
     affinityStrength: state.affinityStrength,
+    mood: state.mood,
+    moodStrength: state.moodStrength,
+    crowdMoods: state.crowdMoods,
+    model: modelFor(state),
+    modelStrength: state.modelStrength,
   };
 }
 
@@ -157,8 +241,10 @@ function loadPersisted() {
         | "boostGenres"
         | "autoAdvance"
         | "deckMemory"
+        | "moodSetAt"
+        | "moodPicks"
       >
-    > & { prefs?: Partial<UserPrefs> };
+    > & { prefs?: Partial<UserPrefs>; mood?: unknown };
   } catch {
     return null;
   }
@@ -221,10 +307,23 @@ function initState(): AppState {
   // arrives after sign-in, or it never arrives and the deck is unchanged.
   const affinity = {};
   const affinityStrength = 0;
+  // A lens survives a reload — closing a tab shouldn't undo an instruction —
+  // but not a night's sleep. See MOOD_TTL.
+  const moodSetAt = saved?.moodSetAt ?? 0;
+  const mood =
+    Date.now() - moodSetAt < MOOD_TTL ? coerceMood(saved?.mood) : null;
+  const moodPicks = (saved?.moodPicks ?? {}) as Record<string, MoodId>;
+  const crowdMoods = {};
   return {
     catalog: BAKED,
     affinity,
     affinityStrength,
+    mood,
+    moodSetAt: mood ? moodSetAt : 0,
+    moodPicks,
+    crowdMoods,
+    moodStrength: MOOD_PLACES,
+    modelStrength: MODEL_PLACES,
     neverTracks: saved?.neverTracks ?? [],
     replayContainers: saved?.replayContainers ?? [],
     taste,
@@ -235,6 +334,13 @@ function initState(): AppState {
         boostGenres,
         affinity,
         affinityStrength,
+        mood,
+        moodStrength: MOOD_PLACES,
+        crowdMoods,
+        // Nothing to train from on the very first render: the reducer builds
+        // the model the first time it ranks with a real library behind it.
+        model: null,
+        modelStrength: MODEL_PLACES,
       }),
     ),
     history: [],
@@ -624,6 +730,56 @@ function reducer(state: AppState, action: Action): AppState {
       };
     }
 
+    case "SET_MOOD": {
+      const mood = action.mood;
+      const moodPicks =
+        action.trackId && mood
+          ? { ...state.moodPicks, [action.trackId]: mood }
+          : state.moodPicks;
+      if (mood === state.mood && moodPicks === state.moodPicks) return state;
+
+      const next = {
+        ...state,
+        mood,
+        moodSetAt: mood ? Date.now() : 0,
+        moodPicks,
+      };
+      // Re-rank behind the visible card, exactly like a right-swipe does. This
+      // one DOES rebuild — unlike affinity arriving from the server, a face was
+      // pressed on purpose a moment ago, and a deck that didn't visibly answer
+      // would make the gesture look decorative.
+      const [head, ...rest] = state.queue;
+      if (!head) return next;
+      return {
+        ...next,
+        queue: spreadAlbums(uniqueById([head, ...rankPool(rest, steerOf(next))])),
+      };
+    }
+
+    case "APPLY_CROWD_MOODS": {
+      // Same reasoning as APPLY_AFFINITY: it is the catalogue's opinion, it
+      // arrives mid-session, and it is not worth rearranging the cards under
+      // someone's thumb for. The next refill picks it up.
+      const sameSize =
+        Object.keys(state.crowdMoods).length === Object.keys(action.crowd).length;
+      if (sameSize && Object.keys(action.crowd).every((id) => state.crowdMoods[id]))
+        return state;
+      return { ...state, crowdMoods: action.crowd };
+    }
+
+    case "APPLY_MOOD_PICKS": {
+      // The device's own picks win: they were made here, possibly since the
+      // query was sent, and a round trip is not a reason to forget one.
+      const picks = { ...action.picks, ...state.moodPicks };
+      if (Object.keys(picks).length === Object.keys(state.moodPicks).length) return state;
+      return { ...state, moodPicks: picks };
+    }
+
+    case "SET_STRENGTHS":
+      if (state.moodStrength === action.mood && state.modelStrength === action.model)
+        return state;
+      return { ...state, moodStrength: action.mood, modelStrength: action.model };
+
     case "APPLY_AFFINITY": {
       // Deliberately does NOT rebuild the queue. The model's opinion is worth
       // a few places, not worth the cards under someone's thumb rearranging
@@ -676,6 +832,17 @@ interface StoreValue {
   }) => void;
   applyCatalog: (tracks: Track[]) => void;
   applyAffinity: (scores: Record<string, number>, strength: number) => void;
+  /** Pick a face. Pass a trackId when it was pressed on a card — that labels it. */
+  setMood: (mood: MoodId | null, trackId?: string) => void;
+  applyCrowdMoods: (crowd: CrowdMoods) => void;
+  applyMoodPicks: (picks: Record<string, MoodId>) => void;
+  setStrengths: (mood: number, model: number) => void;
+  /**
+   * What this device has learned about this listener, or null before there is
+   * anything to learn from. Exposed because the deck shows its verdict, and
+   * recomputing it per screen would train the same model three times.
+   */
+  model: TasteModel | null;
   catalog: Track[];
 }
 
@@ -685,12 +852,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, initState);
 
   useEffect(() => {
-    const { liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, prefs, saveTarget, boostGenres, autoAdvance } = state;
+    const { liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, prefs, saveTarget, boostGenres, autoAdvance, mood, moodSetAt, moodPicks } = state;
     localStorage.setItem(
       PERSIST_KEY,
-      JSON.stringify({ liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, prefs, saveTarget, boostGenres, autoAdvance, deckMemory: state.deckMemory }),
+      JSON.stringify({ liked, discoveries, playlists, neverArtists, neverTracks, replayContainers, taste, prefs, saveTarget, boostGenres, autoAdvance, mood, moodSetAt, moodPicks, deckMemory: state.deckMemory }),
     );
-  }, [state.liked, state.discoveries, state.playlists, state.neverArtists, state.neverTracks, state.replayContainers, state.taste, state.prefs, state.saveTarget, state.boostGenres, state.autoAdvance, state.deckMemory]);
+  }, [state.liked, state.discoveries, state.playlists, state.neverArtists, state.neverTracks, state.replayContainers, state.taste, state.prefs, state.saveTarget, state.boostGenres, state.autoAdvance, state.deckMemory, state.mood, state.moodSetAt, state.moodPicks]);
 
   // CRITICAL: actions are memoized once (dispatch is stable). They must NOT
   // be recreated per state change — effects depend on these functions, and
@@ -727,12 +894,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       applyCatalog: (tracks: Track[]) => dispatch({ type: "APPLY_CATALOG", tracks }),
       applyAffinity: (scores: Record<string, number>, strength: number) =>
         dispatch({ type: "APPLY_AFFINITY", scores, strength }),
+      setMood: (mood: MoodId | null, trackId?: string) =>
+        dispatch({ type: "SET_MOOD", mood, trackId }),
+      applyCrowdMoods: (crowd: CrowdMoods) =>
+        dispatch({ type: "APPLY_CROWD_MOODS", crowd }),
+      applyMoodPicks: (picks: Record<string, MoodId>) =>
+        dispatch({ type: "APPLY_MOOD_PICKS", picks }),
+      setStrengths: (mood: number, model: number) =>
+        dispatch({ type: "SET_STRENGTHS", mood, model }),
     }),
     [],
   );
 
   const value = useMemo<StoreValue>(
-    () => ({ state, ...actions, catalog: state.catalog }),
+    () => ({ state, ...actions, model: modelFor(state), catalog: state.catalog }),
     [state, actions],
   );
 

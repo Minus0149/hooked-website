@@ -4,6 +4,8 @@ import { useStore } from "../state/store";
 import type { Track } from "../types";
 import { art } from "../lib/art";
 import { IconHeart, IconFolder } from "./icons";
+import { Face } from "./faces";
+import { DAYPART_COPY, DAYPART_MOOD, daypartAt, moodsForHour } from "../data/mood";
 
 const stagger = {
   hidden: {},
@@ -41,8 +43,26 @@ export function HomeScreen({
   onOpenLibrary: (container: string) => void;
   onNewPlaylist: () => void;
 }) {
-  const { state, catalog } = useStore();
+  const { state, catalog, setMood } = useStore();
   const { liked, discoveries, playlists, boostGenres, queue } = state;
+
+  /**
+   * The faces, out in the open.
+   *
+   * The long press on a card is the fast way in and an invisible one — nothing
+   * on screen says it exists. This row is where the feature is actually
+   * discovered, and it answers a different question: not "what does this song
+   * feel like" but "what do I want", which is the question somebody standing on
+   * the home screen is already asking.
+   *
+   * Ordered by the hour, so at 1am the quiet faces come first. Ordering, not
+   * filtering — every face is always there, because the clock is a guess about
+   * a person and it is wrong for anyone working nights.
+   */
+  const hour = useMemo(() => {
+    const part = daypartAt();
+    return { part, moods: moodsForHour(), suggested: DAYPART_MOOD[part] };
+  }, []);
 
   const becauseRows = useMemo(() => {
     // the same song reaching the screen twice reads as a glitch — dedupe by
@@ -124,6 +144,51 @@ export function HomeScreen({
           <span /><span /><span /><span />
         </span>
       </motion.button>
+
+      <motion.section className="mood-section" variants={rise}>
+        <div className="section-head">
+          <h3 className="section-title">What&apos;s the mood?</h3>
+          {state.prefs.moodByTime !== "off" && (
+            <span className="section-count">{DAYPART_COPY[hour.part].nudge}</span>
+          )}
+        </div>
+        <div className="mood-row">
+          {hour.moods.map((mood) => {
+            const isOn = state.mood === mood.id;
+            const isSuggested =
+              state.prefs.moodByTime !== "off" && mood.id === hour.suggested;
+            return (
+              <button
+                key={mood.id}
+                type="button"
+                className={`mood-chip${isOn ? " is-on" : ""}${isSuggested ? " is-suggested" : ""}`}
+                style={{ ["--face" as string]: mood.accent }}
+                onClick={() => {
+                  setMood(mood.id);
+                  onDiscover();
+                }}
+                aria-label={`${mood.label} — ${mood.line}`}
+                title={mood.line}
+              >
+                <Face mood={mood.id} size={26} />
+                <span className="mood-chip-label">{mood.label}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            className={`mood-chip mood-chip-any${state.mood === null ? " is-on" : ""}`}
+            onClick={() => {
+              setMood(null);
+              onDiscover();
+            }}
+            title="No lens — the deck as it comes"
+          >
+            <span className="mood-any-mark" aria-hidden="true">∞</span>
+            <span className="mood-chip-label">Anything</span>
+          </button>
+        </div>
+      </motion.section>
 
       <motion.div className="section-head" variants={rise}>
         <h3 className="section-title">Your library</h3>

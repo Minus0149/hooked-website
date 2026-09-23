@@ -23,6 +23,7 @@ import type * as http from "../http.js";
 import type * as imports from "../imports.js";
 import type * as library from "../library.js";
 import type * as matching from "../matching.js";
+import type * as moods from "../moods.js";
 import type * as recommend from "../recommend.js";
 import type * as runtime from "../runtime.js";
 import type * as security from "../security.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   imports: typeof imports;
   library: typeof library;
   matching: typeof matching;
+  moods: typeof moods;
   recommend: typeof recommend;
   runtime: typeof runtime;
   security: typeof security;

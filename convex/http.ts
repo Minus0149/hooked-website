@@ -227,7 +227,7 @@ http.route({
     }
 
     type Result =
-      | { trackId: string; ok: true; written: number }
+      | { trackId: string; ok: true; written: number; energy: number | null }
       | { trackId: string; ok: false; reason?: string };
     const results: Result[] = [];
 
@@ -243,10 +243,11 @@ http.route({
           trackId,
           analyzedAt,
           windows: rec.windows as { startMs: number; durationMs: number }[],
+          energy: typeof rec.energy === "number" ? rec.energy : undefined,
         });
         results.push(
           result.ok
-            ? { trackId, ok: true, written: result.written }
+            ? { trackId, ok: true, written: result.written, energy: result.energy }
             : { trackId, ok: false, reason: result.reason },
         );
       } catch {

@@ -42,6 +42,21 @@ export const RUNTIME_DEFAULTS = {
   /** listeners who must link a pair before that pair is published */
   recsMinSupport: 2,
   /**
+   * How hard the face someone picked pulls on the deck, in places. Highest of
+   * the ranking terms by default, because it is the only one about *now*.
+   * Zero turns the mood lens into decoration without a deploy.
+   */
+  moodStrength: 16,
+  /** Listeners who must agree before a mood tag is published to everyone. */
+  moodMinVotes: 2,
+  /**
+   * How hard the model each device trains on its own listener's swipes may
+   * pull, in places. It is already damped by its own confidence, so this is
+   * the ceiling it reaches once there is real evidence — not what a first
+   * session gets.
+   */
+  modelStrength: 12,
+  /**
    * Apple chart feeds pulled per scheduled catalogue refresh. There are 100
    * of them, so 10 covers the lot every ten runs. Zero stops the job — the
    * off switch for the only thing in here that reaches outside on a timer.
@@ -63,6 +78,9 @@ const BOUNDS: Record<RuntimeKey, [number, number]> = {
   recsMinRaters: [2, 50],
   recsMinSupport: [1, 50],
   chartFeedsPerRun: [0, 100],
+  moodStrength: [0, 40],
+  moodMinVotes: [1, 50],
+  modelStrength: [0, 40],
 };
 
 export type RuntimeConfig = Record<RuntimeKey, number>;
@@ -109,6 +127,9 @@ export const set = mutation({
     recsMinRaters: v.optional(v.number()),
     recsMinSupport: v.optional(v.number()),
     chartFeedsPerRun: v.optional(v.number()),
+    moodStrength: v.optional(v.number()),
+    moodMinVotes: v.optional(v.number()),
+    modelStrength: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "config.manage");

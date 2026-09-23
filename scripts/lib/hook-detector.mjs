@@ -274,12 +274,58 @@ export function planHooks(profile, count = 3) {
   return picked.sort((a, b) => b.score - a.score);
 }
 
-/** Download + analyse in one call. Returns scored windows, or null. */
+const clamp01 = (v) => Math.min(Math.max(v, 0), 1);
+
+/**
+ * How activating this recording sounds, 0..1 — the arousal axis of the mood
+ * plane, measured rather than guessed from the genre string.
+ *
+ * Free, because both curves are already computed to find hooks. Two parts:
+ *
+ *   loudness — the median second in dBFS, mapped across the range real masters
+ *              actually occupy. Median, not mean, so one clipped transient or a
+ *              silent intro doesn't decide it.
+ *   rhythm   — onsets per second, counted as peaks in the onset envelope. The
+ *              envelope is normalised per track, so its heights don't compare
+ *              across songs, but its PEAK RATE does: that is tempo and density,
+ *              not volume, which is why it earns a term of its own.
+ *
+ * What this is NOT is valence. Nothing here can tell a joyful song from a
+ * devastating one at the same tempo — that needs a trained classifier
+ * (Essentia's mood models, or a decision model run offline over the catalogue).
+ * Mood inference treats a missing value as missing rather than as neutral.
+ */
+export function trackEnergy(profile) {
+  const rms = profile?.rms ?? [];
+  const env = profile?.onsets ?? [];
+  if (rms.length === 0 || env.length === 0) return null;
+
+  const sorted = [...rms].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] / 32768;
+  const db = 20 * Math.log10(Math.max(median, 1e-5));
+  const loud = clamp01((db + 34) / 26); // -34 dBFS reads as 0, -8 as 1
+
+  const fps = SR / HOP;
+  let peaks = 0;
+  for (let i = 1; i < env.length - 1; i++) {
+    if (env[i] > 0.18 && env[i] >= env[i - 1] && env[i] > env[i + 1]) peaks++;
+  }
+  const busy = clamp01(peaks / (env.length / fps) / 4.5);
+
+  return Math.round((0.6 * loud + 0.4 * busy) * 1000) / 1000;
+}
+
+/**
+ * Download + analyse in one call.
+ *
+ * Returns the scored windows and the track's measured energy together: one
+ * download, one decode, two answers. Null only when the audio never arrived.
+ */
 export async function analyzeUrl(url, fallbackMs = 30000) {
   const res = await fetch(url, { signal: AbortSignal.timeout(25000) });
   if (!res.ok) return null;
   const audio = Buffer.from(await res.arrayBuffer());
   const profile = await measureAudio(audio, fallbackMs);
   if (!profile) return null;
-  return planHooks(profile, 3);
+  return { windows: planHooks(profile, 3), energy: trackEnergy(profile) };
 }

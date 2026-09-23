@@ -2811,3 +2811,184 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 .profile-body .prefs-block { width: 100%; }
 .profile-body .prefs-hint { line-height: 1.5; }
 .profile-body .ob-skip { margin-top: 2px; }
+
+/* ------------------------------------------------------------------ moods
+   The faces: a lens on the deck, and a label on a song.
+
+   Every mood carries its own colour as --face, set inline from the taxonomy,
+   so one set of rules dresses six different states. Nothing here uses a colour
+   on its own to mean something — the picked face is also filled and also
+   labelled, because a ring in a hue is not a signal to everyone. */
+
+.mood-section { margin-bottom: 28px; }
+
+.mood-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  margin: 0 -20px;
+  padding: 2px 20px 6px;
+  scrollbar-width: none;
+}
+.mood-row::-webkit-scrollbar { display: none; }
+
+.mood-chip {
+  flex: 0 0 auto;
+  width: 78px;
+  min-height: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 6px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  transition: transform 0.15s ease, border-color 0.2s ease, color 0.2s ease,
+    background 0.2s ease;
+}
+.mood-chip:hover { color: var(--face, var(--accent)); }
+.mood-chip:active { transform: scale(0.95); }
+.mood-chip.is-suggested {
+  border-color: color-mix(in srgb, var(--face, var(--accent)) 55%, var(--line));
+  color: var(--face, var(--accent));
+}
+.mood-chip.is-on {
+  color: #0b0b10;
+  background: var(--face, var(--accent));
+  border-color: var(--face, var(--accent));
+}
+.mood-chip-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.mood-chip-any { color: var(--muted); }
+.mood-any-mark { font-size: 24px; line-height: 26px; font-weight: 300; }
+
+/* the lens, standing where the wordmark does while it's on */
+.mood-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12.5px;
+  color: #0b0b10;
+  background: var(--face, var(--accent));
+  border: 1px solid var(--face, var(--accent));
+  transition: transform 0.15s ease;
+}
+.mood-pill:active { transform: scale(0.96); }
+.mood-pill-x { font-size: 11px; opacity: 0.65; }
+
+/* how much of this listener the model thinks a card is */
+.card-match {
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid color-mix(in srgb, #0b0b10 35%, transparent);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+}
+
+/* ---- the fan -------------------------------------------------------- */
+
+.mood-backdrop { background: rgba(3, 3, 5, 0.72); }
+
+.moodfan {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 12px;
+  z-index: 25;
+  padding: 18px 12px calc(14px + env(safe-area-inset-bottom));
+  border-radius: 26px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+}
+.moodfan-head { text-align: center; margin-bottom: 4px; }
+.moodfan-q {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14.5px;
+}
+.moodfan-verdict { margin-top: 4px; font-size: 12px; color: var(--muted); }
+.moodfan-verdict b { color: var(--save); font-weight: 700; }
+.moodfan-why { color: var(--muted); }
+
+.moodfan-arc {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  /* the arc lifts the middle faces; the row needs the headroom back or the
+     top of the hump is clipped by the panel's own padding box */
+  padding: 26px 0 8px;
+  gap: 2px;
+}
+.moodface {
+  flex: 1 1 0;
+  min-width: 0;
+  /* 44px is the comfortable target; these are wider than that and the height
+     is what the audit measures */
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 2px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+.moodface:hover,
+.moodface:focus-visible { color: var(--face); background: var(--surface-2); }
+.moodface.is-active { color: var(--face); border-color: var(--face); }
+.moodface.is-picked {
+  color: #0b0b10;
+  background: var(--face);
+  border-color: var(--face);
+}
+.moodface-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.moodfan-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  padding: 0 6px;
+}
+.moodfan-line { font-size: 12px; color: var(--muted); }
+.moodfan-clear {
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.moodfan-clear:hover { border-color: var(--accent); color: var(--accent); }
+
+@media (max-width: 360px) {
+  .moodface-label { font-size: 9.5px; }
+  .moodfan-arc { gap: 0; }
+}
+
+/* The hour's suggestion sits beside the heading; give it a ceiling so a long
+   nudge can't push the title into wrapping, and let it wrap itself instead. */
+.mood-section .section-head { align-items: center; gap: 12px; }
+.mood-section .section-count { max-width: 52%; text-align: right; line-height: 1.35; }

@@ -12,6 +12,8 @@ import { authClient } from "./lib/auth-client";
 import { StoreProvider, useStore } from "./state/store";
 import { usePlayer } from "./audio/usePlayer";
 import { SwipeDeck } from "./components/SwipeDeck";
+import { coerceMood, DAYPART_MOOD, daypartAt, type MoodId } from "./data/mood";
+import { verdict as verdictFor } from "./data/predict";
 import { TopBar } from "./components/TopBar";
 import { BottomNav } from "./components/BottomNav";
 import { HomeScreen } from "./components/HomeScreen";
@@ -104,6 +106,7 @@ type ServerTrackWithHooks = ServerTrack & {
   hooks?: { id: string; startMs: number; durationMs: number; label?: string }[];
   markets?: string[];
   heat?: number;
+  energy?: number;
 };
 
 interface ServerLibrary {
@@ -118,6 +121,7 @@ const toLocal = (t: ServerTrackWithHooks): Track => ({
   hooks: t.hooks,
   markets: t.markets,
   heat: t.heat,
+  energy: t.energy,
   id: t.trackId,
   title: t.title,
   artist: t.artist,
@@ -148,6 +152,11 @@ function Shell() {
     hydrateRemote,
     applyCatalog,
     applyAffinity,
+    setMood,
+    applyCrowdMoods,
+    applyMoodPicks,
+    setStrengths,
+    model,
   } = useStore();
   // latest state without re-creating callbacks that read it (the debounced
   // prefs push below reads state.prefs at fire time, not capture time)
@@ -381,6 +390,7 @@ function Shell() {
             adsOptOut: merged.adsOptOut,
             adFrequency: merged.adFrequency,
             adCadence: merged.adCadence ?? undefined,
+            moodByTime: merged.moodByTime,
             allowRepeats: merged.allowRepeats,
             includeBuried: merged.includeBuried,
             includeBlockedArtists: merged.includeBlockedArtists,
@@ -458,6 +468,114 @@ function Shell() {
       live = false;
     };
   }, [convex, sessionUid, applyAffinity]);
+
+  /**
+   * The two dials the client-side signals answer to.
+   *
+   * Subscribed rather than fetched, because that subscription IS the push
+   * mechanism: an admin moving a slider re-fires this everywhere and the deck
+   * changes without a deploy. It is one tiny row, identical for everybody, so
+   * it caches — the cost argument that applies to `forMe` does not apply here.
+   * Offline it never answers and the client defaults stand.
+   */
+  const runtime = useQuery(api.runtime.get);
+  useEffect(() => {
+    if (!runtime) return;
+    setStrengths(runtime.moodStrength, runtime.modelStrength);
+  }, [runtime, setStrengths]);
+
+  /**
+   * What the catalogue's listeners have said songs feel like.
+   *
+   * One shot, not a subscription, for the same reason as affinity: a stranger
+   * pressing a face three time zones away is not a reason to re-rank the card
+   * under this listener's thumb. Their own labels come with it so the face they
+   * picked is still lit when the song comes round on another device.
+   */
+  const crowdFetched = useRef<string | null>(null);
+  useEffect(() => {
+    const key = sessionUid ?? "guest";
+    if (crowdFetched.current === key) return;
+    crowdFetched.current = key;
+    let live = true;
+    void convex
+      .query(api.moods.crowd, {})
+      .then((rows) => {
+        if (!live || !rows) return;
+        const crowd: Record<string, Partial<Record<MoodId, number>>> = {};
+        for (const row of rows) {
+          const counts: Partial<Record<MoodId, number>> = {};
+          for (const c of row.counts) {
+            const mood = coerceMood(c.mood);
+            if (mood) counts[mood] = c.n;
+          }
+          if (Object.keys(counts).length > 0) crowd[row.trackId] = counts;
+        }
+        applyCrowdMoods(crowd);
+      })
+      .catch(() => undefined);
+    if (sessionUid) {
+      void convex
+        .query(api.moods.mine, {})
+        .then((rows) => {
+          if (!live || !rows) return;
+          const picks: Record<string, MoodId> = {};
+          for (const row of rows) {
+            const mood = coerceMood(row.mood);
+            if (mood) picks[row.trackId] = mood;
+          }
+          applyMoodPicks(picks);
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      live = false;
+    };
+  }, [convex, sessionUid, applyCrowdMoods, applyMoodPicks]);
+
+  /**
+   * The clock, when they asked it to decide rather than to offer.
+   *
+   * Applied once per block per session, tracked by a ref: without that, a
+   * listener who clears the mood would have it put straight back by this
+   * effect, which is an app arguing with the person using it. Cleared stays
+   * cleared until the hour genuinely moves on.
+   */
+  const [daypart, setDaypart] = useState(() => daypartAt());
+  useEffect(() => {
+    const id = window.setInterval(() => setDaypart(daypartAt()), 5 * 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const autoApplied = useRef<string | null>(null);
+  useEffect(() => {
+    if (state.prefs.moodByTime !== "always") return;
+    if (autoApplied.current === daypart) return;
+    autoApplied.current = daypart;
+    setMood(DAYPART_MOOD[daypart]);
+  }, [daypart, state.prefs.moodByTime, setMood]);
+
+  const voteMood = useMutation(api.moods.vote);
+  /**
+   * A face was pressed on a card: steer this deck, and tell the catalogue.
+   *
+   * The local half is instant and unconditional — the ranking is the visible
+   * answer to the gesture, and it must not wait for, or depend on, a network.
+   * The vote is best-effort: a guest has no profile to attach it to, and a
+   * failed vote is a lost data point, not a broken interaction.
+   */
+  const pickMood = useCallback(
+    (mood: MoodId, trackId: string) => {
+      setMood(mood, trackId);
+      void voteMood({ trackId, mood }).catch(() => undefined);
+    },
+    [setMood, voteMood],
+  );
+
+  const deckTrack = state.queue[0] ?? null;
+  const deckVerdict = useMemo(
+    () => (deckTrack ? verdictFor(model, deckTrack, state.crowdMoods) : null),
+    [model, deckTrack, state.crowdMoods],
+  );
 
   useEffect(() => {
     // An empty server catalogue is a real state (admin hid everything, or the
@@ -812,6 +930,8 @@ function Shell() {
                 onBack={handleBack}
                 saveTarget={state.saveTarget}
                 onOpenSettings={() => setSheetOpen(true)}
+                mood={state.mood}
+                onClearMood={() => setMood(null)}
               />
               <SwipeDeck
                 tracks={state.queue.slice(0, 3)}
@@ -830,6 +950,11 @@ function Shell() {
                 gateSwipe={gateSwipe}
                 sensitivity={state.prefs.swipeSensitivity}
                 motionPref={state.prefs.motion}
+                activeMood={state.mood}
+                pickedMood={deckTrack ? state.moodPicks[deckTrack.id] ?? null : null}
+                verdict={deckVerdict}
+                onPickMood={pickMood}
+                onClearMood={() => setMood(null)}
               />
               {/* house ad between swipes — music keeps playing under it */}
               <AnimatePresence>

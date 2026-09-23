@@ -17,6 +17,14 @@ import {
   type MotionLevel,
 } from "../data/prefs";
 import { ADVENTURE, availableTasteOptions, type Adventure, type TastePrefs } from "../data/taste";
+import {
+  DAYPART_COPY,
+  DAYPART_MOOD,
+  daypartAt,
+  moodById,
+  MOOD_BY_TIME,
+  type MoodByTime,
+} from "../data/mood";
 import { IconBack, IconCheck, IconUser } from "./icons";
 
 const BETA_URL = import.meta.env.VITE_BETA_URL ?? "https://hookedcue.com/beta";
@@ -313,6 +321,22 @@ export function SettingsScreen({
         </span>
         <span className="settings-row-value">change</span>
       </button>
+
+      <Group>Time of day</Group>
+      <div className="prefs-block">
+        <span className="prefs-label">Mood by the clock</span>
+        <Segmented<MoodByTime>
+          options={MOOD_BY_TIME}
+          value={state.prefs.moodByTime}
+          onChange={(moodByTime) => onSetPrefs({ moodByTime })}
+        />
+        <span className="prefs-hint">
+          {MOOD_BY_TIME.find((o) => o.id === state.prefs.moodByTime)?.copy}
+          {" — right now that's "}
+          {moodById(DAYPART_MOOD[daypartAt()])?.label.toLowerCase()}
+          {`, because it's ${DAYPART_COPY[daypartAt()].label}`}
+        </span>
+      </div>
     </PageShell>
   );
 

@@ -1,0 +1,384 @@
+/**
+ * Mood: the dimension the deck was missing.
+ *
+ * Everything that ranked the deck until now answers "what kind of music is
+ * this person into" — language, genre, how played a song is, who else reacted
+ * to it. None of it answers "what do they want *right now*", and those are
+ * different questions with different answers. The same listener wants a
+ * different song at 2pm on a Friday than at 1am on a Tuesday, and no amount of
+ * knowing their taste tells you which one it is.
+ *
+ * Moods are laid out on Russell's plane, the two axes affective research has
+ * used for forty years:
+ *
+ *   energy  (arousal)  — how activating the song is. Measurable from audio.
+ *   valence (pleasure) — how happy it sounds. Not measurable from audio
+ *                        without a trained classifier, so it is inferred here.
+ *
+ * Two axes, not a list of words, because the axes are what make the arithmetic
+ * work: "close to what they asked for" is a distance, and a time of day is a
+ * point rather than a category. The six faces are the corners of that plane a
+ * person can actually name.
+ *
+ * Grounded, not invented:
+ *   - Self-reported mood beats no mood. A 2026 study conditioning a ranker on
+ *     a mood the listener picked from a small set of faces measured 3.59 vs
+ *     2.67 mean rating against an unconditioned baseline (p ~ 0.01), with the
+ *     largest gains on the low-arousal moods — which is exactly the ask here.
+ *   - Listening is diurnal. Post-midnight listening skews to LOW AROUSAL (and,
+ *     notably, not to low valence — late-night is quiet, not miserable), while
+ *     loudness peaks around noon. That is the shape of DAYPART_ENERGY below,
+ *     and it is why the late-night suggestion is "sleepy" and not "sad".
+ *
+ * Mirrored in mobile/src/data/mood.ts. Two clients that disagree about what
+ * "party" means are two different products.
+ */
+
+import { flattenGenre, GENRES } from "./taste";
+
+export type MoodId = "party" | "hyped" | "sunny" | "chill" | "tender" | "sleepy";
+
+export interface Mood {
+  id: MoodId;
+  /** what the face is called, out loud */
+  label: string;
+  /** one line, shown under the label — the promise, not the definition */
+  line: string;
+  /** Russell's plane, both 0..1 */
+  energy: number;
+  valence: number;
+  /**
+   * Genre substrings that ARE this mood, matched letters-only so "hip hop",
+   * "hip-hop/rap" and "Hip-Hop" are one thing. Overlap between moods is
+   * deliberate: a ghazal is tender and nearly sleepy, and moodFit grades
+   * rather than decides.
+   */
+  match: string[];
+  /** the face's own colour, used for the fan and the active chip */
+  accent: string;
+}
+
+/**
+ * Six, ordered by energy, loudest first.
+ *
+ * The fan draws them along an arc in this order, so the gesture has a
+ * direction a hand can learn: up the arc is louder, down it is quieter. Never
+ * reorder this for looks — the muscle memory is the feature, and a test holds
+ * the order to the energy values so the two can't drift apart.
+ */
+export const MOODS: Mood[] = [
+  {
+    id: "hyped",
+    label: "Hyped",
+    line: "shoulders back, volume up",
+    energy: 0.95,
+    valence: 0.5,
+    match: [
+      "hip hop", "hip-hop", "rap", "drill", "trap", "phonk", "grime",
+      "metal", "punk", "hardcore", "rock", "classic rock", "alt rock",
+      "desi hip hop", "sertanejo",
+    ],
+    accent: "#ff7a29",
+  },
+  {
+    id: "party",
+    label: "Party",
+    line: "loud room, no thinking",
+    energy: 0.92,
+    valence: 0.82,
+    match: [
+      "dance", "house", "techno", "edm", "electronic", "club", "disco",
+      "reggaeton", "bhangra", "punjabi", "afrobeats", "afro house",
+      "funk carioca", "baile", "amapiano", "garage", "trance",
+    ],
+    accent: "#ff4d8d",
+  },
+  {
+    id: "sunny",
+    label: "Sunny",
+    line: "good mood, keep it there",
+    energy: 0.62,
+    valence: 0.9,
+    match: [
+      "pop", "alt pop", "k-pop", "kpop", "latin pop", "indian pop",
+      "bollywood", "kollywood", "funk", "soul", "motown", "reggae",
+      "afropop", "mandopop", "j-pop", "synthpop",
+    ],
+    accent: "#ffd23f",
+  },
+  {
+    id: "chill",
+    label: "Chill",
+    line: "easy, warm, in the background",
+    energy: 0.35,
+    valence: 0.68,
+    match: [
+      "indie folk", "folk", "acoustic", "lo-fi", "lofi", "downtempo",
+      "chillout", "r&b", "rnb", "bossa", "jazz", "singer/songwriter",
+      "psych pop", "indie", "alternative", "americana", "soft rock",
+    ],
+    accent: "#4fd1c5",
+  },
+  {
+    id: "tender",
+    label: "Tender",
+    line: "the sad ones, on purpose",
+    energy: 0.28,
+    valence: 0.26,
+    match: [
+      "ghazal", "ghazals", "sufi", "qawwali", "ballad", "blues", "sad",
+      "adult contemporary", "arabic", "egyptian pop", "soundtrack",
+      "singer/songwriter", "gospel", "fado",
+    ],
+    accent: "#8b7cff",
+  },
+  {
+    id: "sleepy",
+    label: "Sleepy",
+    line: "lights off, volume down",
+    energy: 0.14,
+    valence: 0.5,
+    match: [
+      "ambient", "instrumental", "classical", "indian classical",
+      "carnatic", "hindustani", "devotional", "bhajan", "meditation",
+      "new age", "piano", "sleep", "instrumental hip hop", "drone",
+    ],
+    accent: "#5b8def",
+  },
+];
+
+export const MOOD_IDS = MOODS.map((m) => m.id);
+
+export const moodById = (id: MoodId | null | undefined): Mood | null =>
+  MOODS.find((m) => m.id === id) ?? null;
+
+/** Narrow anything persisted, typed by hand, or sent by a server. */
+export function coerceMood(raw: unknown): MoodId | null {
+  return typeof raw === "string" && MOOD_IDS.includes(raw as MoodId)
+    ? (raw as MoodId)
+    : null;
+}
+
+/* ------------------------------------------------------------------ crowd */
+
+/**
+ * What other listeners said a track feels like: track id -> mood -> votes.
+ *
+ * Sparse and small on purpose. It arrives from `mood.crowd`, which only
+ * returns moods several separate people agreed on, so most tracks are absent
+ * and a young catalogue has none of this at all. Absent means "nobody has
+ * said", which is a different thing from "it is not that mood".
+ */
+export type CrowdMoods = Record<string, Partial<Record<MoodId, number>>>;
+
+/** Votes needed before a crowd tag is taken as seriously as a genre match. */
+const CROWD_CONFIDENT = 4;
+
+/* -------------------------------------------------------------------- fit */
+
+export interface MoodTrack {
+  genre: string;
+  /**
+   * Measured arousal, 0..1, written by the offline analyser from the same
+   * loudness and onset curves it already computes to find hooks (see
+   * scripts/lib/hook-detector.mjs). Absent for anything not yet analysed,
+   * which is most of a fresh catalogue.
+   */
+  energy?: number;
+}
+
+/**
+ * How well a track answers a mood, 0..1.
+ *
+ * Three signals, weighted by how much each deserves to be trusted, and
+ * averaged over only the ones that exist for this track. A weighted average
+ * rather than a sum, so a track with no crowd votes and no analysis isn't
+ * penalised for what we failed to measure — it is simply judged on its genre.
+ *
+ * The order of trust is the point:
+ *   people who listened to it (1.6) > how it is filed (1.0) > how loud it is (0.7)
+ *
+ * A crowd tag outranks a genre string because genre is a retail category and
+ * mood is an experience: Apple files half of Bollywood under one word, and
+ * that word covers both a wedding banger and a funeral. Loudness comes last
+ * because it is real but blunt — plenty of quiet songs are devastating.
+ */
+export function moodFit(
+  track: MoodTrack,
+  mood: Mood,
+  crowd?: Partial<Record<MoodId, number>>,
+): number {
+  let weight = 0;
+  let total = 0;
+
+  if (crowd) {
+    const votes = MOOD_IDS.reduce((n, id) => n + (crowd[id] ?? 0), 0);
+    if (votes > 0) {
+      // share of the vote, damped while the sample is tiny: two people calling
+      // something a party is a hint, ten is a fact
+      const share = (crowd[mood.id] ?? 0) / votes;
+      const w = 1.6 * Math.min(votes / CROWD_CONFIDENT, 1);
+      total += w * share;
+      weight += w;
+    }
+  }
+
+  const genre = flattenGenre(track.genre ?? "");
+  if (genre.length > 0) {
+    const hit = mood.match.some((m) => genre.includes(flattenGenre(m)));
+    total += 1.0 * (hit ? 1 : 0);
+    weight += 1.0;
+  }
+
+  if (typeof track.energy === "number" && Number.isFinite(track.energy)) {
+    const energy = Math.min(Math.max(track.energy, 0), 1);
+    // distance on one axis; 1 when it lands on the mood, 0 at the far end
+    total += 0.7 * (1 - Math.abs(energy - mood.energy));
+    weight += 0.7;
+  }
+
+  return weight === 0 ? 0 : total / weight;
+}
+
+/**
+ * The same thing for a catalogue track and the active lens, looking the crowd's
+ * votes up by id. This is the form the ranker calls.
+ */
+export function moodFitFor(
+  track: MoodTrack & { id: string },
+  id: MoodId | null,
+  crowd?: CrowdMoods,
+): number {
+  const mood = moodById(id);
+  if (!mood) return 0;
+  return moodFit(track, mood, crowd?.[track.id]);
+}
+
+/**
+ * Which mood a track reads as, strongest first. Used to describe a song ("this
+ * one's tender") and to feed the taste model a mood feature.
+ */
+export function moodsOf(
+  track: MoodTrack,
+  crowd?: Partial<Record<MoodId, number>>,
+  floor = 0.5,
+): MoodId[] {
+  return MOODS.map((m) => ({ id: m.id, fit: moodFit(track, m, crowd) }))
+    .filter((m) => m.fit >= floor)
+    .sort((a, b) => b.fit - a.fit)
+    .map((m) => m.id);
+}
+
+/* ---------------------------------------------------------------- daypart */
+
+export type Daypart = "lateNight" | "morning" | "afternoon" | "evening" | "night";
+
+/**
+ * Five blocks. The literature usually cuts the day into four; the fifth is the
+ * one that matters most here, because "1am" and "10pm" are not the same
+ * listening session and India's late-night block is where the quiet music is.
+ *
+ * Boundaries are half-open [from, to) on the local clock. Local is the whole
+ * point — a daypart computed on the server would be the VPS's opinion of what
+ * time it is, which is a different continent's evening.
+ */
+const BLOCKS: { part: Daypart; from: number; to: number }[] = [
+  { part: "lateNight", from: 0, to: 5 },
+  { part: "morning", from: 5, to: 12 },
+  { part: "afternoon", from: 12, to: 17 },
+  { part: "evening", from: 17, to: 22 },
+  { part: "night", from: 22, to: 24 },
+];
+
+export function daypartAt(when: Date = new Date()): Daypart {
+  const h = when.getHours();
+  return BLOCKS.find((b) => h >= b.from && h < b.to)?.part ?? "morning";
+}
+
+/**
+ * The arousal curve of a day, which is the part that is actually evidenced:
+ * loudness peaks around midday, and post-midnight listening drops to low
+ * arousal without dropping to low valence.
+ */
+export const DAYPART_ENERGY: Record<Daypart, number> = {
+  lateNight: 0.18,
+  morning: 0.55,
+  afternoon: 0.9,
+  evening: 0.88,
+  night: 0.35,
+};
+
+/**
+ * The face the app offers unprompted, per block.
+ *
+ * "Suggest" is the operative word — see MOOD_BY_TIME. An app that silently
+ * filtered the deck by the clock would read as broken ("where did my music
+ * go"), and would be wrong for everyone who works nights.
+ */
+export const DAYPART_MOOD: Record<Daypart, MoodId> = {
+  lateNight: "sleepy",
+  morning: "sunny",
+  afternoon: "hyped",
+  evening: "party",
+  night: "tender",
+};
+
+export const DAYPART_COPY: Record<Daypart, { label: string; nudge: string }> = {
+  lateNight: { label: "late", nudge: "It's late. Something quiet?" },
+  morning: { label: "morning", nudge: "Morning. Start it bright?" },
+  afternoon: { label: "afternoon", nudge: "Afternoon slump. Something loud?" },
+  evening: { label: "evening", nudge: "Evening. Turn it up?" },
+  night: { label: "night", nudge: "Winding down. The slow ones?" },
+};
+
+/**
+ * Moods ordered by how well they suit the hour: nearest the block's energy
+ * first. The suggested face still leads — this is what fills the row behind it,
+ * so at 1am the quiet faces come before the loud ones without hiding any.
+ */
+export function moodsForHour(when: Date = new Date()): Mood[] {
+  const part = daypartAt(when);
+  const target = DAYPART_ENERGY[part];
+  const lead = DAYPART_MOOD[part];
+  return [...MOODS].sort((a, b) => {
+    if (a.id === lead) return -1;
+    if (b.id === lead) return 1;
+    return Math.abs(a.energy - target) - Math.abs(b.energy - target);
+  });
+}
+
+/** How the clock is allowed to touch the deck. A preference, default "suggest". */
+export type MoodByTime = "off" | "suggest" | "always";
+
+export const MOOD_BY_TIME: { id: MoodByTime; label: string; copy: string }[] = [
+  { id: "off", label: "Off", copy: "The clock never touches the deck" },
+  {
+    id: "suggest",
+    label: "Suggest",
+    copy: "Offer a mood for the hour; tap to take it",
+  },
+  {
+    id: "always",
+    label: "Always on",
+    copy: "Lean the deck toward the hour without asking",
+  },
+];
+
+export function coerceMoodByTime(raw: unknown): MoodByTime {
+  return raw === "off" || raw === "always" || raw === "suggest" ? raw : "suggest";
+}
+
+/* ---------------------------------------------------------------- helpers */
+
+/**
+ * The genre buckets that overlap a mood, for copy like "party — dance, house".
+ * Reads the same GENRES the onboarding offers, so the two surfaces can't
+ * describe the catalogue differently.
+ */
+export function bucketsForMood(mood: Mood): string[] {
+  return GENRES.filter((g) =>
+    g.match.some((gm) =>
+      mood.match.some((mm) => flattenGenre(mm).includes(flattenGenre(gm))),
+    ),
+  ).map((g) => g.label);
+}

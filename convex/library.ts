@@ -521,6 +521,7 @@ export const setPrefs = mutation({
     adCadence: v.optional(
       v.object({ unit: v.string(), value: v.number() }),
     ),
+    moodByTime: v.optional(v.string()),
     allowRepeats: v.boolean(),
     includeBuried: v.boolean(),
     includeBlockedArtists: v.boolean(),
@@ -582,6 +583,9 @@ export const setPrefs = mutation({
         adFrequency,
         ...(adEveryNSwipes !== undefined ? { adEveryNSwipes } : {}),
         ...(adCadence !== undefined ? { adCadence } : {}),
+        moodByTime: ["off", "suggest", "always"].includes(args.moodByTime ?? "")
+          ? (args.moodByTime as string)
+          : "suggest",
         allowRepeats: args.allowRepeats === true,
         includeBuried: args.includeBuried === true,
         includeBlockedArtists: args.includeBlockedArtists === true,

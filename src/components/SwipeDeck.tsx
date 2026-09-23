@@ -7,6 +7,9 @@ import {
   type PanInfo,
 } from "motion/react";
 import type { SwipeDir, Track } from "../types";
+import type { MoodId } from "../data/mood";
+import type { Verdict } from "../data/predict";
+import { MoodFan } from "./MoodFan";
 import { gesture } from "../design/tokens";
 import { useDialog } from "../lib/dialog";
 import { DiscFX, type SaveFxData, type SaveRelease } from "./DiscFX";
@@ -39,6 +42,14 @@ interface Props {
   sensitivity?: number;
   // gates the save vinyl: off skips it, reduced downgrades cinematic→fast
   motionPref?: "full" | "reduced" | "off";
+  /** the lens currently on the deck */
+  activeMood: MoodId | null;
+  /** what this listener already said the song on deck feels like */
+  pickedMood: MoodId | null;
+  /** the local model's read on the song on deck, or null before it has one */
+  verdict: Verdict | null;
+  onPickMood: (mood: MoodId, trackId: string) => void;
+  onClearMood: () => void;
 }
 
 export function resolveDir(info: PanInfo, sensitivity = 1): SwipeDir | null {
@@ -279,6 +290,8 @@ function TopCard({
   onSeek,
   onSwipe,
   sensitivity = 1,
+  onLongPress,
+  verdict,
 }: {
   track: Track;
   playing: boolean;
@@ -292,10 +305,29 @@ function TopCard({
   onSwipe: (dir: SwipeDir, release?: SaveRelease) => void;
   /** scales the drag distance a swipe needs (Settings → Gestures) */
   sensitivity?: number;
+  onLongPress: () => void;
+  verdict: Verdict | null;
 }) {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
   const rotate = useTransform(x, [-220, 220], [-13, 13]);
+
+  /**
+   * Hold the card to open the faces.
+   *
+   * The card is also the drag surface, so the two have to be told apart, and
+   * the honest difference is movement: a swipe moves, a hold doesn't. Ten
+   * pixels of slack covers the wobble in a real thumb without letting a slow
+   * drag turn into a mood pick. Cancelled on release, on leaving, and on the
+   * browser stealing the pointer for a scroll.
+   */
+  const hold = useRef<{ timer?: number; x: number; y: number }>({ x: 0, y: 0 });
+  const cancelHold = useCallback(() => {
+    window.clearTimeout(hold.current.timer);
+    hold.current.timer = undefined;
+  }, []);
+
+  useEffect(() => cancelHold, [cancelHold]);
 
   const upOpacity = useTransform(y, [-110, -36], [1, 0]);
   const downOpacity = useTransform(y, [36, 110], [0, 1]);
@@ -310,6 +342,22 @@ function TopCard({
       dragSnapToOrigin
       dragElastic={0.7}
       whileDrag={{ scale: 1.02 }}
+      onPointerDown={(e) => {
+        hold.current.x = e.clientX;
+        hold.current.y = e.clientY;
+        window.clearTimeout(hold.current.timer);
+        hold.current.timer = window.setTimeout(onLongPress, 420);
+      }}
+      onPointerMove={(e) => {
+        if (hold.current.timer === undefined) return;
+        const moved =
+          Math.abs(e.clientX - hold.current.x) + Math.abs(e.clientY - hold.current.y);
+        if (moved > 10) cancelHold();
+      }}
+      onPointerUp={cancelHold}
+      onPointerCancel={cancelHold}
+      onPointerLeave={cancelHold}
+      onDragStart={cancelHold}
       onDragEnd={(_, info) => {
         const dir = resolveDir(info, sensitivity);
         if (dir)
@@ -355,7 +403,21 @@ function TopCard({
       </motion.div>
 
       <div className="card-meta">
-        <span className="card-genre">{track.genre}</span>
+        <span className="card-genre">
+          {track.genre}
+          {verdict?.worthShowing && verdict.chance >= 0.7 && (
+            // Only when the model has both earned an opinion and formed a
+            // strong one. A badge on every card would be wallpaper, and a
+            // badge on a coin-flip would be a lie.
+            <span className="card-match" title={
+              verdict.reasons.length > 0
+                ? `because: ${verdict.reasons.join(", ")}`
+                : "based on what you've kept"
+            }>
+              {Math.round(verdict.chance * 100)}% you
+            </span>
+          )}
+        </span>
         <h2 className="card-title">{track.title}</h2>
         <p className="card-artist">
           <span className={`eq ${playing ? "" : "paused"}`}>
@@ -386,6 +448,11 @@ export function SwipeDeck({
   gateSwipe,
   sensitivity = 1,
   motionPref = "full",
+  activeMood,
+  pickedMood,
+  verdict,
+  onPickMood,
+  onClearMood,
 }: Props) {
   const [onDeck, next, nextNext] = tracks;
   const lastDir = useRef<SwipeDir>("up");
@@ -396,6 +463,7 @@ export function SwipeDeck({
   const [fx, setFx] = useState<FX | null>(null);
   const [saveFx, setSaveFx] = useState<SaveFxData | null>(null);
   const [fullSongOpen, setFullSongOpen] = useState(false);
+  const [moodsOpen, setMoodsOpen] = useState(false);
   const fxTimer = useRef<number | undefined>(undefined);
   const saveCount = useRef(0);
   const longPress = useRef<{ timer?: number; fired: boolean }>({ fired: false });
@@ -405,6 +473,11 @@ export function SwipeDeck({
   useEffect(() => {
     if (backToken > 0) setSaveFx(null);
   }, [backToken]);
+
+  // The fan labels one specific song. If the card moves on — a swipe, a revert,
+  // an auto-advance — the question it is asking is about a card nobody is
+  // looking at any more, so it closes rather than quietly retargeting.
+  useEffect(() => setMoodsOpen(false), [onDeck?.id]);
 
   useEffect(() => {
     const measure = () => {
@@ -466,6 +539,10 @@ export function SwipeDeck({
       } else if (e.key === " ") {
         e.preventDefault();
         onToggle();
+      } else if (e.key === "m" || e.key === "M") {
+        // the long press, for anyone without one
+        e.preventDefault();
+        setMoodsOpen((open) => !open);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -521,6 +598,8 @@ export function SwipeDeck({
               onSeek={onSeek}
               onSwipe={handleSwipe}
               sensitivity={sensitivity}
+              onLongPress={() => setMoodsOpen(true)}
+              verdict={verdict}
             />
           )}
         </AnimatePresence>
@@ -623,6 +702,27 @@ export function SwipeDeck({
       <AnimatePresence>
         {fullSongOpen && onDeck && (
           <FullSongSheet track={onDeck} onClose={() => setFullSongOpen(false)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {moodsOpen && onDeck && (
+          <MoodFan
+            title={onDeck.title}
+            picked={pickedMood}
+            active={activeMood}
+            verdict={verdict}
+            motionPref={motionPref}
+            onPick={(mood) => {
+              onPickMood(mood, onDeck.id);
+              setMoodsOpen(false);
+            }}
+            onClear={() => {
+              onClearMood();
+              setMoodsOpen(false);
+            }}
+            onClose={() => setMoodsOpen(false)}
+          />
         )}
       </AnimatePresence>
     </div>

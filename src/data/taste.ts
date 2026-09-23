@@ -95,7 +95,11 @@ export const EMPTY_TASTE: TastePrefs = {
  * "hip hop", Apple's charts say "hip-hop/rap", and a substring test between
  * those two finds nothing. Comparing letters only makes them the same thing.
  */
-const flatten = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+export const flattenGenre = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** Local alias — this file reads better with the short name. */
+const flatten = flattenGenre;
 
 export function tasteScore(
   track: { genre: string; markets?: string[]; heat?: number },

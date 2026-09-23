@@ -52,13 +52,14 @@ const results = [];
 
 for (const t of tracks) {
   try {
-    const windows = await analyzeUrl(t.previewUrl, t.durationMs || 30000);
-    if (windows) {
+    const measured = await analyzeUrl(t.previewUrl, t.durationMs || 30000);
+    if (measured) {
       scored++;
       results.push({
         trackId: t.trackId,
         analyzedAt: new Date().toISOString(),
-        windows: windows.map((w) => ({ startMs: w.startMs, durationMs: w.durationMs })),
+        windows: measured.windows.map((w) => ({ startMs: w.startMs, durationMs: w.durationMs })),
+        energy: measured.energy,
       });
     } else {
       // mark so we don't retry a dead preview forever
@@ -85,7 +86,10 @@ for (let i = 0; i < results.length; i += 25) {
   }
   const out = await post.json();
   for (const r of out.results ?? []) {
-    if (r.ok) console.log(`  ✓ ${r.trackId}: ${r.written} hook(s)`);
+    if (r.ok) {
+      const nrg = r.energy === null || r.energy === undefined ? "" : `, energy ${r.energy}`;
+      console.log(`  ✓ ${r.trackId}: ${r.written} hook(s)${nrg}`);
+    }
   }
 }
 

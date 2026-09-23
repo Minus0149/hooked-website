@@ -57,8 +57,10 @@ export const ingestHooks = internalMutation({
         durationMs: v.number(),
       }),
     ),
+    /** measured arousal 0..1; absent when the preview couldn't be decoded */
+    energy: v.optional(v.union(v.number(), v.null())),
   },
-  handler: async (ctx, { trackId, analyzedAt, windows }) => {
+  handler: async (ctx, { trackId, analyzedAt, windows, energy }) => {
     const track = await ctx.db
       .query("tracks")
       .withIndex("by_trackId", (q) => q.eq("trackId", cleanText(trackId, 120)))
@@ -68,6 +70,16 @@ export const ingestHooks = internalMutation({
     // bounded ISO timestamp — the analyzer is trusted but not infallible
     const stamp = cleanText(analyzedAt, 40) || new Date().toISOString();
 
+    // Written before the window checks below, deliberately: if the audio
+    // decoded then the measurement is real, and mood inference wants it whether
+    // or not any window survived the filters. Losing it to an unrelated early
+    // return would mean re-downloading the whole preview to get it back.
+    const safeEnergy =
+      typeof energy === "number" && Number.isFinite(energy)
+        ? Math.min(Math.max(energy, 0), 1)
+        : undefined;
+    if (safeEnergy !== undefined) await ctx.db.patch(track._id, { energy: safeEnergy });
+
     const safeWindows = windows
       .slice(0, MAX_WINDOWS)
       .map((w) => ({
@@ -75,7 +87,9 @@ export const ingestHooks = internalMutation({
         durationMs: Math.min(Math.max(Math.floor(w.durationMs), 5_000), 45_000),
       }))
       .filter((w) => w.startMs + w.durationMs <= (track.audioDurationMs ?? track.durationMs ?? 60_000) + 2_000);
-    if (safeWindows.length === 0) return { ok: false as const, reason: "no usable windows" };
+    if (safeWindows.length === 0) {
+      return { ok: false as const, reason: "no usable windows" };
+    }
 
     const existing = await ctx.db
       .query("hooks")
@@ -101,7 +115,11 @@ export const ingestHooks = internalMutation({
     }
 
     await ctx.db.patch(track._id, { analyzedAt: stamp });
-    return { ok: true as const, written: safeWindows.length };
+    return {
+      ok: true as const,
+      written: safeWindows.length,
+      energy: safeEnergy ?? null,
+    };
   },
 });
 
