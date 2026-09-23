@@ -90,6 +90,7 @@ export const MOODS: Mood[] = [
       "dance", "house", "techno", "edm", "electronic", "club", "disco",
       "reggaeton", "bhangra", "punjabi", "afrobeats", "afro house",
       "funk carioca", "baile", "amapiano", "garage", "trance",
+      "calypso", "soca",
     ],
     accent: "#ff4d8d",
   },
@@ -103,6 +104,7 @@ export const MOODS: Mood[] = [
       "pop", "alt pop", "k-pop", "kpop", "latin pop", "indian pop",
       "bollywood", "kollywood", "funk", "soul", "motown", "reggae",
       "afropop", "mandopop", "j-pop", "synthpop",
+      "tamil", "telugu", "malayalam", "regional indian", "country", "worldbeat",
     ],
     accent: "#ffd23f",
   },
@@ -116,6 +118,7 @@ export const MOODS: Mood[] = [
       "indie folk", "folk", "acoustic", "lo-fi", "lofi", "downtempo",
       "chillout", "r&b", "rnb", "bossa", "jazz", "singer/songwriter",
       "psych pop", "indie", "alternative", "americana", "soft rock",
+      "country", "celtic",
     ],
     accent: "#4fd1c5",
   },
@@ -129,6 +132,7 @@ export const MOODS: Mood[] = [
       "ghazal", "ghazals", "sufi", "qawwali", "ballad", "blues", "sad",
       "adult contemporary", "arabic", "egyptian pop", "soundtrack",
       "singer/songwriter", "gospel", "fado",
+      "original score",
     ],
     accent: "#8b7cff",
   },
@@ -381,4 +385,45 @@ export function bucketsForMood(mood: Mood): string[] {
       mood.match.some((mm) => flattenGenre(mm).includes(flattenGenre(gm))),
     ),
   ).map((g) => g.label);
+}
+
+/* ---------------------------------------------------------------- the wheel */
+
+/**
+ * Where each face sits on the emote wheel, and which one a push lands on.
+ *
+ * This is product judgement, not rendering: "up is hyped, down-left is tender"
+ * has to be the same sentence on both clients or the gesture means two things.
+ * Kept here, mirrored, rather than in either client's wheel component.
+ *
+ * Face i is centred at -90 + i * 60 degrees — index 0 straight up, then
+ * clockwise in MOODS order, so the loudest faces are the top of the wheel and
+ * the quietest are the bottom.
+ */
+export const WHEEL_START_DEG = -90;
+export const WHEEL_STEP_DEG = 360 / 6;
+
+/** Where face `i` sits, in degrees, 0 = three o'clock, clockwise positive. */
+export function wheelAngle(i: number): number {
+  return WHEEL_START_DEG + i * WHEEL_STEP_DEG;
+}
+
+/**
+ * Which mood a push of (dx, dy) selects, or null for "not far enough yet".
+ *
+ * `deadZone` is in the same units as dx/dy. Releasing inside it cancels, which
+ * is the escape hatch: a gesture you cannot back out of is a trap, and opening
+ * the wheel to see what it does is the most common first use of it.
+ */
+export function moodAtPush(
+  dx: number,
+  dy: number,
+  deadZone: number,
+): MoodId | null {
+  if (Math.sqrt(dx * dx + dy * dy) < deadZone) return null;
+  const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const shifted =
+    (deg - WHEEL_START_DEG + WHEEL_STEP_DEG / 2 + 720) % 360;
+  const i = Math.floor(shifted / WHEEL_STEP_DEG) % MOODS.length;
+  return MOODS[i].id;
 }

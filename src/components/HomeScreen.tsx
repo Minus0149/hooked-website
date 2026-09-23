@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { motion } from "motion/react";
 import { useStore } from "../state/store";
 import type { Track } from "../types";
@@ -126,6 +126,21 @@ export function HomeScreen({
     );
   };
 
+  // The row holds all six faces and runs off the side of a phone, so the mood
+  // you're in could be the one you can't see — pushed "tender" on a card, came
+  // home, and the row showed Party ringed (the hour's suggestion) with Tender
+  // scrolled away. The active chip is brought to the middle instead.
+  const moodRowRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const row = moodRowRef.current;
+    const on = row?.querySelector<HTMLElement>(".mood-chip.is-on");
+    if (!row || !on) return;
+    const r = row.getBoundingClientRect();
+    const c = on.getBoundingClientRect();
+    const left = row.scrollLeft + (c.left - r.left) - (row.clientWidth - c.width) / 2;
+    row.scrollTo({ left: Math.max(0, left) });
+  }, [state.mood]);
+
   return (
     <motion.div className="home" variants={stagger} initial="hidden" animate="show">
       <motion.p className="home-greeting" variants={rise}>{greeting()}</motion.p>
@@ -148,11 +163,8 @@ export function HomeScreen({
       <motion.section className="mood-section" variants={rise}>
         <div className="section-head">
           <h3 className="section-title">What&apos;s the mood?</h3>
-          {state.prefs.moodByTime !== "off" && (
-            <span className="section-count">{DAYPART_COPY[hour.part].nudge}</span>
-          )}
         </div>
-        <div className="mood-row">
+        <div className="mood-row" ref={moodRowRef}>
           {hour.moods.map((mood) => {
             const isOn = state.mood === mood.id;
             const isSuggested =
@@ -170,7 +182,9 @@ export function HomeScreen({
                 aria-label={`${mood.label} — ${mood.line}`}
                 title={mood.line}
               >
-                <Face mood={mood.id} size={26} />
+                <span className="mood-disc">
+                  <Face mood={mood.id} size={30} />
+                </span>
                 <span className="mood-chip-label">{mood.label}</span>
               </button>
             );
@@ -184,10 +198,15 @@ export function HomeScreen({
             }}
             title="No lens — the deck as it comes"
           >
-            <span className="mood-any-mark" aria-hidden="true">∞</span>
+            <span className="mood-disc">
+              <span className="mood-any-mark" aria-hidden="true">∞</span>
+            </span>
             <span className="mood-chip-label">Anything</span>
           </button>
         </div>
+        {state.prefs.moodByTime !== "off" && (
+          <span className="mood-nudge">{DAYPART_COPY[hour.part].nudge}</span>
+        )}
       </motion.section>
 
       <motion.div className="section-head" variants={rise}>

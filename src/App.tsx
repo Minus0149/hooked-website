@@ -1,6 +1,7 @@
 ﻿import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { useConvex, useMutation, useQuery } from "convex/react";
+import { useConvex, useConvexAuth, useMutation, useQuery } from "convex/react";
+import { profileCheck } from "./lib/authGate";
 import { api } from "../convex/_generated/api";
 import { coerceTaste } from "./data/taste";
 import { coercePrefs } from "./data/prefs";
@@ -220,6 +221,8 @@ function Shell() {
   // ----- cloud sync -----
   const session = authClient.useSession();
   const signedIn = !!session.data;
+  const { isAuthenticated: backendAuthed } = useConvexAuth();
+  const profileStage = profileCheck(signedIn, backendAuthed);
   const library = useQuery(api.library.getLibrary);
   const serverTracks = useQuery(api.tracks.list);
   const ensureProfile = useMutation(api.library.ensureProfile);
@@ -235,10 +238,11 @@ function Shell() {
   // rather than swallowed.
   const [accessBlock, setAccessBlock] = useState<null | "pending" | "rejected" | "none">(null);
   useEffect(() => {
-    if (!signedIn) {
+    if (profileStage === "signed-out") {
       setAccessBlock(null);
       return;
     }
+    if (profileStage === "waiting") return; // the backend hasn't got the token yet
     void ensureProfile({})
       .then(() => setAccessBlock(null))
       .catch((err: unknown) => {
@@ -247,7 +251,7 @@ function Shell() {
         else if (msg.includes("ACCESS_PENDING")) setAccessBlock("pending");
         else if (msg.includes("ACCESS_NOT_REQUESTED")) setAccessBlock("none");
       });
-  }, [signedIn, ensureProfile]);
+  }, [profileStage, ensureProfile]);
 
   // ----- taste-first login gate -----
   const [gate, setGate] = useState<null | "save" | "limit">(null);
@@ -494,7 +498,9 @@ function Shell() {
    */
   const crowdFetched = useRef<string | null>(null);
   useEffect(() => {
-    const key = sessionUid ?? "guest";
+    // keyed on the backend's view too: the listener's own votes can only be
+    // read once Convex holds their token, which lands after the session does
+    const key = `${sessionUid ?? "guest"}:${profileStage}`;
     if (crowdFetched.current === key) return;
     crowdFetched.current = key;
     let live = true;
@@ -514,7 +520,7 @@ function Shell() {
         applyCrowdMoods(crowd);
       })
       .catch(() => undefined);
-    if (sessionUid) {
+    if (sessionUid && profileStage === "ready") {
       void convex
         .query(api.moods.mine, {})
         .then((rows) => {
@@ -531,7 +537,7 @@ function Shell() {
     return () => {
       live = false;
     };
-  }, [convex, sessionUid, applyCrowdMoods, applyMoodPicks]);
+  }, [convex, sessionUid, profileStage, applyCrowdMoods, applyMoodPicks]);
 
   /**
    * The clock, when they asked it to decide rather than to offer.
@@ -1091,11 +1097,14 @@ function Shell() {
             <Onboarding
               demoTracks={demoTracks}
               demoCatalog={state.catalog}
-              onFinish={(taste) => {
+              onFinish={(taste, firstMood) => {
                 localStorage.setItem(ONBOARD_KEY, "1");
                 // apply locally first so the very first deck is already tilted;
                 // the server copy is for the next device they sign in on
                 setTaste(taste);
+                // the mood they picked in the tour opens the deck — the whole
+                // point of asking during onboarding rather than after it
+                if (firstMood) setMood(firstMood);
                 if (signedIn) syncWrite("setTaste", { ...taste }, setTasteMutation);
                 setOnboarded(true);
                 setViewWithHistory("discover"); // this tap unlocks audio autoplay

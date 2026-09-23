@@ -6,6 +6,8 @@
  */
 import { useRef, useState } from "react";
 import { motion } from "motion/react";
+import { moodById, type MoodId } from "../../data/mood";
+import { Face } from "../faces";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -190,6 +192,33 @@ export function TrackCard({ track }: { track: Track }) {
           </button>
         </div>
       </div>
+
+      {/* How listeners hear it. For an artist this is the one piece of
+          feedback the swipe log can't give: not whether people kept the song,
+          but what they think it IS — the thing a genre tag gets wrong. */}
+      {track.moods && track.moods.length > 0 ? (
+        <div className="creator-moods">
+          <span className="creator-moods-label">listeners hear it as</span>
+          {track.moods.map((m) => {
+            const mood = moodById(m.mood as MoodId);
+            if (!mood) return null;
+            return (
+              <span
+                key={m.mood}
+                className="creator-mood"
+                style={{ ["--face" as string]: mood.accent }}
+                title={`${m.n} listeners`}
+              >
+                <Face mood={mood.id} size={16} />
+                {mood.label}
+                <b>{m.n}</b>
+              </span>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="creator-moods-empty">no mood tags yet</p>
+      )}
 
       {/* the dots the listener will see, previewed here */}
       {track.hooks.length > 0 && (

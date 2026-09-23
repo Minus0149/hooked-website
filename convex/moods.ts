@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { enforceRateLimit, requireGatedUser } from "./security";
+import { enforceRateLimit, requireGatedUser, requirePermission } from "./security";
 import { runtimeFor } from "./runtime";
 
 /**
@@ -138,5 +138,113 @@ export const mine = query({
       .withIndex("by_user_track", (q) => q.eq("userId", String(user.id)))
       .take(500);
     return rows.map((r) => ({ trackId: r.trackId, mood: r.mood }));
+  },
+});
+
+/* --------------------------------------------------------------- dashboard */
+
+export type MoodSummary = {
+  floor: number;
+  votes: number;
+  voters: number;
+  /** tracks anyone has labelled */
+  tagged: number;
+  /** tracks with at least one mood above the floor — what listeners see */
+  published: number;
+  byMood: { mood: MoodId; votes: number; tracks: number }[];
+  energy: { analysed: number; total: number; buckets: number[] };
+  top: {
+    mood: MoodId;
+    tracks: { trackId: string; title: string; artist: string; artwork: string; n: number }[];
+  }[];
+};
+
+type TrackLite = { trackId: string; title: string; artist: string; artwork: string; energy?: number; hidden?: boolean };
+
+/**
+ * The whole mood picture, from the raw rows. Pure so it can be tested without
+ * a backend — the dashboard is the one place a counting mistake would be read
+ * as a fact about listeners.
+ */
+export function summariseMoods(
+  votes: { userId: string; trackId: string; mood: string }[],
+  tallies: { trackId: string; counts: Counts }[],
+  tracks: TrackLite[],
+  floor: number,
+): MoodSummary {
+  const live = tracks.filter((t) => t.hidden !== true);
+  const byId = new Map(live.map((t) => [t.trackId, t]));
+
+  const byMood = MOOD_IDS.map((mood) => ({
+    mood,
+    votes: votes.filter((v) => v.mood === mood).length,
+    tracks: tallies.filter((t) => publishable(t.counts, floor).some((c) => c.mood === mood)).length,
+  }));
+
+  // five equal bands of measured energy, quiet to loud
+  const buckets = [0, 0, 0, 0, 0];
+  let analysed = 0;
+  for (const t of live) {
+    if (typeof t.energy !== "number") continue;
+    analysed++;
+    buckets[Math.min(4, Math.max(0, Math.floor(t.energy * 5)))]++;
+  }
+
+  const top = MOOD_IDS.map((mood) => ({
+    mood,
+    tracks: tallies
+      .map((t) => ({ t, n: publishable(t.counts, floor).find((c) => c.mood === mood)?.n ?? 0 }))
+      .filter((x) => x.n > 0 && byId.has(x.t.trackId))
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 3)
+      .map(({ t, n }) => {
+        const track = byId.get(t.trackId)!;
+        return { trackId: t.trackId, title: track.title, artist: track.artist, artwork: track.artwork, n };
+      }),
+  }));
+
+  return {
+    floor: Math.max(1, floor),
+    votes: votes.length,
+    voters: new Set(votes.map((v) => v.userId)).size,
+    tagged: tallies.filter((t) => t.counts.length > 0).length,
+    published: tallies.filter((t) => publishable(t.counts, floor).length > 0).length,
+    byMood,
+    energy: { analysed, total: live.length, buckets },
+    top,
+  };
+}
+
+/**
+ * What the dashboard shows about moods. Staff only: the per-track counts here
+ * include what is still below the floor, which is exactly the information the
+ * floor exists to keep from ordinary clients.
+ */
+export const adminSummary = query({
+  args: {},
+  handler: async (ctx): Promise<MoodSummary | null> => {
+    try {
+      await requirePermission(ctx, "stats.view");
+    } catch {
+      return null;
+    }
+    const runtime = await runtimeFor(ctx);
+    // bounded: the most recent votes are the ones that describe the catalogue now
+    const votes = await ctx.db.query("moodVotes").order("desc").take(20_000);
+    const tallies = await ctx.db.query("trackMoods").collect();
+    const tracks = await ctx.db.query("tracks").collect();
+    return summariseMoods(
+      votes.map((v) => ({ userId: v.userId, trackId: v.trackId, mood: v.mood })),
+      tallies.map((t) => ({ trackId: t.trackId, counts: t.counts })),
+      tracks.map((t) => ({
+        trackId: t.trackId,
+        title: t.title,
+        artist: t.artist,
+        artwork: t.artwork,
+        energy: t.energy,
+        hidden: t.hidden,
+      })),
+      runtime.moodMinVotes,
+    );
   },
 });

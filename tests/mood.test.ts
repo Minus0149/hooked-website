@@ -12,6 +12,8 @@ import {
   moodFitFor,
   moodsForHour,
   moodsOf,
+  moodAtPush,
+  wheelAngle,
   type Daypart,
   type MoodId,
 } from "../src/data/mood";
@@ -195,5 +197,78 @@ describe("the clock", () => {
     expect(coerceMoodByTime("nonsense")).toBe("suggest");
     expect(coerceMoodByTime("off")).toBe("off");
     expect(coerceMoodByTime("always")).toBe("always");
+  });
+});
+
+/**
+ * The ring's directions are a promise to the hand: up is hyped, down-left is
+ * tender, every time, on both clients. A regression here doesn't look broken
+ * — the ring still lights up — it just quietly picks the wrong mood.
+ */
+describe("the mood ring's directions", () => {
+  const at = (deg: number, dist = 90) => {
+    const r = (deg * Math.PI) / 180;
+    return moodAtPush(Math.cos(r) * dist, Math.sin(r) * dist, 38);
+  };
+
+  it("puts each face where the ring draws it", () => {
+    MOODS.forEach((m, i) => expect(at(wheelAngle(i))).toBe(m.id));
+  });
+
+  it("gives each face the whole sixty degrees around it", () => {
+    MOODS.forEach((m, i) => {
+      expect(at(wheelAngle(i) - 29)).toBe(m.id);
+      expect(at(wheelAngle(i) + 29)).toBe(m.id);
+    });
+  });
+
+  it("reads the four thumb directions the way a hand expects", () => {
+    expect(at(-90)).toBe("hyped"); // straight up: the loudest
+    expect(at(90)).toBe("chill"); // straight down
+    expect(at(150)).toBe("tender"); // down-left
+    expect(at(-30)).toBe("party"); // up-right
+  });
+
+  it("cancels inside the dead zone, however it is approached", () => {
+    for (let deg = 0; deg < 360; deg += 15) expect(at(deg, 30)).toBeNull();
+    expect(moodAtPush(0, 0, 38)).toBeNull();
+  });
+
+  it("does not care how far past the ring the push went", () => {
+    expect(at(150, 400)).toBe("tender");
+  });
+});
+
+/**
+ * The map was first written against the 22 genres in the bundled catalogue.
+ * The live chart pull uses more, and when this was checked against 1,000 real
+ * tracks, 21% matched no mood at all — invisible to every face, including the
+ * Tamil, Telugu and Malayalam songs an India-first app most needs to serve.
+ * These are the genre strings Apple's charts actually use, as of the check.
+ */
+describe("coverage of the real chart genres", () => {
+  const CHART_GENRES = [
+    "pop", "country", "r&b/soul", "alternative", "rock", "dance", "electronic",
+    "hip-hop/rap", "hard rock", "bollywood", "house", "tamil", "k-pop",
+    "soundtrack", "devotional & spiritual", "hip-hop", "punk", "indie rock",
+    "metal", "malayalam", "celtic folk", "soul", "egyptian pop", "telugu",
+    "calypso", "soca", "worldbeat", "celtic", "original score", "regional indian",
+  ];
+  /** Apple's catch-alls carry no signal; measured energy has to cover them */
+  const CATCH_ALLS = ["worldwide"];
+
+  it("gives every real genre at least one mood", () => {
+    const missing = CHART_GENRES.filter((g) => moodsOf({ genre: g }).length === 0);
+    expect(missing).toEqual([]);
+  });
+
+  it("files regional Indian music with the rest of Indian film and pop", () => {
+    for (const g of ["tamil", "telugu", "malayalam"]) {
+      expect(moodsOf({ genre: g })).toContain("sunny");
+    }
+  });
+
+  it("leaves the catch-alls to measurement rather than guessing", () => {
+    for (const g of CATCH_ALLS) expect(moodsOf({ genre: g })).toEqual([]);
   });
 });

@@ -4,6 +4,8 @@ import { motion } from "motion/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "../lib/auth-client";
 import type { Tab } from "./admin/shared";
+
+type Group = "today" | "people" | "catalogue" | "system";
 import { Overview } from "./admin/Overview";
 import { AnalyticsPanel } from "./admin/Analytics";
 import { RequestsPanel } from "./admin/Requests";
@@ -14,6 +16,7 @@ import { AdsPanel } from "./admin/AdsPanel";
 import { ConfigPanel } from "./admin/ConfigPanel";
 import { ReportsPanel } from "./admin/ReportsPanel";
 import { FeedPanel } from "./admin/Feed";
+import { MoodsPanel } from "./admin/MoodsPanel";
 
 /**
  * The admin shell: which tabs this account may see, and the data each needs.
@@ -32,6 +35,7 @@ export function AdminDashboard() {
   const requests = useQuery(api.access.list);
   const analytics = useQuery(api.admin.analytics, {});
   const creatorData = useQuery(api.creators.listCreators);
+  const moodSummary = useQuery(api.moods.adminSummary);
   const decideCreator = useMutation(api.creators.decideCreator);
   const decide = useMutation(api.access.decide);
   const markInvited = useMutation(api.access.markInvited);
@@ -41,28 +45,42 @@ export function AdminDashboard() {
   const setPermission = useMutation(api.admin.setPermission);
   const setAdmin = useMutation(api.admin.setAdmin);
 
+  /**
+   * Ten entries in one flat list is a list you read rather than scan. They
+   * group naturally by what you came to do — check on today, deal with a
+   * person, change the catalogue, or tune the machine — so the sidebar says
+   * that out loud instead of making every visit a linear search.
+   */
+  const GROUPS: { id: Group; label: string }[] = [
+    { id: "today", label: "Today" },
+    { id: "people", label: "People" },
+    { id: "catalogue", label: "Catalogue" },
+    { id: "system", label: "System" },
+  ];
+
   const tabs = useMemo(() => {
-    const t: { id: Tab; label: string; icon: string }[] = [];
-    if (stats !== null) t.push({ id: "overview", label: "Overview", icon: "◈" });
-    if (analytics !== null) t.push({ id: "analytics", label: "Analytics", icon: "▤" });
+    const t: { id: Tab; label: string; icon: string; group: Group }[] = [];
+    if (stats !== null) t.push({ group: "today", id: "overview", label: "Overview", icon: "◈" });
+    if (analytics !== null) t.push({ group: "system", id: "analytics", label: "Analytics", icon: "▤" });
     if (requests !== null) {
       const pending = requests?.pending ?? 0;
-      t.push({ id: "requests", label: pending ? `Requests (${pending})` : "Requests", icon: "✦" });
+      t.push({ group: "people", id: "requests", label: pending ? `Requests (${pending})` : "Requests", icon: "✦" });
     }
     if (creatorData !== null) {
       const pending = creatorData?.pending ?? 0;
-      t.push({ id: "creators", label: pending ? `Creators (${pending})` : "Creators", icon: "✸" });
+      t.push({ group: "people", id: "creators", label: pending ? `Creators (${pending})` : "Creators", icon: "✸" });
     }
-    if (userData !== null) t.push({ id: "users", label: "Users", icon: "◉" });
-    if (catalog !== null) t.push({ id: "catalog", label: "Catalog", icon: "♪" });
+    if (userData !== null) t.push({ group: "people", id: "users", label: "Users", icon: "◉" });
+    if (catalog !== null) t.push({ group: "catalogue", id: "catalog", label: "Catalog", icon: "♪" });
+    if (moodSummary !== null) t.push({ group: "catalogue", id: "moods", label: "Moods", icon: "◐" });
     if (access?.permissions.includes("ads.manage") || access?.isAdmin)
-      t.push({ id: "ads", label: "Ads", icon: "▣" });
+      t.push({ group: "catalogue", id: "ads", label: "Ads", icon: "▣" });
     if (access?.permissions.includes("config.manage") || access?.isAdmin)
-      t.push({ id: "config", label: "Config", icon: "⚙" });
-    t.push({ id: "reports", label: "Reports", icon: "⚠" });
-    if (stats !== null) t.push({ id: "feed", label: "Live feed", icon: "≋" });
+      t.push({ group: "system", id: "config", label: "Config", icon: "⚙" });
+    t.push({ group: "system", id: "reports", label: "Reports", icon: "⚠" });
+    if (stats !== null) t.push({ group: "today", id: "feed", label: "Live feed", icon: "≋" });
     return t;
-  }, [stats, userData, catalog, requests, analytics, creatorData, access]);
+  }, [stats, userData, catalog, requests, analytics, creatorData, access, moodSummary]);
 
   const [tab, setTab] = useState<Tab>("overview");
   const activeTab = tabs.some((t) => t.id === tab) ? tab : (tabs[0]?.id ?? "overview");
@@ -107,16 +125,27 @@ export function AdminDashboard() {
           <span className="admin-live-dot" /> live data
         </span>
         <nav className="admin-side-nav">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              className={`admin-side-item ${activeTab === t.id ? "on" : ""}`}
-              onClick={() => setTab(t.id)}
-            >
-              <span className="admin-side-icon">{t.icon}</span>
-              {t.label}
-            </button>
-          ))}
+          {GROUPS.map((g) => {
+            const inGroup = tabs.filter((t) => t.group === g.id);
+            // a heading over nothing is worse than no heading — permissions
+            // can empty a whole group for a staff account
+            if (inGroup.length === 0) return null;
+            return (
+              <div key={g.id} className="admin-side-group">
+                <span className="admin-side-label">{g.label}</span>
+                {inGroup.map((t) => (
+                  <button
+                    key={t.id}
+                    className={`admin-side-item ${activeTab === t.id ? "on" : ""}`}
+                    onClick={() => setTab(t.id)}
+                  >
+                    <span className="admin-side-icon">{t.icon}</span>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </nav>
         <div className="admin-side-foot">
           {session.data && <span className="admin-user">{session.data.user.email}</span>}
@@ -132,7 +161,16 @@ export function AdminDashboard() {
         transition={{ duration: 0.25 }}
       >
         {activeTab === "overview" && stats && <Overview stats={stats} />}
-        {activeTab === "analytics" && analytics && (
+        {activeTab === "moods" && moodSummary && <MoodsPanel summary={moodSummary} />}
+        {activeTab === "analytics" && analytics && !("catalogue" in analytics) && (
+          // a snapshot written before computeSnapshot awaited its payload holds
+          // only a timestamp; reading it as a full one crashed the app
+          <p className="admin-empty">
+            The stored analytics snapshot is incomplete. Refresh it from Config, or wait
+            for tonight's run.
+          </p>
+        )}
+        {activeTab === "analytics" && analytics && "catalogue" in analytics && (
           <AnalyticsPanel a={analytics as import("./admin/Analytics").AnalyticsSnapshot} />
         )}
         {activeTab === "creators" && creatorData && (

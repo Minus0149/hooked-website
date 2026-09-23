@@ -156,7 +156,14 @@ export const record = internalMutation({
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requirePermission(ctx, "users.view");
+    // null, not a throw: the dashboard reads null as "not yours to see", and a
+    // throw here took the whole app down for anyone whose token was still
+    // arriving when the page loaded
+    try {
+      await requirePermission(ctx, "users.view");
+    } catch {
+      return null;
+    }
     const rows = await ctx.db.query("accessRequests").collect();
     rows.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
     const count = (s: string) => rows.filter((r) => r.status === s).length;

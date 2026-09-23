@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { motion } from "motion/react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "../lib/auth-client";
 import type { Id } from "../../convex/_generated/dataModel";
 import { ImportPanel } from "./creator/ImportPanel";
 import { TrackCard } from "./creator/TrackCard";
 import type { Track } from "./creator/types";
+import { filterTracks, TRACK_FILTERS, type TrackFilter } from "./creator/filter";
 
 /**
  * The creator dashboard.
@@ -17,6 +18,7 @@ import type { Track } from "./creator/types";
  * artist wants. The UI says so rather than letting someone find out by failing.
  */
 
+const PAGE = 24;
 const MS = (s: number) => Math.round(s * 1000);
 const secs = (ms: number) => (ms / 1000).toFixed(1).replace(/\.0$/, "");
 const clock = (ms: number) => {
@@ -28,10 +30,11 @@ const clock = (ms: number) => {
 
 export function CreatorDashboard() {
   const session = authClient.useSession();
-  const authed = session.data?.user != null;
-  // gated on the session: the query throws "Not signed in" for logged-out
-  // visitors, and a throwing query never resolves — which used to park this
-  // screen on "Loading…" forever
+  // Gated on the backend holding the token, not on the session: the session
+  // lands first, and the query then ran unauthenticated, threw, and took the
+  // whole app down with it.
+  const { isAuthenticated } = useConvexAuth();
+  const authed = session.data?.user != null && isAuthenticated;
   const data = useQuery(api.creators.dashboard, authed ? {} : "skip");
   const apply = useMutation(api.creators.apply);
 
@@ -103,7 +106,7 @@ export function CreatorDashboard() {
               maxLength={400}
             />
             {error && <p className="access-error">{error}</p>}
-            <button className="auth-submit" type="submit" disabled={busy}>
+            <button className="ob-primary" type="submit" disabled={busy}>
               {busy ? "sending…" : "apply as a creator"}
             </button>
           </form>
@@ -160,6 +163,13 @@ function CreatorWorkspace({ tracks, curator }: { tracks: Track[]; curator: boole
     { plays: 0, saves: 0, skips: 0, hooks: 0, live: 0 },
   );
   const saveRate = totals.plays ? Math.round((totals.saves / totals.plays) * 100) : 0;
+
+  // A curator sees the whole catalogue. Rendering all of it at once made a
+  // 285,000px page; it is searched, filtered, and shown a page at a time.
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<TrackFilter>("all");
+  const [shown, setShown] = useState(PAGE);
+  const visible = useMemo(() => filterTracks(tracks, query, filter), [tracks, query, filter]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -237,9 +247,53 @@ function CreatorWorkspace({ tracks, curator }: { tracks: Track[]; curator: boole
       )}
 
       {tracks.length === 0 && <p className="aq-empty">Nothing here yet. Add a track to start.</p>}
-      {tracks.map((track) => (
+      {tracks.length > 0 && (
+        <div className="creator-toolbar">
+          <input
+            className="auth-input creator-search"
+            type="search"
+            placeholder={`search ${tracks.length} tracks by title or artist`}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setShown(PAGE);
+            }}
+          />
+          <div className="creator-filters" role="tablist" aria-label="show">
+            {TRACK_FILTERS.map((f) => (
+              <button
+                key={f.id}
+                role="tab"
+                aria-selected={filter === f.id}
+                className={filter === f.id ? "creator-filter on" : "creator-filter"}
+                onClick={() => {
+                  setFilter(f.id);
+                  setShown(PAGE);
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <p className="creator-count">
+            {visible.length === tracks.length
+              ? `${tracks.length} tracks`
+              : `${visible.length} of ${tracks.length} tracks`}
+            {" · "}mood tags appear once a few listeners agree
+          </p>
+        </div>
+      )}
+      {tracks.length > 0 && visible.length === 0 && (
+        <p className="aq-empty">Nothing matches that.</p>
+      )}
+      {visible.slice(0, shown).map((track) => (
         <TrackCard key={track._id} track={track} />
       ))}
+      {visible.length > shown && (
+        <button className="aq-btn creator-more" onClick={() => setShown((n) => n + PAGE)}>
+          show {Math.min(PAGE, visible.length - shown)} more · {visible.length - shown} left
+        </button>
+      )}
     </div>
   );
 }

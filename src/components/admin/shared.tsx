@@ -20,6 +20,7 @@ export type Tab =
   | "creators"
   | "users"
   | "catalog"
+  | "moods"
   | "ads"
   | "reports"
   | "config"

@@ -50,6 +50,79 @@ const STATS_SNAPSHOT_KEY = "analytics:snapshot";
 
 const dayKeyOf = (ts: number) => new Date(ts).toISOString().slice(0, 10);
 
+type SwipeLite = {
+  action: "skip" | "save" | "more" | "never";
+  trackId: string;
+  title: string;
+  artist: string;
+  artwork: string;
+  genre: string;
+};
+
+/**
+ * The Overview's three leaderboards, from whatever swipes it is handed.
+ *
+ * Pure because it was wrong twice and nothing noticed: "top saved" counted
+ * every swipe on a track, skips included, and every genre reported 0% saved
+ * because the save count was a hardcoded nought. The snapshot never carried
+ * these either, so the partial fallback was all anyone ever saw.
+ */
+export function swipeAggregates(swipes: SwipeLite[]) {
+  const saved = new Map<string, { count: number; s: SwipeLite }>();
+  const nevered = new Map<string, number>();
+  const genres = new Map<string, { total: number; saves: number }>();
+  for (const s of swipes) {
+    if (s.action === "save") {
+      const row = saved.get(s.trackId);
+      saved.set(s.trackId, { count: (row?.count ?? 0) + 1, s });
+    }
+    if (s.action === "never" && s.artist) nevered.set(s.artist, (nevered.get(s.artist) ?? 0) + 1);
+    if (s.genre) {
+      const g = genres.get(s.genre) ?? { total: 0, saves: 0 };
+      g.total++;
+      if (s.action === "save") g.saves++;
+      genres.set(s.genre, g);
+    }
+  }
+  return {
+    topSaved: [...saved.values()]
+      .sort((a, b) => b.count - a.count || a.s.title.localeCompare(b.s.title))
+      .slice(0, 8)
+      .map(({ count, s }) => ({ trackId: s.trackId, count, title: s.title, artist: s.artist, artwork: s.artwork })),
+    topNever: [...nevered.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 5)
+      .map(([artist, count]) => ({ artist, count })),
+    genres: [...genres.entries()]
+      .sort((a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0]))
+      .slice(0, 8)
+      .map(([genre, g]) => ({ genre, total: g.total, saves: g.saves })),
+  };
+}
+
+/**
+ * Today's counts by action: the rolled-up day row, plus only the swipes the
+ * rollup hasn't reached yet. Adding the whole recent tail on top of the rolled
+ * row counted most of today twice.
+ */
+export function todayCounts(
+  rolled: { saves: number; skips: number; mores: number; nevers: number } | undefined,
+  tail: { action: SwipeLite["action"]; _creationTime: number }[],
+  watermark: number,
+  todayKey: string,
+) {
+  const out = {
+    save: rolled?.saves ?? 0,
+    skip: rolled?.skips ?? 0,
+    more: rolled?.mores ?? 0,
+    never: rolled?.nevers ?? 0,
+  };
+  for (const s of tail) {
+    if (s._creationTime > watermark && dayKeyOf(s._creationTime) === todayKey) out[s.action]++;
+  }
+  return out;
+}
+
 /**
  * The live ticker.
  *
@@ -92,12 +165,6 @@ export const stats = query({
       byAction.never += row.nevers;
     }
     const todayRow = dailyRows.find((r) => r.day === todayKey);
-    const todayByAction = {
-      save: todayRow?.saves ?? 0,
-      skip: todayRow?.skips ?? 0,
-      more: todayRow?.mores ?? 0,
-      never: todayRow?.nevers ?? 0,
-    };
 
     // recent tail only — enough for the sparklines and the live list
     const tail = await ctx.db
@@ -106,6 +173,7 @@ export const stats = query({
       .order("desc")
       .take(400);
     const recentAll = tail.reverse();
+    const todayByAction = todayCounts(todayRow, recentAll, await readWatermark(ctx), todayKey);
 
     const now = Date.now();
     const MIN_BUCKETS = 30;
@@ -118,7 +186,6 @@ export const stats = query({
       const ageHour = Math.floor((now - s._creationTime) / 3_600_000);
       if (ageHour >= 0 && ageHour < HOUR_BUCKETS) {
         activityHours[HOUR_BUCKETS - 1 - ageHour]++;
-        todayByAction[s.action]++;
       }
     }
 
@@ -143,39 +210,10 @@ export const stats = query({
     type TopNever = { artist: string; count: number }[];
     type GenreStat = { genre: string; total: number; saves: number }[];
 
-    const tally = <K extends string>(keyFn: (s: (typeof recentAll)[number]) => K) => {
-      const m = new Map<K, number>();
-      for (const s of recentAll) {
-        const k = keyFn(s);
-        m.set(k, (m.get(k) ?? 0) + 1);
-      }
-      return m;
-    };
-    const topSaved =
-      (snapshot?.topSaved as TopSaved | undefined) ??
-      (() => {
-        const saves = tally((s) => s.trackId);
-        return [...saves.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 8)
-          .map(([trackId]) => {
-            const s = recentAll.find((x) => x.trackId === trackId)!;
-            return { trackId, count: saves.get(trackId)!, title: s.title, artist: s.artist, artwork: s.artwork };
-          });
-      })();
-    const topNever =
-      (snapshot?.topNever as TopNever | undefined) ??
-      [...tally((s) => (s.action === "never" ? s.artist : "")).entries()]
-        .filter(([a]) => a)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([artist, count]) => ({ artist, count }));
-    const genres =
-      (snapshot?.genres as GenreStat | undefined) ??
-      [...tally((s) => s.genre).entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8)
-        .map(([genre, total]) => ({ genre, total, saves: 0 }));
+    const fallback = swipeAggregates(recentAll);
+    const topSaved = (snapshot?.topSaved as TopSaved | undefined) ?? fallback.topSaved;
+    const topNever = (snapshot?.topNever as TopNever | undefined) ?? fallback.topNever;
+    const genres = (snapshot?.genres as GenreStat | undefined) ?? fallback.genres;
 
     return {
       userCount: profileCount,
@@ -478,6 +516,8 @@ async function computeAnalyticsPayload(ctx: QueryCtx, spanDaysOverride?: number)
       bestHooks: scored.slice(0, 6),
       // the tail, never overlapping the top — a hook here is one to re-cut
       worstHooks: scored.slice(6).slice(-6).reverse(),
+      // the Overview's leaderboards, over all history rather than the tail
+      ...swipeAggregates(swipes),
       creators: {
         total: creators.length,
         pending: creators.filter((c) => c.status === "pending").length,
@@ -535,7 +575,9 @@ export const computeSnapshot = internalMutation({
   args: { spanDays: v.optional(v.number()) },
   handler: async (ctx, { spanDays }) => {
     const payload = {
-      ...computeAnalyticsPayload(ctx, spanDays),
+      // awaited: spreading the promise itself copied nothing, and every
+      // snapshot ever stored was just { computedAt } — the panel then crashed
+      ...(await computeAnalyticsPayload(ctx, spanDays)),
       computedAt: new Date().toISOString(),
     };
     const existing = await ctx.db

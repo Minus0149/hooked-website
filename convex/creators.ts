@@ -1,4 +1,6 @@
 import { v } from "convex/values";
+import { runtimeFor } from "./runtime";
+import { publishable } from "./moods";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import {
   cleanAccent,
@@ -114,21 +116,42 @@ export const dashboard = query({
           .withIndex("by_owner", (q) => q.eq("ownerUserId", user.id))
           .collect();
 
+    const moodFloor = (await runtimeFor(ctx)).moodMinVotes;
+
+    // Three lookups per track (hooks, their stats, the mood tally) is fine for
+    // an artist with a dozen songs and fatal for a curator, who sees the whole
+    // catalogue: at 1,000 tracks it passed Convex's 4,096-reads-per-query cap
+    // and the dashboard crashed the app. Past a small catalogue, each table is
+    // read once and joined here instead.
+    const owns = new Set(owned.map((t) => t.trackId));
+    const bulk = owned.length > 40;
+    const hooksAll = bulk ? (await ctx.db.query("hooks").collect()).filter((h) => owns.has(h.trackId)) : null;
+    const statsAll = bulk ? await ctx.db.query("hookStats").collect() : null;
+    const talliesAll = bulk ? await ctx.db.query("trackMoods").collect() : null;
+    const hooksBy = new Map<string, NonNullable<typeof hooksAll>>();
+    for (const h of hooksAll ?? []) hooksBy.set(h.trackId, [...(hooksBy.get(h.trackId) ?? []), h]);
+    const statsBy = new Map((statsAll ?? []).map((st) => [String(st.hookId), st]));
+    const tallyBy = new Map((talliesAll ?? []).map((t) => [t.trackId, t]));
+
     const tracks = await Promise.all(
       owned.map(async (track) => {
-        const hooks = await ctx.db
-          .query("hooks")
-          .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))
-          .collect();
+        const hooks = bulk
+          ? (hooksBy.get(track.trackId) ?? [])
+          : await ctx.db
+              .query("hooks")
+              .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))
+              .collect();
         hooks.sort((a, b) => a.order - b.order);
         // counters live in hookStats now; the dashboard still wants them, so
         // they're joined here rather than denormalised back onto the hook
         const withStats = await Promise.all(
           hooks.map(async (hook) => {
-            const stats = await ctx.db
-              .query("hookStats")
-              .withIndex("by_hookId", (q) => q.eq("hookId", hook._id))
-              .unique();
+            const stats = bulk
+              ? statsBy.get(String(hook._id))
+              : await ctx.db
+                  .query("hookStats")
+                  .withIndex("by_hookId", (q) => q.eq("hookId", hook._id))
+                  .unique();
             return {
               ...hook,
               plays: stats?.plays ?? 0,
@@ -137,10 +160,20 @@ export const dashboard = query({
             };
           }),
         );
+        // How listeners hear this track, once enough of them agree — the same
+        // floor every client sees, so an artist can't read one fan's vote off
+        // their own dashboard.
+        const tally = bulk
+          ? tallyBy.get(track.trackId)
+          : await ctx.db
+              .query("trackMoods")
+              .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))
+              .unique();
         return {
           ...track,
           audioUrl: track.audioStorageId ? await ctx.storage.getUrl(track.audioStorageId) : null,
           hooks: withStats,
+          moods: publishable(tally?.counts ?? [], moodFloor),
         };
       }),
     );
@@ -470,7 +503,14 @@ export const deleteHook = mutation({
 export const listCreators = query({
   args: {},
   handler: async (ctx) => {
-    await requirePermission(ctx, "users.view");
+    // null, not a throw: the dashboard reads null as "not yours to see", and a
+    // throw here took the whole app down for anyone whose token was still
+    // arriving when the page loaded
+    try {
+      await requirePermission(ctx, "users.view");
+    } catch {
+      return null;
+    }
     const rows = await ctx.db.query("creators").collect();
     rows.sort((a, b) => b.appliedAt.localeCompare(a.appliedAt));
     return {

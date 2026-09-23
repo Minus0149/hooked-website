@@ -27,7 +27,7 @@ export function ReportsPanel() {
   const [open, setOpen] = useState<string | null>(null);
 
   return (
-    <div className="admin-v2">
+    <div className="admin-page">
       <header className="admin-head">
         <h2>Error reports</h2>
         <p>
@@ -37,6 +37,9 @@ export function ReportsPanel() {
       </header>
 
       {reports === undefined && <p className="admin-empty">Loading…</p>}
+      {reports === null && (
+        <p className="admin-empty">Error reports need the users.view permission.</p>
+      )}
       {reports !== undefined && reports !== null && reports.length === 0 && (
         <p className="admin-empty">No reports. Either the app is perfect or the silence is worrying.</p>
       )}

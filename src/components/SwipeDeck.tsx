@@ -9,7 +9,7 @@ import {
 import type { SwipeDir, Track } from "../types";
 import type { MoodId } from "../data/mood";
 import type { Verdict } from "../data/predict";
-import { MoodFan } from "./MoodFan";
+import { MoodWheel, type WheelOrigin } from "./MoodWheel";
 import { gesture } from "../design/tokens";
 import { useDialog } from "../lib/dialog";
 import { DiscFX, type SaveFxData, type SaveRelease } from "./DiscFX";
@@ -291,6 +291,7 @@ function TopCard({
   onSwipe,
   sensitivity = 1,
   onLongPress,
+  holding,
   verdict,
 }: {
   track: Track;
@@ -305,7 +306,9 @@ function TopCard({
   onSwipe: (dir: SwipeDir, release?: SaveRelease) => void;
   /** scales the drag distance a swipe needs (Settings → Gestures) */
   sensitivity?: number;
-  onLongPress: () => void;
+  onLongPress: (x: number, y: number) => void;
+  /** true once the wheel is up — the card must stop being draggable */
+  holding: boolean;
   verdict: Verdict | null;
 }) {
   const x = useMotionValue(0);
@@ -338,17 +341,23 @@ function TopCard({
     <motion.div
       className="card is-top"
       style={{ x, y, rotate }}
-      drag
+      drag={!holding}
       dragSnapToOrigin
       dragElastic={0.7}
-      whileDrag={{ scale: 1.02 }}
+      whileDrag={holding ? undefined : { scale: 1.02 }}
       onPointerDown={(e) => {
         hold.current.x = e.clientX;
         hold.current.y = e.clientY;
+        const { clientX, clientY } = e;
         window.clearTimeout(hold.current.timer);
-        hold.current.timer = window.setTimeout(onLongPress, 420);
+        hold.current.timer = window.setTimeout(() => {
+          hold.current.timer = undefined;
+          onLongPress(clientX, clientY);
+        }, 420);
       }}
       onPointerMove={(e) => {
+        // once the wheel is up the window listener owns the finger
+        if (holding) return;
         if (hold.current.timer === undefined) return;
         const moved =
           Math.abs(e.clientX - hold.current.x) + Math.abs(e.clientY - hold.current.y);
@@ -463,7 +472,16 @@ export function SwipeDeck({
   const [fx, setFx] = useState<FX | null>(null);
   const [saveFx, setSaveFx] = useState<SaveFxData | null>(null);
   const [fullSongOpen, setFullSongOpen] = useState(false);
-  const [moodsOpen, setMoodsOpen] = useState(false);
+  /** the emote wheel: where it opened, whether the finger is still down, and
+      where that finger is now */
+  const [wheel, setWheel] = useState<WheelOrigin | null>(null);
+  const [holding, setHolding] = useState(false);
+  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
+  const closeWheel = useCallback(() => {
+    setWheel(null);
+    setHolding(false);
+    setPointer(null);
+  }, []);
   const fxTimer = useRef<number | undefined>(undefined);
   const saveCount = useRef(0);
   const longPress = useRef<{ timer?: number; fired: boolean }>({ fired: false });
@@ -477,7 +495,27 @@ export function SwipeDeck({
   // The fan labels one specific song. If the card moves on — a swipe, a revert,
   // an auto-advance — the question it is asking is about a card nobody is
   // looking at any more, so it closes rather than quietly retargeting.
-  useEffect(() => setMoodsOpen(false), [onDeck?.id]);
+  useEffect(() => closeWheel(), [onDeck?.id, closeWheel]);
+
+  /**
+   * While the wheel is open and the finger is still down, the pointer is
+   * tracked on the window rather than on the card. The backdrop sits over the
+   * card the instant the wheel appears, so card-level pointermove stops firing
+   * exactly when the aiming starts — which is the whole gesture.
+   */
+  useEffect(() => {
+    if (!wheel || !holding) return;
+    const move = (e: PointerEvent) => setPointer({ x: e.clientX, y: e.clientY });
+    const end = () => setHolding(false);
+    window.addEventListener("pointermove", move, true);
+    window.addEventListener("pointerup", end, true);
+    window.addEventListener("pointercancel", end, true);
+    return () => {
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", end, true);
+      window.removeEventListener("pointercancel", end, true);
+    };
+  }, [wheel, holding]);
 
   useEffect(() => {
     const measure = () => {
@@ -494,6 +532,11 @@ export function SwipeDeck({
   const handleSwipe = useCallback(
     (dir: SwipeDir, release?: SaveRelease) => {
       if (locked || !onDeck) return;
+      // Belt and braces: `drag` is switched off the moment the wheel opens,
+      // but motion can already be mid-gesture when that happens, and a drag
+      // that survives turns "aim at tender" into "never play this artist".
+      // The wheel being open is an unconditional veto on a swipe.
+      if (wheel) return;
       if (gateSwipe && !gateSwipe(dir)) return; // login wall — card snaps back untouched
       lastDir.current = dir;
       setLocked(true);
@@ -521,7 +564,7 @@ export function SwipeDeck({
       onSwipe(dir);
       window.setTimeout(() => setLocked(false), 200);
     },
-    [locked, onDeck, gateSwipe, onSwipe, motionPref],
+    [locked, onDeck, gateSwipe, onSwipe, motionPref, wheel],
   );
 
   // desktop keyboard support: arrows swipe, space toggles playback
@@ -540,9 +583,13 @@ export function SwipeDeck({
         e.preventDefault();
         onToggle();
       } else if (e.key === "m" || e.key === "M") {
-        // the long press, for anyone without one
+        // the long press, for anyone without one — the wheel opens centred
         e.preventDefault();
-        setMoodsOpen((open) => !open);
+        setWheel((w) =>
+          w ? null : { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+        );
+        setHolding(false);
+        setPointer(null);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -598,7 +645,12 @@ export function SwipeDeck({
               onSeek={onSeek}
               onSwipe={handleSwipe}
               sensitivity={sensitivity}
-              onLongPress={() => setMoodsOpen(true)}
+              onLongPress={(x, y) => {
+                setWheel({ x, y });
+                setHolding(true);
+                setPointer({ x, y });
+              }}
+              holding={wheel !== null && holding}
               verdict={verdict}
             />
           )}
@@ -706,22 +758,23 @@ export function SwipeDeck({
       </AnimatePresence>
 
       <AnimatePresence>
-        {moodsOpen && onDeck && (
-          <MoodFan
-            title={onDeck.title}
+        {wheel && onDeck && (
+          <MoodWheel
+            origin={wheel}
             picked={pickedMood}
             active={activeMood}
             verdict={verdict}
+            dragging={holding}
+            // the LAST position survives the release: nulling it on lift reset the
+            // aim in the same render the commit reads it, so only pushes that
+            // happened to end on a bubble ever landed
+            pointer={pointer}
             motionPref={motionPref}
-            onPick={(mood) => {
+            onCommit={(mood) => {
               onPickMood(mood, onDeck.id);
-              setMoodsOpen(false);
+              closeWheel();
             }}
-            onClear={() => {
-              onClearMood();
-              setMoodsOpen(false);
-            }}
-            onClose={() => setMoodsOpen(false)}
+            onCancel={closeWheel}
           />
         )}
       </AnimatePresence>

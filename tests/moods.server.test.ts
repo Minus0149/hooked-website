@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { applyVote, isMood, MOOD_IDS, publishable, type Counts } from "../convex/moods";
+import {
+  applyVote,
+  isMood,
+  MOOD_IDS,
+  publishable,
+  summariseMoods,
+  type Counts,
+} from "../convex/moods";
 import { MOOD_IDS as CLIENT_MOOD_IDS } from "../src/data/mood";
 
 /**
@@ -92,5 +99,58 @@ describe("what leaves the server", () => {
 
   it("never publishes on a floor of zero — that would be a config typo", () => {
     expect(publishable([{ mood: "party", n: 0 }], 0)).toEqual([]);
+  });
+});
+
+/**
+ * The dashboard is where a counting mistake gets read as a fact about
+ * listeners, so the summary is pinned against a small hand-built world.
+ */
+describe("the dashboard's mood summary", () => {
+  const tracks = [
+    { trackId: "a", title: "A", artist: "x", artwork: "", energy: 0.95 },
+    { trackId: "b", title: "B", artist: "y", artwork: "", energy: 0.1 },
+    { trackId: "c", title: "C", artist: "z", artwork: "" },
+    { trackId: "gone", title: "Hidden", artist: "q", artwork: "", energy: 0.5, hidden: true },
+  ];
+  const votes = [
+    { userId: "u1", trackId: "a", mood: "party" },
+    { userId: "u2", trackId: "a", mood: "party" },
+    { userId: "u3", trackId: "a", mood: "party" },
+    { userId: "u1", trackId: "b", mood: "tender" },
+    { userId: "u2", trackId: "c", mood: "sleepy" },
+  ];
+  const tallies = [
+    { trackId: "a", counts: [{ mood: "party", n: 3 }] },
+    { trackId: "b", counts: [{ mood: "tender", n: 1 }] },
+    { trackId: "c", counts: [{ mood: "sleepy", n: 1 }] },
+  ];
+  const s = summariseMoods(votes, tallies, tracks, 2);
+
+  it("counts votes and the distinct people behind them", () => {
+    expect(s.votes).toBe(5);
+    expect(s.voters).toBe(3);
+  });
+
+  it("separates what was tagged from what cleared the floor", () => {
+    expect(s.tagged).toBe(3);
+    expect(s.published).toBe(1); // only 'a', with three agreeing
+  });
+
+  it("reports every mood, including the ones nobody used", () => {
+    expect(s.byMood.map((m) => m.mood).sort()).toEqual([...MOOD_IDS].sort());
+    expect(s.byMood.find((m) => m.mood === "hyped")?.votes).toBe(0);
+    expect(s.byMood.find((m) => m.mood === "party")).toMatchObject({ votes: 3, tracks: 1 });
+  });
+
+  it("never lists a below-floor track as a top track", () => {
+    expect(s.top.find((t) => t.mood === "tender")?.tracks).toEqual([]);
+    expect(s.top.find((t) => t.mood === "party")?.tracks[0]).toMatchObject({ trackId: "a", n: 3 });
+  });
+
+  it("measures energy coverage on live tracks only, in five bands", () => {
+    expect(s.energy.total).toBe(3); // the hidden one doesn't count
+    expect(s.energy.analysed).toBe(2);
+    expect(s.energy.buckets).toEqual([1, 0, 0, 0, 1]);
   });
 });

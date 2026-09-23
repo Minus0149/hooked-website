@@ -34,6 +34,9 @@ export function UsersPanel({
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"swipes" | "saved" | "active" | "joined">("active");
   const [selected, setSelected] = useState<string | null>(null);
+  // Six toggles on every row made the table mostly chips. A row shows what the
+  // person actually holds; the toggles open for one row at a time.
+  const [editingPerms, setEditingPerms] = useState<string | null>(null);
 
   const users = useMemo(() => {
     const filtered = data.users.filter((u) =>
@@ -122,8 +125,29 @@ export function UsersPanel({
                   <div className="admin-perms">
                     {u.isAdmin ? (
                       <span className="admin-dim">all</span>
+                    ) : editingPerms !== u.profileId ? (
+                      <>
+                        {u.permissions.length === 0 ? (
+                          <span className="admin-dim">none</span>
+                        ) : (
+                          u.permissions.map((p) => (
+                            <span key={p} className="admin-perm on">
+                              {PERM_LABEL[p] ?? p}
+                            </span>
+                          ))
+                        )}
+                        {isAdmin && (
+                          <button
+                            className="admin-perm-edit"
+                            onClick={() => setEditingPerms(u.profileId)}
+                            aria-label={`Edit permissions for ${u.email}`}
+                          >
+                            edit
+                          </button>
+                        )}
+                      </>
                     ) : (
-                      data.allPermissions.map((p) => {
+                      [...data.allPermissions.map((p) => {
                         const has = u.permissions.includes(p);
                         return (
                           <button
@@ -135,7 +159,10 @@ export function UsersPanel({
                             {PERM_LABEL[p] ?? p}
                           </button>
                         );
-                      })
+                      }),
+                      <button key="done" className="admin-perm-edit" onClick={() => setEditingPerms(null)}>
+                        done
+                      </button>]
                     )}
                   </div>
                 </td>

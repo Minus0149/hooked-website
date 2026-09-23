@@ -80,7 +80,12 @@ export const report = mutation({
 export const listForAdmin = query({
   args: {},
   handler: async (ctx) => {
-    await requirePermission(ctx, "users.view");
+    // null rather than a throw — the panel reads null as "not yours to see"
+    try {
+      await requirePermission(ctx, "users.view");
+    } catch {
+      return null;
+    }
     const rows = await ctx.db
       .query("errorReports")
       .order("desc")

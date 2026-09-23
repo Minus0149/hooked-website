@@ -40,4 +40,6 @@ export type Track = {
   /** set when the uploader ticked the rights box on an attached upload */
   rightsConfirmedAt?: string;
   hooks: Hook[];
+  /** how listeners say this track feels — only tags enough of them agreed on */
+  moods?: { mood: string; n: number }[];
 };

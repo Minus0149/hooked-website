@@ -127,7 +127,7 @@ export function ConfigPanel() {
   };
 
   return (
-    <div className="admin-v2">
+    <div className="admin-page">
       <header className="admin-head">
         <h2>Configuration</h2>
         <p>
@@ -137,11 +137,9 @@ export function ConfigPanel() {
       </header>
 
       {GROUPS.map((g) => (
-        <section className="admin-card" key={g.title}>
-          <header className="admin-card-head">
-            <h3>{g.title}</h3>
-            <p>{g.lede}</p>
-          </header>
+        <section className="admin-panel config-group" key={g.title}>
+          <h3>{g.title}</h3>
+          <p className="admin-dim">{g.lede}</p>
           <div className="admin-grid">
             {g.fields.map((f) => (
               <label className="field" key={f.key}>
@@ -162,7 +160,7 @@ export function ConfigPanel() {
         </section>
       ))}
 
-      <footer className="admin-card-foot sticky-foot">
+      <footer className="config-foot">
         <button
           className="aq-btn yes"
           disabled={!dirty || saving}

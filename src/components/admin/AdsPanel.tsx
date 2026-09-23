@@ -302,7 +302,7 @@ export function AdsPanel() {
   const [editing, setEditing] = useState<AdRow | "new" | null>(null);
 
   return (
-    <div className="admin-v2">
+    <div className="admin-page">
       <header className="admin-head">
         <h2>Ads</h2>
         <p>

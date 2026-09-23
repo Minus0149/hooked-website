@@ -150,7 +150,12 @@ function cleanAdUrl(raw: string): string {
 export const listAds = query({
   args: {},
   handler: async (ctx) => {
-    await requirePermission(ctx, "ads.manage");
+    // null rather than a throw — the panel reads null as "not yours to see"
+    try {
+      await requirePermission(ctx, "ads.manage");
+    } catch {
+      return null;
+    }
     const rows = await ctx.db.query("ads").collect();
     rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const urls = await Promise.all(

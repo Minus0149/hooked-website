@@ -26,6 +26,28 @@ export function HookEditor({
   const regionRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  // A curator's list can hold a thousand of these; decoding every preview on
+  // mount downloaded the whole catalogue and took the tab down. Nothing is
+  // fetched until the editor is actually on screen.
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || seen) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setSeen(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setSeen(true);
+      },
+      { rootMargin: "200px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen]);
+
   const [error, setError] = useState<string | null>(null);
   const [peaks, setPeaks] = useState<number[] | null>(null);
   const [startMs, setStartMs] = useState(0);
@@ -40,6 +62,7 @@ export function HookEditor({
 
   // decode once, draw peaks
   useEffect(() => {
+    if (!seen) return;
     let cancelled = false;
     setError(null);
     setPeaks(null);
@@ -75,7 +98,7 @@ export function HookEditor({
     return () => {
       cancelled = true;
     };
-  }, [audioUrl]);
+  }, [audioUrl, seen]);
 
   // draw whenever peaks or the window changes
   useEffect(() => {
@@ -188,7 +211,7 @@ export function HookEditor({
   );
 
   return (
-    <div className="hook-editor">
+    <div className="hook-editor" ref={rootRef}>
       <div className="hook-editor-canvas" ref={regionRef}>
         {peaks ? (
           <canvas ref={canvasRef} style={{ width: "100%", height: 72, display: "block" }} />

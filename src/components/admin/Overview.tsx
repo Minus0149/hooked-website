@@ -26,7 +26,7 @@ export function Overview({ stats }: { stats: NonNullable<ReturnType<typeof useSt
         <StatCard
           label="total swipes"
           value={String(stats.swipeCount)}
-          sub={`${todayTotal} in the last 24h`}
+          sub={`${todayTotal} today (UTC)`}
         />
         <StatCard
           label="save rate"

@@ -161,3 +161,16 @@ Add them as a Cloudflare **Transform Rule → Modify Response Header** on
 The Convex self-hosted admin key and `BETTER_AUTH_SECRET` should both be
 rotated. Rotating the auth secret signs everyone out, which is fine — there are
 few enough accounts for that not to matter yet, and it will matter later.
+
+**Clear the signing keys in the same step.** Better Auth encrypts its JWT
+signing key (the `jwks` table in the `betterAuth` component) with
+`BETTER_AUTH_SECRET`. Change the secret and leave the old key in place, and
+every sign-in "succeeds" but `/api/auth/convex/token` returns 500 ("Failed to
+decrypt private key"): the app looks signed in and nothing syncs. Empty the
+table right after setting the new secret; a fresh key is minted on the next
+sign-in:
+
+```bash
+npx convex env set BETTER_AUTH_SECRET "$(openssl rand -base64 32)"
+: > empty.jsonl && npx convex import --component betterAuth --table jwks --replace -y empty.jsonl
+```
