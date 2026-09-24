@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, type ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import { ConvexReactClient } from "convex/react";
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
@@ -25,7 +25,13 @@ createRoot(document.getElementById("root")!).render(
     {/* outer boundary: catches provider-level crashes (no reporting — the
         convex client itself is what died) */}
     <AppErrorBoundary>
-      <ConvexBetterAuthProvider client={convex} authClient={authClient}>
+      {/* cast at this one boundary: the adapter declares the prop's session as
+          `never`, which no real client satisfies; the app's own session types
+          stay intact everywhere else */}
+      <ConvexBetterAuthProvider
+        client={convex}
+        authClient={authClient as unknown as ComponentProps<typeof ConvexBetterAuthProvider>["authClient"]}
+      >
         {/* inner boundary: the app's crashes get the full report panel */}
         <AppErrorBoundary reportable>
           <App />

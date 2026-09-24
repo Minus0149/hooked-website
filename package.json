@@ -10,10 +10,10 @@
     "test": "vitest run",
     "audit:ui": "python scripts/ui-audit.py",
     "preview": "vite preview",
-  "check": "node scripts/check-mojibake.mjs && tsc -b && tsc --noEmit -p convex && vitest run"
+    "check": "node scripts/check-mojibake.mjs && tsc -b && tsc --noEmit -p convex && vitest run"
   },
   "dependencies": {
-    "@convex-dev/better-auth": "^0.12.3",
+    "@convex-dev/better-auth": "^0.12.5",
     "better-auth": "~1.6.9",
     "convex": "^1.41.0",
     "motion": "^11.15.0",

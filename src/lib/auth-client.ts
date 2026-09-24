@@ -1,5 +1,4 @@
 import { createAuthClient } from "better-auth/react";
-import type { BetterAuthClientPlugin } from "better-auth";
 import {
   convexClient,
   crossDomainClient,
@@ -9,8 +8,9 @@ export const authClient = createAuthClient({
   baseURL: import.meta.env.VITE_CONVEX_SITE_URL as string,
   plugins: [
     convexClient(),
-    // cast: minor type-level skew between better-auth 1.6.x and the Convex
-    // plugin's bundled declarations; runtime shape is identical
-    crossDomainClient() as unknown as BetterAuthClientPlugin,
+    // no cast: with better-auth and @convex-dev/better-auth on matching
+    // versions the plugin types line up, and the old `as unknown as` erased
+    // the session's type to `never` once they moved
+    crossDomainClient(),
   ],
 });
