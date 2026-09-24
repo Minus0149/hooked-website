@@ -11,6 +11,8 @@
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { evaluate, type Swipe } from "./lib/evaluate";
 import type { SwipeAction, Track } from "../src/types";
 
@@ -22,13 +24,15 @@ const val = (f: string) => {
 };
 const target = has("prod") ? ["--prod"] : [];
 
-function convex(cmd: string[], input?: string): string {
-  return execFileSync("npx", ["convex", ...cmd], {
+// The CLI's own script, run by node with no shell in between: through `npx`
+// on Windows the JSON argument to `convex run` went via cmd.exe, which ate the
+// quotes, and --store failed.
+const CONVEX_CLI = join(dirname(fileURLToPath(import.meta.url)), "../node_modules/convex/bin/main.js");
+function convex(cmd: string[]): string {
+  return execFileSync(process.execPath, [CONVEX_CLI, ...cmd], {
     encoding: "utf8",
     maxBuffer: 512e6,
-    shell: process.platform === "win32",
-    input,
-    stdio: [input ? "pipe" : "ignore", "pipe", "ignore"],
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 const jsonl = (text: string) =>
