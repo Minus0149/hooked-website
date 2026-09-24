@@ -437,3 +437,33 @@ export function moodPlaylistName(mood: MoodId): string {
   const face = moodById(mood);
   return face ? `${face.label} mix` : "Mood mix";
 }
+
+
+/**
+ * How each face moves while a ring is open — a personality, not a spinner.
+ * Six faces bobbing the same way read as one loading animation; each moving
+ * the way its mood feels reads as six choices. Shared by both clients so the
+ * phone and the browser animate the same faces the same way.
+ */
+export const FACE_IDLE: Record<
+  MoodId,
+  { keyframes: Partial<Record<"x" | "y" | "rotate" | "scale", number[]>>; duration: number }
+> = {
+  // can't keep still
+  hyped: { keyframes: { y: [0, -5, 0], scale: [1, 1.1, 1] }, duration: 0.7 },
+  // dancing
+  party: { keyframes: { rotate: [-12, 12, -12] }, duration: 0.9 },
+  // beaming
+  sunny: { keyframes: { rotate: [0, 9, 0, -9, 0], scale: [1, 1.07, 1, 1.07, 1] }, duration: 2.4 },
+  // swaying, unbothered
+  chill: { keyframes: { x: [-2, 2, -2], rotate: [-4, 4, -4] }, duration: 3 },
+  // a slow breath in
+  tender: { keyframes: { scale: [1, 0.9, 1], y: [0, 1.5, 0] }, duration: 2.6 },
+  // nodding off, then catching itself
+  sleepy: { keyframes: { rotate: [0, -16, -16, 0], y: [0, 2, 2, 0] }, duration: 3.6 },
+};
+
+/** The aimed face moves faster (it's excited to be picked); faces start out of phase. */
+export function faceIdleTiming(index: number, aimed: boolean, duration: number) {
+  return { duration: aimed ? duration * 0.55 : duration, delay: 0.25 + index * 0.13 };
+}
