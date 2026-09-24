@@ -172,8 +172,8 @@ button {
   inset: -30%;
   pointer-events: none;
   background:
-    radial-gradient(45% 38% at 70% 12%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 70%),
-    radial-gradient(50% 40% at 15% 85%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%);
+    radial-gradient(45% 38% at 70% 12%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
+    radial-gradient(50% 40% at 15% 85%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%);
   filter: blur(50px);
   animation: drift 14s ease-in-out infinite alternate;
   transition: background 0.8s ease;
@@ -783,8 +783,11 @@ button {
   margin-bottom: 26px;
   position: relative;
   overflow: hidden;
+  /* solid, like the phone app's: the one filled accent on home. The old
+     accent-to-black gradient turned most accents into a muddy maroon */
   background:
-    linear-gradient(120deg, color-mix(in srgb, var(--accent) 80%, #000) 0%, color-mix(in srgb, var(--accent) 35%, #0a0a10) 100%);
+    linear-gradient(120deg, rgba(255, 255, 255, 0.1), transparent 55%),
+    var(--accent);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -796,10 +799,10 @@ button {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 19px;
-  color: #fff;
+  color: var(--on-accent, #fff);
 }
-.cta-sub { font-size: 13px; color: rgba(255, 255, 255, 0.75); margin-top: 4px; }
-.cta .eq span { background: #fff; }
+.cta-sub { font-size: 13px; color: var(--on-accent, #fff); opacity: 0.72; margin-top: 4px; }
+.cta .eq span { background: var(--on-accent, #fff); }
 
 .section-head {
   display: flex;
@@ -1328,12 +1331,13 @@ button {
   font-size: 27px;
   font-weight: 600;
   line-height: 1;
-  color: #0b0b10;
-  background: var(--accent);
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.4),
-    0 0 24px color-mix(in srgb, var(--accent) 35%, transparent);
-  transition: transform 0.15s ease, background 0.5s ease;
+  /* dark and ringed, not a second pink button: "Start discovering" is the
+     one filled accent on home, and the + no longer argues with it */
+  color: var(--accent);
+  background: var(--surface-2);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  transition: transform 0.15s ease, color 0.5s ease, border-color 0.5s ease;
 }
 .nav-fab:hover { transform: scale(1.06); }
 .nav-fab:active { transform: scale(0.9); }
@@ -2147,7 +2151,8 @@ span.pill { cursor: default; }
   display: none; /* the gate provides its own pitch */
 }
 .gate-close {
-  margin-top: 6px;
+  display: block;
+  margin: 6px auto 0;
   padding: 12px;
   color: var(--muted);
   font-size: 12.5px;
@@ -2933,12 +2938,10 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 .mood-section { margin-bottom: 28px; }
 
 .mood-row {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  margin: 0 -20px;
-  padding: 2px 20px 6px;
-  scrollbar-width: none;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px 0 6px;
 }
 .mood-row::-webkit-scrollbar { display: none; }
 
@@ -2946,12 +2949,11 @@ html[data-motion="reduced"] .drift { animation: none !important; }
    the face on the card, the face on the wheel and the face here are the same
    object at three sizes, so none of them wears a different shape. */
 .mood-chip {
-  flex: 0 0 auto;
-  width: 82px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   padding: 2px 0 4px;
   background: none;
   border: 0;
@@ -2959,8 +2961,8 @@ html[data-motion="reduced"] .drift { animation: none !important; }
   transition: transform 0.15s ease, color 0.2s ease;
 }
 .mood-disc {
-  width: 72px;
-  height: 72px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   border-radius: 999px;
@@ -2982,12 +2984,12 @@ html[data-motion="reduced"] .drift { animation: none !important; }
   border-color: var(--face, var(--accent));
 }
 .mood-chip-label {
-  font-size: 11.5px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 .mood-chip-any { color: var(--muted); }
-.mood-any-mark { font-size: 24px; line-height: 26px; font-weight: 300; }
+.mood-any-mark { font-size: 19px; line-height: 20px; font-weight: 300; }
 
 /* the lens, standing where the wordmark does while it's on */
 .mood-pill {
@@ -3125,12 +3127,6 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 }
 .mood-nudge b { color: var(--accent); font-weight: 700; }
 
-/* A chip sliced by the viewport edge reads as a bug unless something says
-   "there is more this way". The mask fades the last one out instead. */
-.mood-row {
-  -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 46px), transparent 100%);
-  mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 46px), transparent 100%);
-}
 
 /* ---------- onboarding: the hold ----------
    The fifth gesture is the only one that doesn't announce itself — a swipe
@@ -3623,3 +3619,72 @@ html[data-motion="reduced"] .drift { animation: none !important; }
   font-size: 11px;
 }
 .np-rules { overflow: hidden; }
+
+/* ---------- home: an empty library is one invitation ---------- */
+.library-empty-home {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 28px;
+  padding: 16px;
+  text-align: left;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  color: var(--text);
+  cursor: pointer;
+}
+.library-empty-home b { display: block; font-size: 14.5px; margin-bottom: 3px; }
+.library-empty-home small { display: block; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.library-empty-icon {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--save);
+  background: color-mix(in srgb, var(--save) 12%, transparent);
+}
+
+/* ---------- settings: grouped cards ----------
+   One card per group with hairlines between rows, instead of seven separate
+   boxes — the same shape as the phone app's settings. */
+.settings-card {
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.settings-card > .settings-row {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  border-top: 1px solid var(--line);
+}
+.settings-card > .settings-row:first-child { border-top: 0; }
+.settings-card > .settings-row:hover { background: rgba(255, 255, 255, 0.025); }
+.settings-foot {
+  margin: 22px 0 6px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+
+/* ---------- access form: email first ---------- */
+.access-field { display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+.access-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.access-label small { font-weight: 500; opacity: 0.75; margin-left: 4px; }
+.access-form .auth-input { font-size: 16px; }
+.auth-field { margin-bottom: 14px; text-align: left; }
+.auth-field .auth-input { width: 100%; font-size: 16px; }
+.auth-field .prefs-hint { font-size: 12px; }

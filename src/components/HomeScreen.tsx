@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { motion } from "motion/react";
 import { useStore } from "../state/store";
 import type { Track } from "../types";
@@ -126,20 +126,9 @@ export function HomeScreen({
     );
   };
 
-  // The row holds all six faces and runs off the side of a phone, so the mood
-  // you're in could be the one you can't see — pushed "tender" on a card, came
-  // home, and the row showed Party ringed (the hour's suggestion) with Tender
-  // scrolled away. The active chip is brought to the middle instead.
-  const moodRowRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const row = moodRowRef.current;
-    const on = row?.querySelector<HTMLElement>(".mood-chip.is-on");
-    if (!row || !on) return;
-    const r = row.getBoundingClientRect();
-    const c = on.getBoundingClientRect();
-    const left = row.scrollLeft + (c.left - r.left) - (row.clientWidth - c.width) / 2;
-    row.scrollTo({ left: Math.max(0, left) });
-  }, [state.mood]);
+  // All seven choices fit in one row. It used to scroll sideways, which hid
+  // the mood you were in half the time and cut a face in half at the edge.
+  const libraryEmpty = liked.length === 0 && discoveries.length === 0 && playlists.length === 0;
 
   return (
     <motion.div className="home" variants={stagger} initial="hidden" animate="show">
@@ -164,7 +153,7 @@ export function HomeScreen({
         <div className="section-head">
           <h3 className="section-title">What&apos;s the mood?</h3>
         </div>
-        <div className="mood-row" ref={moodRowRef}>
+        <div className="mood-row">
           {hour.moods.map((mood) => {
             const isOn = state.mood === mood.id;
             const isSuggested =
@@ -183,7 +172,7 @@ export function HomeScreen({
                 title={mood.line}
               >
                 <span className="mood-disc">
-                  <Face mood={mood.id} size={30} />
+                  <Face mood={mood.id} size={24} />
                 </span>
                 <span className="mood-chip-label">{mood.label}</span>
               </button>
@@ -192,6 +181,8 @@ export function HomeScreen({
           <button
             type="button"
             className={`mood-chip mood-chip-any${state.mood === null ? " is-on" : ""}`}
+            style={{ ["--face" as string]: "var(--text)" }}
+            aria-label="Any — no mood on the deck"
             onClick={() => {
               setMood(null);
               onDiscover();
@@ -201,7 +192,7 @@ export function HomeScreen({
             <span className="mood-disc">
               <span className="mood-any-mark" aria-hidden="true">∞</span>
             </span>
-            <span className="mood-chip-label">Anything</span>
+            <span className="mood-chip-label">Any</span>
           </button>
         </div>
         {state.prefs.moodByTime !== "off" && (
@@ -211,10 +202,19 @@ export function HomeScreen({
 
       <motion.div className="section-head" variants={rise}>
         <h3 className="section-title">Your library</h3>
-        <button className="section-action" onClick={onNewPlaylist}>
-          + new playlist
-        </button>
       </motion.div>
+      {libraryEmpty ? (
+        // one invitation, not two empty boxes pretending to be a library
+        <motion.button className="library-empty-home" variants={rise} onClick={onNewPlaylist}>
+          <span className="library-empty-icon">
+            <IconHeart size={18} />
+          </span>
+          <span>
+            <b>Nothing saved yet</b>
+            <small>Swipe a song down to keep it. Tap here, or hold +, to start a playlist.</small>
+          </span>
+        </motion.button>
+      ) : (
       <motion.div className="tiles" variants={rise}>
         <button className="tile" onClick={() => onOpenLibrary("liked")}>
           {mosaic(liked)}
@@ -245,6 +245,7 @@ export function HomeScreen({
           </button>
         ))}
       </motion.div>
+      )}
 
       {becauseRows.map((row) => (
         <motion.section key={row.genre} variants={rise}>

@@ -36,6 +36,7 @@ const CreatorDashboard = lazy(() =>
 import { LibraryScreen } from "./components/LibraryScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { NewPlaylistSheet, type PlaylistRules } from "./components/NewPlaylistSheet";
+import { inkOn } from "./lib/contrast";
 import { IconSettings, IconUser } from "./components/icons";
 import {
   DIR_TO_ACTION,
@@ -967,6 +968,8 @@ function Shell() {
     state.prefs.accentMode === "custom" ? state.prefs.accentColor : trackAccent;
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", accent);
+    // text on anything filled with the accent: dark or white, whichever reads
+    document.documentElement.style.setProperty("--on-accent", inkOn(accent));
   }, [accent]);
 
   // motion preference rides a data attribute so CSS can gate its loops

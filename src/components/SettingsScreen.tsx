@@ -25,7 +25,8 @@ import {
   MOOD_BY_TIME,
   type MoodByTime,
 } from "../data/mood";
-import { IconBack, IconCheck, IconUser } from "./icons";
+import { IconBack, IconChart, IconDroplet, IconHeart, IconMic, IconMove, IconMusic, IconPlayLine, IconShield, IconUser } from "./icons";
+import { BUILD_TAG } from "../buildInfo";
 import { useDialogs } from "./ui/Dialogs";
 
 const BETA_URL = import.meta.env.VITE_BETA_URL ?? "https://hookedcue.com/beta";
@@ -721,84 +722,114 @@ export function SettingsScreen({
   else if (page === "data") body = dataPage;
   else {
     body = (
+      <>
+      <header className="topbar">
+        <button className="topbar-btn" onClick={onBack} aria-label="Back">
+          <IconBack />
+        </button>
+        <span className="wordmark">
+          hooked<span className="dot">.</span>
+        </span>
+        <span style={{ width: 42 }} />
+      </header>
       <motion.div
         className="library-body"
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h2 className="library-title" style={{ marginBottom: 14 }}>
+        <h2 className="library-title" style={{ marginBottom: 4 }}>
           Settings
         </h2>
 
-        <NavRow
-          icon="◐"
-          title="Appearance"
-          sub={`accent · motion ${state.prefs.motion}`}
-          onOpen={() => onOpenPage("appearance")}
-        />
-        <NavRow
-          icon="▶"
-          iconColor="var(--more)"
-          title="Playback"
-          sub={`auto-advance ${state.autoAdvance ? "on" : "off"} · volume · save target`}
-          onOpen={() => onOpenPage("playback")}
-        />
-        <NavRow
-          icon="✥"
-          iconColor="var(--save)"
-          title="Gestures"
-          sub={`swipe distance · haptics ${state.prefs.haptics}`}
-          onOpen={() => onOpenPage("gestures")}
-        />
-        <NavRow
-          icon="♫"
-          iconColor="var(--accent)"
-          title="Sound & taste"
-          sub="languages, genres, blocked artists, replays"
-          onOpen={() => onOpenPage("sound")}
-        />
-        <NavRow
-          icon="♥"
-          iconColor={state.prefs.adsOptOut ? "var(--muted)" : "var(--accent)"}
-          title="Support hooked"
-          sub={state.prefs.adsOptOut ? "house ads off" : "house ads on"}
-          onOpen={() => onOpenPage("support")}
-        />
-        <NavRow
-          icon={<IconUser size={17} />}
-          title="Account"
-          sub={session.data?.user?.email ?? "sign in to keep your taste forever"}
-          onOpen={onOpenProfile}
-        />
-        <NavRow
-          icon="§"
-          title="Data & privacy"
-          sub="export, reset, delete account"
-          onOpen={() => onOpenPage("data")}
-        />
+        {/* three short cards instead of one long column of boxes — the same
+            groups, order and icons as the phone app's settings */}
+        <Group>listening</Group>
+        <div className="settings-card">
+          <NavRow
+            icon={<IconPlayLine />}
+            iconColor="var(--more)"
+            title="Playback"
+            sub={`auto-advance ${state.autoAdvance ? "on" : "off"} · volume · save target`}
+            onOpen={() => onOpenPage("playback")}
+          />
+          <NavRow
+            icon={<IconMove />}
+            iconColor="var(--save)"
+            title="Gestures"
+            sub={`swipe distance · haptics ${state.prefs.haptics}`}
+            onOpen={() => onOpenPage("gestures")}
+          />
+          <NavRow
+            icon={<IconMusic />}
+            iconColor="var(--accent)"
+            title="Sound & taste"
+            sub="languages, genres, blocked artists, replays"
+            onOpen={() => onOpenPage("sound")}
+          />
+        </div>
 
-        <Group>elsewhere</Group>
-        <a className="settings-row" href="#/creator" style={{ textDecoration: "none" }}>
-          <span className="settings-row-icon" style={{ color: "var(--more)" }}>♫</span>
-          <span className="settings-row-label">
-            Creator dashboard
-            <small>put your own music in the deck</small>
-          </span>
-          <span className="settings-row-value">open</span>
-        </a>
-        {isAdmin && (
-          <a className="settings-row" href="#/admin" style={{ textDecoration: "none" }}>
-            <span className="settings-row-icon" style={{ color: "var(--accent)" }}>
-              <IconCheck size={17} />
+        <Group>you</Group>
+        <div className="settings-card">
+          <NavRow
+            icon={<IconUser size={17} />}
+            title="Account"
+            sub={session.data?.user?.email ?? "sign in to keep your taste forever"}
+            onOpen={onOpenProfile}
+          />
+          <NavRow
+            icon={<IconDroplet />}
+            iconColor={state.prefs.accentMode === "custom" ? state.prefs.accentColor : "var(--accent)"}
+            title="Appearance"
+            sub={`accent · motion ${state.prefs.motion}`}
+            onOpen={() => onOpenPage("appearance")}
+          />
+          <NavRow
+            icon={<IconShield />}
+            title="Data & privacy"
+            sub="export, reset, delete account"
+            onOpen={() => onOpenPage("data")}
+          />
+        </div>
+
+        <Group>hooked</Group>
+        <div className="settings-card">
+          <NavRow
+            icon={<IconHeart size={17} />}
+            iconColor={state.prefs.adsOptOut ? "var(--muted)" : "var(--accent)"}
+            title="Support hooked"
+            sub={state.prefs.adsOptOut ? "house ads off" : "house ads on"}
+            onOpen={() => onOpenPage("support")}
+          />
+          <a className="settings-row" href="#/creator" style={{ textDecoration: "none" }}>
+            <span className="settings-row-icon" style={{ color: "var(--more)" }}>
+              <IconMic />
             </span>
             <span className="settings-row-label">
-              Admin dashboard
-              <small>live stats, users, permissions, catalog</small>
+              Creator dashboard
+              <small>put your own music in the deck</small>
             </span>
-            <span className="settings-row-value">open</span>
+            <span className="settings-row-value" aria-hidden>
+              ›
+            </span>
           </a>
-        )}
+          {isAdmin && (
+            <a className="settings-row" href="#/admin" style={{ textDecoration: "none" }}>
+              <span className="settings-row-icon" style={{ color: "var(--accent)" }}>
+                <IconChart />
+              </span>
+              <span className="settings-row-label">
+                Admin dashboard
+                <small>live stats, users, permissions, catalog</small>
+              </span>
+              <span className="settings-row-value" aria-hidden>
+                ›
+              </span>
+            </a>
+          )}
+        </div>
+        <p className="settings-foot">hooked. web · {BUILD_TAG}</p>
       </motion.div>
+      </>
     );
   }
 

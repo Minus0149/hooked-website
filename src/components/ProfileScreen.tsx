@@ -182,9 +182,10 @@ export function AuthForm() {
           : "Sign in to pick up your library where you left it."}
       </p>
 
-      {/* 01 — identity */}
-      <div className="prefs-block">
-        <span className="prefs-label">01 · who are you</span>
+      {/* plain labelled fields — the numbered boxes-in-a-card read as a
+          form within a form */}
+      <div className="access-field auth-field">
+        <span className="access-label">email</span>
         <input
           className="auth-input"
           type="email"
@@ -203,9 +204,8 @@ export function AuthForm() {
         </span>
       </div>
 
-      {/* 02 — the key */}
-      <div className="prefs-block">
-        <span className="prefs-label">02 · the key</span>
+      <div className="access-field auth-field">
+        <span className="access-label">password</span>
         <input
           className="auth-input"
           type="password"

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { authClient } from "../lib/auth-client";
 import { AuthForm } from "./ProfileScreen";
 
@@ -14,7 +14,14 @@ const GENRES = [
 ] as const;
 const MAX_GENRES = 8;
 
-type Stage = "form" | "sent" | "already" | "signin";
+type Stage = "form" | "details" | "sent" | "already" | "signin";
+
+interface ApplyResult {
+  ok?: boolean;
+  duplicate?: boolean;
+  status?: string;
+  message?: string;
+}
 
 /**
  * The wall after the free swipes run out.
@@ -22,6 +29,12 @@ type Stage = "form" | "sent" | "already" | "signin";
  * Deliberately an application, not a signup — accounts only exist once an admin
  * has approved the email, so offering a password field first would just produce
  * accounts that can't do anything.
+ *
+ * Two steps. The first is only the email (name optional): sending it is the
+ * whole application. It used to be eleven fields in four boxes, and every
+ * field on a form like this loses people. The second step — phone and what
+ * you play — is optional and skippable; it is sent as a second application for
+ * the same email, which the server uses only to fill details left blank.
  */
 export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
   const [stage, setStage] = useState<Stage>("form");
@@ -49,9 +62,7 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
           : list,
     );
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (busy) return;
+  const apply = async (extra: Record<string, unknown>): Promise<ApplyResult | null> => {
     setError(null);
     setBusy(true);
     try {
@@ -61,34 +72,56 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim(),
-          device: device.trim() || undefined,
-          notes: notes.trim() || undefined,
-          genres: genres.length ? genres : undefined,
           website: trap,
           startedAt: startedAt.current,
+          ...extra,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        duplicate?: boolean;
-        status?: string;
-        message?: string;
-      };
+      const data = (await res.json().catch(() => ({}))) as ApplyResult;
       if (!res.ok || !data.ok) {
         setError(data.message ?? "that didn't go through. try again?");
-        return;
+        return null;
       }
-      if (data.duplicate) {
-        setExisting(data.status ?? "pending");
-        setStage(data.status === "approved" ? "signin" : "already");
-      } else {
-        setStage("sent");
-      }
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "that didn't go through. try again?");
+      return null;
     } finally {
       setBusy(false);
     }
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+      setError("that email doesn't look right");
+      return;
+    }
+    const data = await apply({});
+    if (!data) return;
+    if (data.duplicate) {
+      setExisting(data.status ?? "pending");
+      setStage(data.status === "approved" ? "signin" : data.status === "pending" ? "details" : "already");
+    } else {
+      setStage("details");
+    }
+  };
+
+  const sendDetails = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    const hasAny = device.trim() || notes.trim() || genres.length > 0;
+    if (!hasAny) {
+      setStage("sent");
+      return;
+    }
+    const data = await apply({
+      device: device.trim() || undefined,
+      notes: notes.trim() || undefined,
+      genres: genres.length ? genres : undefined,
+    });
+    if (data) setStage("sent");
   };
 
   if (stage === "signin") {
@@ -111,13 +144,11 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
         role="status"
       >
         <i className="access-dot" />
-        <p className="gate-kicker">
-          {rejected ? "not this round" : stage === "already" ? "you're already in the queue" : "thank you for your interest"}
-        </p>
+        <p className="gate-kicker">{rejected ? "not this round" : "you're on the list"}</p>
         <p className="gate-copy">
           {rejected
             ? "this email isn't on the list for the current round. nothing else to do for now."
-            : "we'll get back to you. once you're approved you can create an account with this email and pick up right where you left off."}
+            : "we'll email you when you're in. then create an account with this address and pick up right where you left off."}
         </p>
         <button className="gate-close" onClick={() => setStage("signin")}>
           already approved? sign in
@@ -126,25 +157,90 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
     );
   }
 
+  if (stage === "details") {
+    return (
+      <motion.form
+        className="access-form"
+        onSubmit={sendDetails}
+        noValidate
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <i className="access-dot" />
+        <p className="gate-kicker">you're on the list</p>
+        <p className="gate-copy">
+          that's all we need. two optional things help us tune your first deck:
+        </p>
+
+        <label className="access-field">
+          <span className="access-label">your phone</span>
+          <input
+            className="auth-input"
+            placeholder="pixel 8a, redmi note 13, …"
+            value={device}
+            onChange={(e) => setDevice(e.target.value)}
+            maxLength={80}
+          />
+        </label>
+
+        <div className="access-field">
+          <span className="access-label">
+            what you actually play <small>up to {MAX_GENRES}</small>
+          </span>
+          <div className="access-pills">
+            {GENRES.map((g) => {
+              const on = genres.includes(g);
+              return (
+                <button
+                  type="button"
+                  key={g}
+                  className={on ? "access-pill on" : "access-pill"}
+                  aria-pressed={on}
+                  disabled={!on && genres.length >= MAX_GENRES}
+                  onClick={() => toggleGenre(g)}
+                >
+                  {g}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <label className="access-field">
+          <span className="access-label">anything else</span>
+          <textarea
+            className="auth-input access-notes"
+            placeholder="bugs you expect, features you want, complaints"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            maxLength={500}
+          />
+        </label>
+
+        {error && <p className="access-error">{error}</p>}
+
+        <div className="gate-actions">
+          <button className="ob-primary" type="submit" disabled={busy}>
+            {busy ? "sending…" : "send"}
+          </button>
+          <button type="button" className="gate-close" onClick={() => setStage("sent")}>
+            skip — I'm done
+          </button>
+        </div>
+      </motion.form>
+    );
+  }
+
   return (
     <form className="access-form" onSubmit={submit} noValidate>
       <p className="gate-kicker">that was your {freeSwipes} free tastes</p>
       <p className="gate-copy">
-        hooked. is invite-only while it's in testing. tell me who you are and i'll get back to you.
+        hooked. is invite-only while it's in testing. leave your email and we'll let you in.
       </p>
 
-      {/* 01 — identity: the two fields that actually matter */}
-      <div className="prefs-block">
-        <span className="prefs-label">01 · who are you</span>
-        <input
-          className="auth-input"
-          placeholder="your name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          autoComplete="name"
-          maxLength={60}
-          required
-        />
+      <label className="access-field">
+        <span className="access-label">email</span>
         <input
           className="auth-input"
           type="email"
@@ -155,60 +251,31 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
           autoComplete="email"
           maxLength={200}
           required
+          autoFocus
         />
-        <span className="prefs-hint">
-          the invite and every update goes to this one address
-        </span>
-      </div>
-
-      {/* 02 — the phone, since the test build is android-only */}
-      <div className="prefs-block">
-        <span className="prefs-label">02 · your phone</span>
-        <input
-          className="auth-input"
-          placeholder="pixel 8a, redmi note 13, ..."
-          value={device}
-          onChange={(e) => setDevice(e.target.value)}
-          maxLength={80}
-        />
-        <span className="prefs-hint">optional — the test build only runs on android</span>
-      </div>
-
-      {/* 03 — taste: optional, but it tunes the first deck you're dealt */}
-      <div className="prefs-block">
-        <span className="prefs-label">03 · what do you actually play?</span>
-        <div className="access-pills">
-          {GENRES.map((g) => {
-            const on = genres.includes(g);
-            return (
-              <button
-                type="button"
-                key={g}
-                className={on ? "access-pill on" : "access-pill"}
-                aria-pressed={on}
-                disabled={!on && genres.length >= MAX_GENRES}
-                onClick={() => toggleGenre(g)}
-              >
-                {g}
-              </button>
-            );
-          })}
-        </div>
-        <span className="prefs-hint">optional — up to {MAX_GENRES}; tunes your first deck</span>
-      </div>
-
-      {/* 04 — the open floor */}
-      <div className="prefs-block">
-        <span className="prefs-label">04 · anything else</span>
-        <textarea
-          className="auth-input access-notes"
-          placeholder="bugs you expect, features you want, complaints"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={2}
-          maxLength={500}
-        />
-      </div>
+      </label>
+      <AnimatePresence initial={false}>
+        {email.includes("@") && (
+          <motion.label
+            className="access-field"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+          >
+            <span className="access-label">
+              your name <small>optional</small>
+            </span>
+            <input
+              className="auth-input"
+              placeholder="what should we call you?"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoComplete="name"
+              maxLength={60}
+            />
+          </motion.label>
+        )}
+      </AnimatePresence>
 
       {/* honeypot — never shown, never announced, only bots fill it */}
       <div className="access-hp" aria-hidden="true">
@@ -226,10 +293,9 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
 
       {error && <p className="access-error">{error}</p>}
 
-      {/* sticky action bar: the card scrolls, the button never leaves */}
       <div className="gate-actions">
-        <button className="ob-primary" type="submit" disabled={busy}>
-          {busy ? "sending..." : "ask for access"}
+        <button className="ob-primary" type="submit" disabled={busy || !email.trim()}>
+          {busy ? "sending…" : "put me on the list"}
         </button>
         <button type="button" className="gate-close" onClick={() => setStage("signin")}>
           already approved? sign in

@@ -58,16 +58,70 @@ type Incoming = {
   userAgent?: string;
 };
 
+/**
+ * The name to store. Signing up asks for the email first and the name only
+ * optionally — every extra field on a signup form loses people, and the
+ * email is the only thing an invite needs. Without one, the part of the
+ * address before the @ stands in, so the admin queue still reads as people.
+ */
+export function nameFor(name: string, email: string): string {
+  const given = cleanText(name, MAX.name);
+  if (given.length >= 2) return given;
+  const local = cleanText(email, MAX.email).split("@")[0] ?? "";
+  return local.length >= 2 ? local.slice(0, MAX.name) : "listener";
+}
+
+/** The optional details a request can carry, cleaned. */
+export function detailFields(input: Omit<Incoming, "email" | "name" | "source">) {
+  return {
+    device: input.device ? cleanText(input.device, MAX.device) || undefined : undefined,
+    androidVersion: input.androidVersion ? cleanText(input.androidVersion, 40) || undefined : undefined,
+    listensOn: cleanList(input.listensOn),
+    genres: cleanList(input.genres),
+    hours: input.hours ? cleanText(input.hours, MAX.hours) || undefined : undefined,
+    lastSkipped: input.lastSkipped ? cleanText(input.lastSkipped, MAX.lastSkipped) || undefined : undefined,
+    notes: input.notes ? cleanText(input.notes, MAX.notes) || undefined : undefined,
+  };
+}
+
+type Details = ReturnType<typeof detailFields>;
+
+/**
+ * What a second submission from the same email may add: details the first
+ * one left empty. The signup is two steps — email, then an optional "help us
+ * tune it" — so the second step arrives as a resubmission.
+ *
+ * It only ever fills blanks, and only while the request is pending: it can't
+ * overwrite what's there, and it can't touch the decision. Someone who knows
+ * an address can add a phone model to a pending row, which is harmless; they
+ * can't change or read anything.
+ */
+export function detailsPatch(
+  existing: Partial<Record<keyof Details, unknown>> & { status: string },
+  incoming: Details,
+): Partial<Details> {
+  if (existing.status !== "pending") return {};
+  const patch: Partial<Details> = {};
+  for (const key of Object.keys(incoming) as (keyof Details)[]) {
+    const next = incoming[key];
+    const empty = Array.isArray(next) ? next.length === 0 : next === undefined;
+    if (empty) continue;
+    const have = existing[key];
+    const haveEmpty = have === undefined || have === null || have === "" || (Array.isArray(have) && have.length === 0);
+    if (haveEmpty) (patch as Record<string, unknown>)[key] = next;
+  }
+  return patch;
+}
+
 /** Shared by the public mutation and the landing webhook, so both validate identically. */
 async function upsertRequest(
   ctx: { db: any },
   input: Incoming,
 ): Promise<{ status: "pending" | "approved" | "rejected"; duplicate: boolean }> {
   const email = cleanText(input.email, MAX.email).toLowerCase();
-  const name = cleanText(input.name, MAX.name);
-
   if (!EMAIL_RE.test(email)) throw new Error("A real email address is required");
-  if (name.length < 2) throw new Error("A name is required");
+  const name = nameFor(input.name, email);
+  const details = detailFields(input);
 
   const existing = await ctx.db
     .query("accessRequests")
@@ -75,21 +129,20 @@ async function upsertRequest(
     .unique();
 
   // Never let a re-submission reset a decision — someone who's been rejected
-  // can't clear it by filling the form again.
-  if (existing) return { status: existing.status, duplicate: true };
+  // can't clear it by filling the form again. A pending one may fill in the
+  // details it left out (the optional second step).
+  if (existing) {
+    const patch = detailsPatch(existing, details);
+    if (Object.keys(patch).length > 0) await ctx.db.patch(existing._id, patch);
+    return { status: existing.status, duplicate: true };
+  }
 
   await ctx.db.insert("accessRequests", {
     email,
     name,
     source: input.source,
     status: "pending" as const,
-    device: input.device ? cleanText(input.device, MAX.device) : undefined,
-    androidVersion: input.androidVersion ? cleanText(input.androidVersion, 40) : undefined,
-    listensOn: cleanList(input.listensOn),
-    genres: cleanList(input.genres),
-    hours: input.hours ? cleanText(input.hours, MAX.hours) : undefined,
-    lastSkipped: input.lastSkipped ? cleanText(input.lastSkipped, MAX.lastSkipped) : undefined,
-    notes: input.notes ? cleanText(input.notes, MAX.notes) : undefined,
+    ...details,
     submittedAt: new Date().toISOString(),
     userAgent: input.userAgent ? cleanText(input.userAgent, MAX.userAgent) : undefined,
     invited: false,

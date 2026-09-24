@@ -140,3 +140,59 @@ export const IconArrow = ({
     <path d="m5 11 7-7 7 7" />
   </svg>
 );
+
+/* settings icons — the same Feather shapes the phone app uses, so the two
+   settings screens read as one */
+export const IconDroplet = ({ size = 17, strokeWidth = 2 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={strokeWidth}>
+    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+  </svg>
+);
+
+export const IconPlayLine = ({ size = 17, strokeWidth = 2 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={strokeWidth}>
+    <polygon points="5 3 19 12 5 21 5 3" />
+  </svg>
+);
+
+export const IconMove = ({ size = 17, strokeWidth = 2 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={strokeWidth}>
+    <polyline points="5 9 2 12 5 15" />
+    <polyline points="9 5 12 2 15 5" />
+    <polyline points="15 19 12 22 9 19" />
+    <polyline points="19 9 22 12 19 15" />
+    <line x1="2" y1="12" x2="22" y2="12" />
+    <line x1="12" y1="2" x2="12" y2="22" />
+  </svg>
+);
+
+export const IconMusic = ({ size = 17, strokeWidth = 2 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={strokeWidth}>
+    <path d="M9 18V5l12-2v13" />
+    <circle cx="6" cy="18" r="3" />
+    <circle cx="18" cy="16" r="3" />
+  </svg>
+);
+
+export const IconShield = ({ size = 17, strokeWidth = 2 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={strokeWidth}>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+  </svg>
+);
+
+export const IconChart = ({ size = 17, strokeWidth = 2 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={strokeWidth}>
+    <line x1="18" y1="20" x2="18" y2="10" />
+    <line x1="12" y1="20" x2="12" y2="4" />
+    <line x1="6" y1="20" x2="6" y2="14" />
+  </svg>
+);
+
+export const IconMic = ({ size = 17, strokeWidth = 2 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={strokeWidth}>
+    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+    <line x1="12" y1="19" x2="12" y2="23" />
+    <line x1="8" y1="23" x2="16" y2="23" />
+  </svg>
+);
