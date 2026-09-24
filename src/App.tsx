@@ -16,6 +16,7 @@ import { SwipeDeck } from "./components/SwipeDeck";
 import { coerceMood, DAYPART_MOOD, daypartAt, moodById, moodPlaylistName, type MoodId } from "./data/mood";
 import { MoodWheel } from "./components/MoodWheel";
 import { verdict as verdictFor } from "./data/predict";
+import { soundScore } from "./data/sound";
 import { TopBar } from "./components/TopBar";
 import { BottomNav } from "./components/BottomNav";
 import { HomeScreen } from "./components/HomeScreen";
@@ -109,6 +110,9 @@ type ServerTrackWithHooks = ServerTrack & {
   markets?: string[];
   heat?: number;
   energy?: number;
+  sound?: string;
+  audioMood?: number[];
+  vocal?: number;
 };
 
 interface ServerLibrary {
@@ -124,6 +128,9 @@ const toLocal = (t: ServerTrackWithHooks): Track => ({
   markets: t.markets,
   heat: t.heat,
   energy: t.energy,
+  sound: t.sound,
+  audioMood: t.audioMood,
+  vocal: t.vocal,
   id: t.trackId,
   title: t.title,
   artist: t.artist,
@@ -159,6 +166,7 @@ function Shell() {
     applyMoodPicks,
     setStrengths,
     model,
+    sound,
   } = useStore();
   // latest state without re-creating callbacks that read it (the debounced
   // prefs push below reads state.prefs at fire time, not capture time)
@@ -582,10 +590,16 @@ function Shell() {
   );
 
   const deckTrack = state.queue[0] ?? null;
-  const deckVerdict = useMemo(
-    () => (deckTrack ? verdictFor(model, deckTrack, state.crowdMoods) : null),
-    [model, deckTrack, state.crowdMoods],
-  );
+  const deckVerdict = useMemo(() => {
+    if (!deckTrack) return null;
+    const v = verdictFor(model, deckTrack, state.crowdMoods);
+    // The labels can't hear; the sound taste can. When it clearly agrees,
+    // say so — "sounds like what you keep" is the reason people actually mean.
+    if (sound && sound.confidence >= 0.5 && soundScore(sound, deckTrack) > 0.35) {
+      return { ...v, reasons: [...v.reasons, "sounds like what you keep"].slice(0, 3) };
+    }
+    return v;
+  }, [model, sound, deckTrack, state.crowdMoods]);
 
   useEffect(() => {
     // An empty server catalogue is a real state (admin hid everything, or the

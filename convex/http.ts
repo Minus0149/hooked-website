@@ -284,4 +284,72 @@ http.route({
   }),
 });
 
+/**
+ * The sound analyser (scripts/analyze-sound.mjs): same key as the hook
+ * analyser, its own pair of routes so the two can run independently.
+ */
+http.route({
+  path: "/analyzer/sound-pending",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const secret = process.env.HOOK_ANALYZE_KEY;
+    const provided = request.headers.get("x-analyzer-key") ?? "";
+    if (!secret || !safeEqual(provided, secret)) return new Response("forbidden", { status: 403 });
+    const params = new URL(request.url).searchParams;
+    const limit = Number(params.get("limit") ?? 100);
+    const version = Number(params.get("version") ?? 0);
+    if (!Number.isInteger(version) || version < 1) return new Response("bad version", { status: 400 });
+    const tracks = await ctx.runQuery(internal.analyzer.soundPendingTracks, {
+      limit: Number.isFinite(limit) ? limit : 100,
+      version,
+    });
+    return Response.json({ ok: true, tracks }, { status: 200 });
+  }),
+});
+
+http.route({
+  path: "/analyzer/sound-ingest",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const secret = process.env.HOOK_ANALYZE_KEY;
+    const provided = request.headers.get("x-analyzer-key") ?? "";
+    if (!secret || !safeEqual(provided, secret)) return new Response("forbidden", { status: 403 });
+    const raw = await request.text();
+    if (raw.length > ANALYZER_MAX_BODY_BYTES) return new Response("too large", { status: 413 });
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return new Response("bad request", { status: 400 });
+    }
+    const items: unknown[] = Array.isArray(body.batch) ? body.batch : [];
+    let heard = 0;
+    let written = 0;
+    for (const item of items.slice(0, 200)) {
+      const rec = item as Record<string, unknown>;
+      const trackId = str(rec.trackId);
+      const version = typeof rec.version === "number" ? rec.version : NaN;
+      if (!trackId || !Number.isInteger(version)) continue;
+      try {
+        const r = await ctx.runMutation(internal.analyzer.ingestSound, {
+          trackId,
+          version,
+          sound: typeof rec.sound === "string" ? rec.sound : undefined,
+          audioMood: Array.isArray(rec.audioMood)
+            ? (rec.audioMood as unknown[]).filter((x): x is number => typeof x === "number")
+            : undefined,
+          vocal: typeof rec.vocal === "number" ? rec.vocal : undefined,
+        });
+        if (r.ok) {
+          written++;
+          if (r.heard) heard++;
+        }
+      } catch {
+        /* one bad row doesn't sink the batch */
+      }
+    }
+    return Response.json({ ok: true, written, heard }, { status: 200 });
+  }),
+});
+
 export default http;

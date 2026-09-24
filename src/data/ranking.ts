@@ -2,6 +2,7 @@ import type { Track } from "../types";
 import { EMPTY_TASTE, genreBoostScore, tasteScore, type TastePrefs } from "./taste";
 import { moodFitFor, type CrowdMoods, type MoodId } from "./mood";
 import { likeBias, type TasteModel } from "./predict";
+import { SOUND_PLACES, soundScore, type SoundTaste } from "./sound";
 
 /**
  * How the deck decides what comes next.
@@ -41,6 +42,10 @@ export type Steer = {
   model: TasteModel | null;
   /** How far that model may pull a track, in places. */
   modelStrength: number;
+  /** The direction their ear leans (data/sound.ts), or null before evidence. */
+  sound: SoundTaste | null;
+  /** How far a sound match may pull a track, in places, at full confidence. */
+  soundStrength: number;
 };
 
 /**
@@ -66,6 +71,8 @@ export const NO_STEER: Steer = {
   crowdMoods: {},
   model: null,
   modelStrength: MODEL_PLACES,
+  sound: null,
+  soundStrength: SOUND_PLACES,
 };
 
 export function shuffle<T>(arr: T[]): T[] {
@@ -95,6 +102,9 @@ export function shuffle<T>(arr: T[]): T[] {
  *   12  what this device learned from their own swipes, scaled by how much
  *       evidence there is: near zero in a first session, full weight once they
  *       have kept ten songs and buried ten.
+ *   10  how close it sounds to what they keep (data/sound.ts), scaled by
+ *       the evidence behind their taste vector. It hears the difference
+ *       between two "pop" songs, which none of the label-based terms can.
  *    9  what the catalogue's other listeners imply (an admin can zero it).
  *    6  a right-swipe's genre steer: one gesture, a nudge.
  *
@@ -108,6 +118,7 @@ export function rankPool(pool: Track[], steer: Steer): Track[] {
   const useAffinity = steer.affinityStrength > 0;
   const useMood = steer.mood !== null && steer.moodStrength > 0;
   const useModel = steer.model !== null && steer.modelStrength > 0;
+  const useSound = steer.sound !== null && steer.soundStrength > 0;
   const scored = shuffle(pool).map((t, i) => ({
     t,
     // index keeps the shuffle meaningful; score is worth a few places, not all
@@ -119,10 +130,37 @@ export function rankPool(pool: Track[], steer: Steer): Track[] {
       (useMood ? moodFitFor(t, steer.mood, steer.crowdMoods) * steer.moodStrength : 0) -
       // already damped by the model's own confidence, so an untrained one
       // contributes exactly zero rather than noise
-      (useModel ? likeBias(steer.model, t, steer.crowdMoods) * steer.modelStrength : 0),
+      (useModel ? likeBias(steer.model, t, steer.crowdMoods) * steer.modelStrength : 0) -
+      (useSound
+        ? soundScore(steer.sound, t) * steer.soundStrength * (steer.sound?.confidence ?? 0)
+        : 0),
   }));
   scored.sort((a, b) => a.key - b.key);
-  return scored.map((s) => s.t);
+  return spreadArtists(scored.map((s) => s.t));
+}
+
+/** No artist twice within this many cards. */
+export const ARTIST_GAP = 3;
+
+/**
+ * Variety: the same artist never appears twice within ARTIST_GAP cards. Every
+ * signal above pulls toward what someone likes, and what someone likes tends
+ * to be one artist — so without this a good steer turns into three Diljit
+ * songs in a row, which reads as a playlist, not a deck. Moves the repeat to
+ * the next card that isn't a repeat; order is otherwise untouched.
+ */
+export function spreadArtists<T extends { artist: string }>(tracks: T[]): T[] {
+  const out = [...tracks];
+  for (let i = 1; i < out.length; i++) {
+    const recent = new Set(out.slice(Math.max(0, i - ARTIST_GAP + 1), i).map((t) => t.artist));
+    if (!recent.has(out[i].artist)) continue;
+    const j = out.findIndex((t, k) => k > i && !recent.has(t.artist));
+    if (j > i) {
+      const [moved] = out.splice(j, 1);
+      out.splice(i, 0, moved);
+    }
+  }
+  return out;
 }
 
 export function buildQueue(

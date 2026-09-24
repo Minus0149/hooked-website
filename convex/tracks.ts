@@ -49,6 +49,9 @@ export const list = query({
           markets: track.markets,
           heat: track.heat,
           energy: track.energy,
+          sound: track.sound,
+          audioMood: track.audioMood,
+          vocal: track.vocal,
           audioUrl: track.audioStorageId ? await ctx.storage.getUrl(track.audioStorageId) : null,
           hooks: hooks.map((h) => ({
             id: h._id,

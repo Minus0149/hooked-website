@@ -224,6 +224,8 @@ export function AnalyticsPanel({ a }: { a: Analytics }) {
         requests and hooks — no sampling, no delay.
       </p>
 
+      <EvalCard />
+
       <section className="admin-stats">
         <StatCard label="active today" value={String(a.live.dau)} sub="swiped in the last 24h" />
         <StatCard label="active this week" value={String(a.live.wau)} />
@@ -429,3 +431,48 @@ function HookRow({
 }
 
 /* ---------------- creators ---------------- */
+
+/**
+ * Does the ranking beat a shuffle? The last holdout test, run offline by
+ * scripts/eval-recs.ts --store. Every idea about recommendation is a guess
+ * until this says otherwise, so it sits at the top.
+ */
+function EvalCard() {
+  const e = useQuery(api.admin.evalLatest);
+  if (e === undefined) return null;
+  return (
+    <section className="admin-panel eval-card">
+      <h3>Does the ranking beat a shuffle?</h3>
+      {e === null ? (
+        <p className="admin-dim">
+          Not measured yet. Run <code>npx tsx scripts/eval-recs.ts --prod --store</code> once
+          there are real swipes: it trains on each listener&apos;s older swipes and checks
+          how well each ranker predicts their newer ones.
+        </p>
+      ) : (
+        <>
+          <p className="admin-dim">
+            {e.label} · {e.users} listeners · {e.examSwipes} held-out swipes ·{" "}
+            {new Date(e.at).toLocaleString()} · {e.heard} of {e.catalog} tracks have a sound
+            profile. AUC: 0.5 is a coin flip, 1.0 is perfect.
+          </p>
+          <div className="eval-bars">
+            {e.rankers.map((r) => (
+              <div className="eval-bar" key={r.name}>
+                <span className="eval-name">{r.name}</span>
+                <span className="eval-track">
+                  <span
+                    className={r.auc > 0.52 ? "good" : r.auc < 0.48 ? "bad" : ""}
+                    style={{ width: `${Math.max(0, Math.min(1, r.auc)) * 100}%` }}
+                  />
+                  <i style={{ left: "50%" }} aria-hidden="true" />
+                </span>
+                <b>{r.auc.toFixed(3)}</b>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}

@@ -31,6 +31,20 @@ export interface Track {
    * a guess from the genre string. Absent until a track has been analysed.
    */
   energy?: number;
+  /**
+   * What the recording sounds like: its CLAP audio embedding, projected to 32
+   * numbers and packed as signed bytes in base64 (see data/sound.ts). Written
+   * by scripts/analyze-sound.mjs; absent until a track has been heard.
+   */
+  sound?: string;
+  /**
+   * How the audio reads on each mood, in MOOD_IDS order (hyped, party, sunny,
+   * chill, tender, sleepy), summing to ~1 — the model listening, calibrated
+   * across the catalogue. Absent until analysed.
+   */
+  audioMood?: number[];
+  /** 0..1, how sung (vs instrumental) the audio is. Absent until analysed. */
+  vocal?: number;
 }
 
 export type SwipeAction = "skip" | "save" | "more" | "never";

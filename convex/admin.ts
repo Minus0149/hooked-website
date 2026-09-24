@@ -897,3 +897,44 @@ export const grantAdmin = internalMutation({
     return { email: target, created: true };
   },
 });
+
+const EVAL_KEY = "eval:latest";
+
+/**
+ * The latest holdout test (scripts/eval-recs.ts): does each ranker beat a
+ * shuffle on real swipes? Written by the script with --store; internal, so
+ * only someone with deploy access can write a result.
+ */
+export const storeEval = internalMutation({
+  args: { report: v.any() },
+  handler: async (ctx, { report }) => {
+    const value = { ...(report as Record<string, unknown>), at: new Date().toISOString() };
+    const row = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", EVAL_KEY))
+      .unique();
+    if (row) await ctx.db.patch(row._id, { value });
+    else await ctx.db.insert("appSettings", { key: EVAL_KEY, value });
+  },
+});
+
+export const evalLatest = query({
+  args: {},
+  handler: async (ctx) => {
+    const viewer = await getViewer(ctx);
+    if (!hasPerm(viewer, "stats.view")) return null;
+    const row = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", EVAL_KEY))
+      .unique();
+    return (row?.value ?? null) as null | {
+      rankers: { name: string; auc: number; users: number }[];
+      users: number;
+      examSwipes: number;
+      label: string;
+      heard: number;
+      catalog: number;
+      at: string;
+    };
+  },
+});

@@ -194,6 +194,17 @@ export default defineSchema({
     /** which calibration of the energy scale produced `energy` (hook-detector.mjs) */
     energyCal: v.optional(v.number()),
     /**
+     * What the recording sounds like: CLAP embedding projected to 32 signed
+     * bytes, base64 (src/data/sound.ts). From scripts/analyze-sound.mjs.
+     */
+    sound: v.optional(v.string()),
+    /** the audio's reading of each mood, MOOD_IDS order, summing to ~1 */
+    audioMood: v.optional(v.array(v.number())),
+    /** 0..1, how sung (vs instrumental) the audio is */
+    vocal: v.optional(v.number()),
+    /** which version of the sound model/projection produced the three above */
+    soundVersion: v.optional(v.number()),
+    /**
      * When the external analyzer last measured this track's audio and wrote
      * real hooks (see scripts/analyze-hooks.mjs). Absent means "still waiting
      * for analysis" — the even-spaced provisional windows cover until then.

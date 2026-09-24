@@ -88,6 +88,59 @@ export const ingestEnergy = internalMutation({
   },
 });
 
+/** Tracks the sound analyser hasn't heard, or heard with an older model. */
+export const soundPendingTracks = internalQuery({
+  args: { limit: v.number(), version: v.number() },
+  handler: async (ctx, { limit, version }) => {
+    const all = await ctx.db.query("tracks").collect();
+    return all
+      .filter((t) => t.hidden !== true && !!t.previewUrl && t.soundVersion !== version)
+      .slice(0, Math.min(Math.max(limit, 1), 500))
+      .map((t) => ({ trackId: t.trackId, title: t.title, artist: t.artist, previewUrl: t.previewUrl }));
+  },
+});
+
+const SOUND_B64 = /^[A-Za-z0-9+/]{42,44}={0,2}$/;
+
+/**
+ * Store what the sound analyser heard. Validated hard: this lands in every
+ * client's ranking, so a malformed vector must be dropped, not stored.
+ * A preview that wouldn't decode is stamped with the version and nothing
+ * else, so it isn't downloaded again on every run.
+ */
+export const ingestSound = internalMutation({
+  args: {
+    trackId: v.string(),
+    version: v.number(),
+    sound: v.optional(v.string()),
+    audioMood: v.optional(v.array(v.number())),
+    vocal: v.optional(v.number()),
+  },
+  handler: async (ctx, { trackId, version, sound, audioMood, vocal }) => {
+    const track = await ctx.db
+      .query("tracks")
+      .withIndex("by_trackId", (q) => q.eq("trackId", cleanText(trackId, 120)))
+      .unique();
+    if (!track) return { ok: false as const, reason: "no track" };
+    const goodSound = typeof sound === "string" && SOUND_B64.test(sound) ? sound : undefined;
+    const goodMood =
+      Array.isArray(audioMood) &&
+      audioMood.length === 6 &&
+      audioMood.every((x) => Number.isFinite(x) && x >= 0 && x <= 1)
+        ? audioMood.map((x) => Math.round(x * 1000) / 1000)
+        : undefined;
+    const goodVocal =
+      typeof vocal === "number" && Number.isFinite(vocal) ? Math.min(Math.max(vocal, 0), 1) : undefined;
+    await ctx.db.patch(track._id, {
+      sound: goodSound,
+      audioMood: goodMood,
+      vocal: goodVocal,
+      soundVersion: Math.floor(version),
+    });
+    return { ok: true as const, heard: goodSound !== undefined };
+  },
+});
+
 /**
  * Write measured windows for one track.
  *

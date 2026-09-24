@@ -3434,3 +3434,17 @@ html[data-motion="reduced"] .drift { animation: none !important; }
    scroll, the browser cancels the pointer, and the ring never sees it */
 .nav-fab { touch-action: none; }
 .card img { -webkit-user-drag: none; }
+
+/* ---------- admin: the holdout test ---------- */
+.eval-card { margin-bottom: 16px; }
+.eval-bars { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.eval-bar { display: grid; grid-template-columns: 160px 1fr 52px; align-items: center; gap: 12px; font-size: 13px; }
+.eval-name { color: var(--muted); }
+.eval-track { position: relative; height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.eval-track > span { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--muted); }
+.eval-track > span.good { background: var(--save); }
+.eval-track > span.bad { background: var(--never); }
+/* the coin-flip line: everything left of it is worse than a shuffle */
+.eval-track > i { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); opacity: .6; }
+.eval-bar b { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .eval-bar { grid-template-columns: 110px 1fr 46px; } }

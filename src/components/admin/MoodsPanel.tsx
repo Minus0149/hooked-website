@@ -49,6 +49,12 @@ export function MoodsPanel({ summary }: { summary: Summary }) {
           sub={`${summary.energy.analysed} of ${summary.energy.total} tracks`}
           color="var(--save)"
         />
+        <StatCard
+          label="sound heard"
+          value={`${summary.sound.total > 0 ? Math.round((summary.sound.heard / summary.sound.total) * 100) : 0}%`}
+          sub={`${summary.sound.heard} tracks · run scripts/analyze-sound.mjs`}
+          color="#8b7cff"
+        />
       </Stats>
 
       <Cols>

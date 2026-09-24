@@ -153,13 +153,23 @@ export type MoodSummary = {
   published: number;
   byMood: { mood: MoodId; votes: number; tracks: number }[];
   energy: { analysed: number; total: number; buckets: number[] };
+  /** tracks the sound analyser has heard (data/sound.ts) */
+  sound: { heard: number; total: number };
   top: {
     mood: MoodId;
     tracks: { trackId: string; title: string; artist: string; artwork: string; n: number }[];
   }[];
 };
 
-type TrackLite = { trackId: string; title: string; artist: string; artwork: string; energy?: number; hidden?: boolean };
+type TrackLite = {
+  trackId: string;
+  title: string;
+  artist: string;
+  artwork: string;
+  energy?: number;
+  hidden?: boolean;
+  sound?: string;
+};
 
 /**
  * The whole mood picture, from the raw rows. Pure so it can be tested without
@@ -211,6 +221,7 @@ export function summariseMoods(
     published: tallies.filter((t) => publishable(t.counts, floor).length > 0).length,
     byMood,
     energy: { analysed, total: live.length, buckets },
+    sound: { heard: live.filter((t) => typeof t.sound === "string").length, total: live.length },
     top,
   };
 }
@@ -243,6 +254,7 @@ export const adminSummary = query({
         artwork: t.artwork,
         energy: t.energy,
         hidden: t.hidden,
+        sound: t.sound,
       })),
       runtime.moodMinVotes,
     );

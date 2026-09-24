@@ -189,6 +189,8 @@ export interface MoodTrack {
    * which is most of a fresh catalogue.
    */
   energy?: number;
+  /** how the audio reads on each mood, MOOD_IDS order; see types.ts */
+  audioMood?: number[];
 }
 
 /**
@@ -200,7 +202,8 @@ export interface MoodTrack {
  * penalised for what we failed to measure — it is simply judged on its genre.
  *
  * The order of trust is the point:
- *   people who listened to it (1.6) > how it is filed (1.0) > how loud it is (0.7)
+ *   people who listened to it (1.6) > a model that listened to it (1.2)
+ *     > how it is filed (1.0) > how loud it is (0.7)
  *
  * A crowd tag outranks a genre string because genre is a retail category and
  * mood is an experience: Apple files half of Bollywood under one word, and
@@ -232,6 +235,18 @@ export function moodFit(
     const hit = mood.match.some((m) => genre.includes(flattenGenre(m)));
     total += 1.0 * (hit ? 1 : 0);
     weight += 1.0;
+  }
+
+  // The analyser's reading of the audio itself. Relative to the track's own
+  // strongest mood, so a song that is clearly "tender" scores 1 there even if
+  // the model spread some probability elsewhere.
+  if (Array.isArray(track.audioMood) && track.audioMood.length === MOOD_IDS.length) {
+    const top = Math.max(...track.audioMood);
+    const at = track.audioMood[MOOD_IDS.indexOf(mood.id)];
+    if (top > 0 && Number.isFinite(at)) {
+      total += 1.2 * Math.max(0, at / top);
+      weight += 1.2;
+    }
   }
 
   if (typeof track.energy === "number" && Number.isFinite(track.energy)) {
