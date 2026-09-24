@@ -236,7 +236,9 @@ function Shell() {
   // ensureProfile is the access gate: it refuses to create a profile until the
   // email has been approved, so a rejected/pending sign-in has to be surfaced
   // rather than swallowed.
-  const [accessBlock, setAccessBlock] = useState<null | "pending" | "rejected" | "none">(null);
+  const [accessBlock, setAccessBlock] = useState<
+    null | "pending" | "rejected" | "none" | "unverified"
+  >(null);
   useEffect(() => {
     if (profileStage === "signed-out") {
       setAccessBlock(null);
@@ -250,6 +252,7 @@ function Shell() {
         if (msg.includes("ACCESS_REJECTED")) setAccessBlock("rejected");
         else if (msg.includes("ACCESS_PENDING")) setAccessBlock("pending");
         else if (msg.includes("ACCESS_NOT_REQUESTED")) setAccessBlock("none");
+        else if (msg.includes("EMAIL_UNVERIFIED")) setAccessBlock("unverified");
       });
   }, [profileStage, ensureProfile]);
 
@@ -1045,7 +1048,9 @@ function Shell() {
           )}
         </AnimatePresence>
 
-        {accessBlock && <AccessPending reason={accessBlock} />}
+        {accessBlock && (
+          <AccessPending reason={accessBlock} email={session.data?.user?.email ?? ""} />
+        )}
 
         <AnimatePresence>
           {gate && !signedIn && (

@@ -15,6 +15,28 @@ import {
   validateSaveTarget,
 } from "./security";
 
+export type ProfileVerdict =
+  | "create"
+  | "ACCESS_NOT_REQUESTED"
+  | "ACCESS_PENDING"
+  | "ACCESS_REJECTED"
+  | "EMAIL_UNVERIFIED";
+
+/**
+ * Whether a first sign-in may create a profile. Pure, so the one rule that
+ * decides who gets in is tested on its own: an approved invite, for an email
+ * the person has proven they own. The invite is checked first so nobody is
+ * sent to confirm an inbox only to be told they were never invited.
+ */
+export function profileGate(
+  requestStatus: string | null,
+  emailVerified: boolean,
+): ProfileVerdict {
+  if (requestStatus === "rejected") return "ACCESS_REJECTED";
+  if (requestStatus !== "approved") return requestStatus ? "ACCESS_PENDING" : "ACCESS_NOT_REQUESTED";
+  return emailVerified ? "create" : "EMAIL_UNVERIFIED";
+}
+
 /**
  * Called after sign-in. Creates the profile — and this is the real access gate.
  *
@@ -31,51 +53,29 @@ export const ensureProfile = mutation({
     await enforceRateLimit(ctx, `profile:${user.id}`, 20, 60_000);
     const existing = await getProfile(ctx, user.id);
 
+    // Returning accounts are never re-checked, so tightening the gate can't
+    // lock out anyone who is already in.
+    if (existing) return existing;
+
     const email = (user.email ?? "").toLowerCase();
-    // Admins come from an explicit allowlist. The old rule was "first account
-    // ever becomes admin", which on an empty production database handed the
-    // dashboard to whichever stranger signed up first.
-    // Set with: npx convex env set ADMIN_EMAILS "you@example.com,other@example.com"
-    const admins = (process.env.ADMIN_EMAILS ?? "")
-      .split(",")
-      .map((entry) => entry.trim().toLowerCase())
-      .filter(Boolean);
-    const isAdmin = email.length > 0 && admins.includes(email);
-
-    // adding an email to the allowlist promotes an EXISTING profile too —
-    // only ever upward, so this can't be used to demote or lock anyone out
-    if (existing) {
-      if (isAdmin && !existing.isAdmin) {
-        await ctx.db.patch(existing._id, { isAdmin: true });
-        return { ...existing, isAdmin: true };
-      }
-      return existing;
-    }
-
-    if (!isAdmin) {
-      const request = email
-        ? await ctx.db
-            .query("accessRequests")
-            .withIndex("by_email", (q) => q.eq("email", email))
-            .unique()
-        : null;
-      if (request?.status !== "approved") {
-        // the client turns these into the pending / rejected / apply screens
-        throw new Error(
-          request?.status === "rejected"
-            ? "ACCESS_REJECTED"
-            : request
-              ? "ACCESS_PENDING"
-              : "ACCESS_NOT_REQUESTED",
-        );
-      }
-    }
+    const request = email
+      ? await ctx.db
+          .query("accessRequests")
+          .withIndex("by_email", (q) => q.eq("email", email))
+          .unique()
+      : null;
+    const verdict = profileGate(request?.status ?? null, user.emailVerified);
+    // the client turns these into the pending / rejected / apply / inbox screens
+    if (verdict !== "create") throw new Error(verdict);
 
     const id = await ctx.db.insert("profiles", {
       userId: user.id,
       email: user.email ?? "",
       name: user.name ?? undefined,
-      isAdmin,
+      // Admin is never granted here. It used to follow an ADMIN_EMAILS list,
+      // and with no email verification anyone who typed that address became
+      // admin. It is granted by an operator: npx convex run admin:grantAdmin
+      isAdmin: false,
       permissions: [],
       saveTarget: "liked",
     });

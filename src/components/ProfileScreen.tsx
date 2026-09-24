@@ -129,6 +129,8 @@ export function AuthForm() {
             email,
             password,
             name: email.split("@")[0],
+            // the confirmation link lands back in the app
+            callbackURL: `${window.location.origin}/#/`,
           })
         : await authClient.signIn.email({ email, password });
     setBusy(false);

@@ -23,7 +23,12 @@ type Profile = {
 export async function requireUser(ctx: QueryCtx | MutationCtx) {
   const user = await authComponent.getAuthUser(ctx);
   if (!user) throw new Error("Not signed in");
-  return { id: String(user._id), email: user.email, name: user.name };
+  return {
+    id: String(user._id),
+    email: user.email,
+    name: user.name,
+    emailVerified: user.emailVerified === true,
+  };
 }
 
 export async function getProfile(ctx: QueryCtx | MutationCtx, userId: string) {
@@ -59,7 +64,7 @@ export async function requireAdmin(ctx: QueryCtx | MutationCtx) {
  * The access gate, enforced where it can't be clicked past.
  *
  * A profile row only exists once ensureProfile has seen an APPROVED access
- * request (or the ADMIN_EMAILS allowlist) — so "has a profile" IS the
+ * request for a VERIFIED email (or an operator ran admin:grantAdmin) — so "has a profile" IS the
  * authorisation. Passing `null` here used to fall through silently, which
  * meant anyone who signed up could keep writing swipes and playlists straight
  * into Convex while the UI politely showed them the waiting room.

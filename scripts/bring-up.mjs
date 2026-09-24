@@ -46,8 +46,9 @@ const step = (n, what) => console.log(`\n[${n}] ${what}`);
 
 // The app refuses to work without these; better to fail here with a name than
 // at runtime with a decrypt error.
+// Admin is not an env var any more: after signing up, grant it with
+//   npx convex run admin:grantAdmin '{"email":"you@example.com"}'
 const REQUIRED_ENV = {
-  ADMIN_EMAILS: "minus4399@gmail.com",
   SITE_URL: "https://app.hookedcue.com",
 };
 
@@ -132,7 +133,7 @@ async function main() {
 
   console.log(`
 Done. What still needs a human:
-  - sign in once so ensureProfile creates your admin profile
+  - sign up once, then: npx convex run admin:grantAdmin '{"email":"<you>"}'
   - set BETTER_AUTH_SECRET and BETA_INGEST_SECRET (see above)
   - point the three surfaces at this deployment:
       web/.env.local          VITE_CONVEX_URL, VITE_CONVEX_SITE_URL

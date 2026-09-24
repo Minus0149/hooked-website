@@ -244,8 +244,22 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
  * refuses to create their profile, so there is nothing for them to use — this
  * explains why and gets them back out.
  */
-export function AccessPending({ reason }: { reason: "pending" | "rejected" | "none" }) {
+export function AccessPending({
+  reason,
+  email,
+}: {
+  reason: "pending" | "rejected" | "none" | "unverified";
+  email: string;
+}) {
   const [busy, setBusy] = useState(false);
+  const [resent, setResent] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+  const resend = async () => {
+    setResent("sending");
+    const res = await authClient
+      .sendVerificationEmail({ email, callbackURL: `${window.location.origin}/#/` })
+      .catch(() => ({ error: true }));
+    setResent(res && "error" in res && res.error ? "failed" : "sent");
+  };
   const signOut = async () => {
     setBusy(true);
     await authClient.signOut();
@@ -265,15 +279,39 @@ export function AccessPending({ reason }: { reason: "pending" | "rejected" | "no
             ? "not this round"
             : reason === "none"
               ? "no request on file"
-              : "thank you for your interest"}
+              : reason === "unverified"
+                ? "check your inbox"
+                : "thank you for your interest"}
         </p>
         <p className="gate-copy">
           {reason === "rejected"
             ? "this account isn't on the list for the current round."
             : reason === "none"
               ? "this email hasn't asked for access yet. sign out, swipe a few, and the form will come to you."
-              : "we'll get back to you. your account works the moment you're approved — nothing else to do."}
+              : reason === "unverified"
+                ? `you're approved. we sent a confirmation link to ${email} — open it, then come back here.`
+                : "we'll get back to you. your account works the moment you're approved — nothing else to do."}
         </p>
+        {reason === "unverified" && (
+          <div className="gate-actions">
+            <button className="ob-primary" onClick={() => window.location.reload()}>
+              I've confirmed it
+            </button>
+            <button
+              className="linklike"
+              onClick={() => void resend()}
+              disabled={resent === "sending" || resent === "sent"}
+            >
+              {resent === "sending"
+                ? "sending…"
+                : resent === "sent"
+                  ? "sent — give it a minute (and check spam)"
+                  : resent === "failed"
+                    ? "couldn't send — try again"
+                    : "resend the link"}
+            </button>
+          </div>
+        )}
         <button className="gate-close" onClick={signOut} disabled={busy}>
           {busy ? "signing out..." : "sign out"}
         </button>

@@ -6,7 +6,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import { authComponent } from "./auth";
 import { PERMISSIONS } from "./schema";
 import { enforceRateLimit, requireAdmin, requirePermission } from "./security";
@@ -854,5 +854,46 @@ export const setPermission = mutation({
     if (granted) current.add(permission);
     else current.delete(permission);
     await ctx.db.patch(profileId, { permissions: [...current] });
+  },
+});
+
+/**
+ * Make an existing account an admin. Operator-only: internal, so it can't be
+ * called from any client — only `npx convex run` by someone holding deploy
+ * access. This replaced the ADMIN_EMAILS allowlist, which handed admin to
+ * whoever signed up with a listed address, whether or not they owned it.
+ *
+ *   npx convex run --prod admin:grantAdmin '{"email":"you@example.com"}'
+ *
+ * The person signs up first; this then creates their profile (the operator is
+ * vouching, so it skips the invite queue) or promotes the one they have.
+ */
+export const grantAdmin = internalMutation({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    const target = email.trim().toLowerCase();
+    const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: target }],
+    })) as { _id: string; email: string; name?: string } | null;
+    if (!user) throw new Error(`No account for ${target} — sign up first, then run this.`);
+    const userId = String(user._id);
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (profile) {
+      await ctx.db.patch(profile._id, { isAdmin: true, suspended: false });
+      return { email: target, created: false };
+    }
+    await ctx.db.insert("profiles", {
+      userId,
+      email: user.email,
+      name: user.name ?? undefined,
+      isAdmin: true,
+      permissions: [],
+      saveTarget: "liked",
+    });
+    return { email: target, created: true };
   },
 });
