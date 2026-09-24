@@ -7,7 +7,8 @@
       declared here instead — a meta CSP is enforced by the browser exactly like
       the header. What it cannot carry is frame-ancestors and HSTS, which are
       header-only by spec; those still need the Cloudflare transform rule
-      documented in SELF_HOSTED_CONVEX.md. X-Frame-Options is covered below.
+      documented in SELF_HOSTED_CONVEX.md. Until that rule exists, framing is
+      refused by public/frame-guard.js.
       connect-src is filled in at build time from VITE_CONVEX_URL and
       VITE_CONVEX_SITE_URL (vite.config.ts), so it follows the backend.
     -->
