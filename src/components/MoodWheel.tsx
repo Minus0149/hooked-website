@@ -168,6 +168,7 @@ export function MoodWheel({
     <>
       <motion.div
         className="ring-backdrop"
+        onContextMenu={(e) => e.preventDefault()}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -252,7 +253,9 @@ export function MoodWheel({
         <motion.div
           className={`ring-label${labelBelow ? " below" : ""}`}
           style={{
-            top: labelBelow ? RING + BUBBLE / 2 + 14 : -(RING + BUBBLE / 2 + 14),
+            ...(labelBelow
+              ? { top: RING + BUBBLE / 2 + 12 }
+              : { bottom: RING + BUBBLE / 2 + 12 }),
           }}
           initial={{ opacity: 0, y: labelBelow ? -6 : 6 }}
           animate={{ opacity: 1, y: 0 }}
@@ -263,10 +266,12 @@ export function MoodWheel({
           aria-live="polite"
         >
           {lead ? (
-            <>
+            // one card for both lines: the description on its own, over busy
+            // artwork, was the hardest thing on screen to read
+            <span className="ring-label-card">
               <b style={{ color: lead.accent }}>{lead.label}</b>
-              <span>{lead.line}</span>
-            </>
+              <small>{lead.line}</small>
+            </span>
           ) : (
             <span>{dragging ? "push toward a face" : "tap a face"}</span>
           )}

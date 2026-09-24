@@ -278,3 +278,14 @@ describe("the learned model's pull", () => {
     expect(order).toEqual(untouched);
   });
 });
+
+describe("a new catalogue arriving mid-listen", () => {
+  it("never swaps the card on screen, even if the new catalogue lacks it", async () => {
+    const { keepOnScreen } = await import("../src/data/ranking");
+    const onScreen = { id: "valerie" };
+    const rebuilt = [{ id: "humble" }, { id: "valerie" }, { id: "dna" }];
+    expect(keepOnScreen(onScreen, rebuilt).map((t) => t.id)).toEqual(["valerie", "humble", "dna"]);
+    expect(keepOnScreen(onScreen, [{ id: "humble" }]).map((t) => t.id)).toEqual(["valerie", "humble"]);
+    expect(keepOnScreen(undefined, rebuilt)).toBe(rebuilt);
+  });
+});

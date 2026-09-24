@@ -16,6 +16,7 @@ import {
   MOOD_PLACES,
   rankPool,
   shuffle,
+  keepOnScreen,
   spreadAlbums,
   uniqueById,
   type Steer,
@@ -711,22 +712,19 @@ function reducer(state: AppState, action: Action): AppState {
         state.allowedIds.every((id, i) => id === ids[i]);
       if (sameIds) return state;
 
-      // Keep the card the user is looking at if the server still carries it,
-      // but rebuild everything behind it from the new catalogue. Filtering the
-      // old queue instead would empty the deck whenever the server list isn't
-      // a superset of the baked one.
+      // The card on screen stays (see keepOnScreen); everything behind it is
+      // rebuilt from the new catalogue. Filtering the old queue instead would
+      // empty the deck whenever the server list isn't a superset of the baked one.
       const head = state.queue[0];
-      const allowed = new Set(ids);
-      const keepHead = head && allowed.has(head.id) ? head : null;
       const exclude = libraryIds(state);
-      if (keepHead) exclude.add(keepHead.id);
+      if (head) exclude.add(head.id);
 
       const rest = buildQueue(action.tracks, exclude, state.neverArtists, steerOf(state));
       return {
         ...state,
         catalog: action.tracks,
         allowedIds: ids,
-        queue: spreadAlbums(uniqueById(keepHead ? [keepHead, ...rest] : rest)),
+        queue: keepOnScreen(head, spreadAlbums(uniqueById(rest))),
       };
     }
 

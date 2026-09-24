@@ -441,7 +441,7 @@ export function Onboarding({
             <h1 className="ob-headline" style={{ fontSize: 22 }}>
               and <em>hold</em>, then push
             </h1>
-            <div className="ob-demo">
+            <div className="ob-demo ob-demo-hold">
               {demoTracks.length > 0 && (
                 <HoldCard
                   track={demoTracks[0]}

@@ -366,6 +366,9 @@ function TopCard({
       onPointerUp={cancelHold}
       onPointerCancel={cancelHold}
       onPointerLeave={cancelHold}
+      // a long-press on the artwork would otherwise open the browser's image
+      // menu on Android, on top of the mood ring
+      onContextMenu={(e) => e.preventDefault()}
       onDragStart={cancelHold}
       onDragEnd={(_, info) => {
         const dir = resolveDir(info, sensitivity);

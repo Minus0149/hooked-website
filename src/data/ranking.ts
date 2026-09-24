@@ -168,3 +168,19 @@ export function spreadAlbums(tracks: Track[]): Track[] {
   }
   return out;
 }
+
+
+/**
+ * The deck after a new catalogue arrives: the card on screen stays on screen,
+ * and everything behind it is rebuilt.
+ *
+ * It used to be kept only if the server also carried it. The app opens on its
+ * built-in catalogue, the server's arrives two or three seconds later, and a
+ * song only the built-in one had was swapped out mid-listen — under the finger
+ * of anyone already holding it for the mood ring. It stays for this showing;
+ * if the server doesn't carry it, it simply isn't dealt again.
+ */
+export function keepOnScreen<T extends { id: string }>(head: T | undefined, rebuilt: T[]): T[] {
+  if (!head) return rebuilt;
+  return [head, ...rebuilt.filter((t) => t.id !== head.id)];
+}
