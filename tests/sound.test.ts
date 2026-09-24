@@ -97,6 +97,14 @@ describe("the audio's own reading of a mood", () => {
     const plainPop = { genre: "pop" };
     expect(moodFit(sadPop, tender)).toBeGreaterThan(moodFit(plainPop, tender));
   });
+  it("lets one song answer two moods", () => {
+    // bittersweet: strongly sunny and strongly tender, per the analyser
+    const bittersweet = { genre: "pop", audioMood: [0.1, 0.15, 0.8, 0.3, 0.78, 0.2] };
+    const plainPop = { genre: "pop" };
+    const sunny = moodById("sunny")!;
+    expect(moodFit(bittersweet, tender)).toBeGreaterThan(moodFit(plainPop, tender));
+    expect(moodFit(bittersweet, sunny)).toBeGreaterThan(moodFit({ ...plainPop, audioMood: [0.1, 0.15, 0.2, 0.3, 0.78, 0.2] }, sunny));
+  });
   it("ignores a malformed reading rather than trusting it", () => {
     expect(moodFit({ genre: "pop", audioMood: [1, 2] }, tender)).toBe(moodFit({ genre: "pop" }, tender));
   });

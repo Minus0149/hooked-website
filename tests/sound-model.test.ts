@@ -39,7 +39,27 @@ describe("reading a mood from the audio", () => {
     const song = [0.3, 0.6, 0.3, 0.3, 0.35, 0.1];
     const probs = M.calibrateMoods(song, stats);
     expect(M.MOOD_ORDER[probs.indexOf(Math.max(...probs))]).toBe("tender");
-    expect(probs.reduce((a: number, b: number) => a + b, 0)).toBeCloseTo(1, 2);
+    for (const p of probs) expect(p).toBeGreaterThanOrEqual(0), expect(p).toBeLessThanOrEqual(1);
+  });
+
+  // a catalogue where every mood varies, so each has a real spread
+  const varied = Array.from({ length: 60 }, (_, n) => [0, 1, 2, 3, 4, 5].map((i) => 0.3 + (((n * (i + 3)) % 11) - 5) * 0.01));
+  const stats = M.fitMoodStats(varied);
+  const at = (z: number[]) => z.map((x, i) => stats.mean[i] + x * stats.std[i]);
+
+  it("lets a bittersweet song be strongly two moods at once", () => {
+    // unusually sunny AND unusually tender, ordinary elsewhere
+    const moods = M.calibrateMoods(at([0, 0, 2, 0, 2, 0]), stats);
+    const i = (m: string) => M.MOOD_ORDER.indexOf(m);
+    expect(moods[i("sunny")]).toBeGreaterThan(0.6);
+    expect(moods[i("tender")]).toBeGreaterThan(0.6);
+    expect(moods[i("party")]).toBeLessThan(0.4);
+  });
+
+  it("doesn't call a song every mood just because it sits close to all of them", () => {
+    // high on everything equally — the shared level CLAP adds to some songs
+    const moods = M.calibrateMoods(at([2, 2, 2, 2, 2, 2]), stats);
+    for (const p of moods) expect(p).toBeLessThan(0.4);
   });
 
   it("keeps sung vs instrumental in 0..1", () => {

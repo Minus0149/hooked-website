@@ -99,13 +99,26 @@ export function fitMoodStats(rawRows) {
 }
 
 /**
- * Raw CLAP mood scores → a distribution over the six moods. Each mood is first
- * judged against how the whole catalogue scored on it, so "party" winning
- * because every song half-matches the word "dance" stops happening.
+ * Raw CLAP mood scores → how strongly the song is each mood, 0..1, scored
+ * independently — a bittersweet song can be high on both sunny and tender.
+ *
+ * Three steps:
+ *   1. each mood is judged against how the whole catalogue scored on it (z),
+ *      so "party" winning because every song half-matches "dance" stops;
+ *   2. the song's own average over the six is taken off. CLAP's six readings
+ *      rise and fall together — some songs simply sit closer to every
+ *      description — and without this, sixty songs came out as all six moods;
+ *   3. each is squashed on its own (no shared budget, unlike the softmax this
+ *      replaced, where six moods had to split one unit between them).
+ *
+ * Over the 1,689-song catalogue at the defaults: the top mood is unchanged
+ * for 1,686; 619 songs have no strong mood (>= 0.6), 649 one, 342 two and 79
+ * three — hyped+party, chill+sleepy, chill+tender+sleepy, and 14 sunny+tender.
  */
-export function calibrateMoods(raw, stats, sharpness = 1.4) {
+export function calibrateMoods(raw, stats, sharpness = 2.0, bias = 0.8) {
   const z = raw.map((x, i) => (x - stats.mean[i]) / stats.std[i]);
-  return softmax(z.map((x) => x * sharpness)).map((p) => Math.round(p * 1000) / 1000);
+  const own = z.reduce((a, b) => a + b, 0) / z.length;
+  return z.map((x) => Math.round((1 / (1 + Math.exp(-(sharpness * (x - own) - bias)))) * 1000) / 1000);
 }
 
 /** Sung vs instrumental, 0..1, relative to the catalogue. */

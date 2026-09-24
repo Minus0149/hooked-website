@@ -237,14 +237,14 @@ export function moodFit(
     weight += 1.0;
   }
 
-  // The analyser's reading of the audio itself. Relative to the track's own
-  // strongest mood, so a song that is clearly "tender" scores 1 there even if
-  // the model spread some probability elsewhere.
+  // The analyser's reading of the audio itself: how strongly the song is
+  // this mood, 0..1, each mood scored on its own — so a bittersweet song
+  // answers both "sunny" and "tender", and a song with no strong mood counts
+  // for little in any of them (scripts/lib/sound-model.mjs).
   if (Array.isArray(track.audioMood) && track.audioMood.length === MOOD_IDS.length) {
-    const top = Math.max(...track.audioMood);
     const at = track.audioMood[MOOD_IDS.indexOf(mood.id)];
-    if (top > 0 && Number.isFinite(at)) {
-      total += 1.2 * Math.max(0, at / top);
+    if (Number.isFinite(at) && track.audioMood.every((x) => Number.isFinite(x) && x >= 0 && x <= 1)) {
+      total += 1.2 * at;
       weight += 1.2;
     }
   }
