@@ -13,7 +13,8 @@ import { authClient } from "./lib/auth-client";
 import { StoreProvider, useStore } from "./state/store";
 import { usePlayer } from "./audio/usePlayer";
 import { SwipeDeck } from "./components/SwipeDeck";
-import { coerceMood, DAYPART_MOOD, daypartAt, type MoodId } from "./data/mood";
+import { coerceMood, DAYPART_MOOD, daypartAt, moodById, moodPlaylistName, type MoodId } from "./data/mood";
+import { MoodWheel } from "./components/MoodWheel";
 import { verdict as verdictFor } from "./data/predict";
 import { TopBar } from "./components/TopBar";
 import { BottomNav } from "./components/BottomNav";
@@ -821,6 +822,35 @@ function Shell() {
     [signedIn, createPlaylistMutation, createPlaylist, showToast],
   );
 
+  /**
+   * Hold the +, pick a face: a playlist for that mood. It becomes where
+   * swipe-down saves go AND the deck's lens, so every song kept while it's on
+   * is that mood — the playlist fills itself as you listen. A song lives in
+   * one place in the library, so it can't be pre-filled by copying Liked
+   * songs in; asking again reuses the playlist rather than making a second.
+   */
+  const [plusRing, setPlusRing] = useState<{ x: number; y: number } | null>(null);
+  const [plusHolding, setPlusHolding] = useState(false);
+  const [plusPointer, setPlusPointer] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!plusRing || !plusHolding) return;
+    const move = (e: PointerEvent) => setPlusPointer({ x: e.clientX, y: e.clientY });
+    const up = () => setPlusHolding(false);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+  }, [plusRing, plusHolding]);
+  const closePlusRing = useCallback(() => {
+    setPlusRing(null);
+    setPlusHolding(false);
+    setPlusPointer(null);
+  }, []);
+
   /** FAB flow: create the playlist AND make it the swipe-down destination. */
   const handleCreateAndTarget = useCallback(
     async (name: string, accent: string) => {
@@ -828,6 +858,23 @@ function Shell() {
       handleSaveTarget(`pl:${id}`);
     },
     [handleCreatePlaylist, handleSaveTarget],
+  );
+
+  const makeMoodPlaylist = useCallback(
+    async (mood: MoodId) => {
+      const face = moodById(mood);
+      if (!face) return;
+      const name = moodPlaylistName(mood);
+      const existing = state.playlists.find(
+        (p) => p.name.trim().toLowerCase() === name.toLowerCase(),
+      );
+      const id = existing ? existing.id : await handleCreatePlaylist(name, face.accent);
+      handleSaveTarget(`pl:${id}`);
+      setMood(mood);
+      setViewWithHistory("discover");
+      showToast(`${name} — keep songs to fill it`, "✦");
+    },
+    [state.playlists, handleCreatePlaylist, handleSaveTarget, setMood, setViewWithHistory, showToast]
   );
 
   /** "Discover into this": point saves at the container, then go swipe. */
@@ -1030,6 +1077,11 @@ function Shell() {
             showCreate={view === "home"}
             onChange={(v) => setViewWithHistory(v)}
             onCreate={() => setNewPlaylistOpen(true)}
+            onHoldCreate={(x, y) => {
+              setPlusPointer({ x, y });
+              setPlusHolding(true);
+              setPlusRing({ x, y });
+            }}
           />
         </div>
 
@@ -1073,6 +1125,26 @@ function Shell() {
                 </button>
               </motion.div>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {plusRing && (
+            <MoodWheel
+              origin={plusRing}
+              picked={null}
+              active={state.mood}
+              verdict={null}
+              dragging={plusHolding}
+              pointer={plusPointer}
+              motionPref={state.prefs.motion}
+              hint="pick a mood — a playlist that fills as you keep songs"
+              onCommit={(mood) => {
+                closePlusRing();
+                void makeMoodPlaylist(mood);
+              }}
+              onCancel={closePlusRing}
+            />
           )}
         </AnimatePresence>
 

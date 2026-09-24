@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { moodAtPush, MOODS, wheelAngle, type MoodId } from "../data/mood";
 import type { Verdict } from "../data/predict";
 import { Face } from "./faces";
+import { faceIdle } from "./faceMotion";
 
 /**
  * The mood ring — six faces orbiting the thumb that summoned them.
@@ -37,6 +38,8 @@ const BUBBLE = 54;
 const DEAD = 38;
 /** room kept between the outermost bubble and the frame edge */
 const EDGE = 8;
+/** height of the hint strip at the bottom, which the ring must not cover */
+const HINT_ROOM = 44;
 
 export interface WheelOrigin {
   /** viewport coordinates of the press that opened it */
@@ -54,6 +57,7 @@ export function MoodWheel({
   onCommit,
   onCancel,
   motionPref = "full",
+  hint,
 }: {
   origin: WheelOrigin;
   /** what this listener already said about the track under the ring */
@@ -68,6 +72,8 @@ export function MoodWheel({
   onCommit: (mood: MoodId) => void;
   onCancel: () => void;
   motionPref?: "full" | "reduced" | "off";
+  /** the line under everything; defaults to the card's "how does this one feel?" */
+  hint?: string;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [keyIndex, setKeyIndex] = useState<number | null>(null);
@@ -92,7 +98,9 @@ export function MoodWheel({
   const fx = origin.x - hostX;
   const fy = origin.y - hostY;
   const cx = Math.min(Math.max(fx, reach), hostW - reach);
-  const cy = Math.min(Math.max(fy, reach + 40), hostH - reach);
+  // the hint strip along the bottom stays clear: a ring opened low (the +, or a
+  // card's lower edge) used to put its bottom face on top of the hint text
+  const cy = Math.min(Math.max(fy, reach + 40), hostH - reach - HINT_ROOM);
 
   const aimed = useMemo(() => {
     if (keyIndex !== null) return keyIndex;
@@ -215,13 +223,28 @@ export function MoodWheel({
                 damping: 30,
                 delay: instant ? 0 : i * 0.022,
               }}
-              onPointerEnter={() => setKeyIndex(i)}
-              onPointerLeave={() => setKeyIndex(null)}
+              // Hover aims only once the finger is up. While it's held, the push
+              // decides: a ring nudged away from the edge can put a face right
+              // under the finger, and hover-aim then committed that face on a
+              // release that never moved.
+              onPointerEnter={() => {
+                if (!dragging) setKeyIndex(i);
+              }}
+              onPointerLeave={() => {
+                if (!dragging) setKeyIndex(null);
+              }}
               onClick={() => onCommit(m.id)}
               aria-label={`${m.label} — ${m.line}`}
               aria-pressed={picked === m.id}
             >
-              <Face mood={m.id} size={30} />
+              {/* its own element, so the idle loop never fights the orbit spring */}
+              {motionPref === "full" ? (
+                <motion.span className="ring-face-anim" {...faceIdle(m.id, i, on)}>
+                  <Face mood={m.id} size={30} />
+                </motion.span>
+              ) : (
+                <Face mood={m.id} size={30} />
+              )}
             </motion.button>
           );
         })}
@@ -263,7 +286,7 @@ export function MoodWheel({
             {verdict.reasons.length > 0 && ` · ${verdict.reasons.join(", ")}`}
           </span>
         ) : (
-          <span>how does this one feel?</span>
+          <span>{hint ?? "how does this one feel?"}</span>
         )}
       </motion.div>
     </>

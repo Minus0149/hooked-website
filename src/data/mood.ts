@@ -427,3 +427,13 @@ export function moodAtPush(
   const i = Math.floor(shifted / WHEEL_STEP_DEG) % MOODS.length;
   return MOODS[i].id;
 }
+
+/**
+ * What a mood playlist made from the + is called. One name per mood, so
+ * holding + and picking the same face again finds it instead of making a
+ * second "Party mix".
+ */
+export function moodPlaylistName(mood: MoodId): string {
+  const face = moodById(mood);
+  return face ? `${face.label} mix` : "Mood mix";
+}

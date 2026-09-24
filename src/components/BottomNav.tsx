@@ -42,17 +42,37 @@ function barPath(w: number, h: number, notch: boolean): string {
   ].join(" ");
 }
 
+/** how long the + must be held before the mood ring opens (same as a card) */
+const HOLD_MS = 420;
+
 export function BottomNav({
   view,
   showCreate,
   onChange,
   onCreate,
+  onHoldCreate,
 }: {
   view: View;
   showCreate: boolean; // the + (and its notch) only live on the home screen
   onChange: (v: View) => void;
   onCreate: () => void;
+  /** held instead of tapped: open the mood ring around the + */
+  onHoldCreate?: (x: number, y: number) => void;
 }) {
+  // A tap makes a playlist; a hold opens the faces. The click that follows a
+  // hold's release must not ALSO open the new-playlist sheet.
+  const hold = useRef<{ timer?: number; fired: boolean }>({ fired: false });
+  const startHold = (el: HTMLElement) => {
+    if (!onHoldCreate) return;
+    hold.current.fired = false;
+    window.clearTimeout(hold.current.timer);
+    hold.current.timer = window.setTimeout(() => {
+      hold.current.fired = true;
+      const r = el.getBoundingClientRect();
+      onHoldCreate(r.left + r.width / 2, r.top + r.height / 2);
+    }, HOLD_MS);
+  };
+  const cancelHold = () => window.clearTimeout(hold.current.timer);
   const barRef = useRef<HTMLElement | null>(null);
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
 
@@ -116,9 +136,21 @@ export function BottomNav({
             >
               <button
                 className="nav-fab"
-                onClick={onCreate}
-                aria-label="Create a playlist"
-                title="Create a playlist"
+                onPointerDown={(e) => startHold(e.currentTarget)}
+                onPointerUp={cancelHold}
+                onPointerLeave={cancelHold}
+                onPointerCancel={cancelHold}
+                // a long-press would otherwise raise the browser's own menu
+                onContextMenu={(e) => e.preventDefault()}
+                onClick={() => {
+                  if (hold.current.fired) {
+                    hold.current.fired = false;
+                    return;
+                  }
+                  onCreate();
+                }}
+                aria-label="Create a playlist — hold for a mood playlist"
+                title="Tap: new playlist · Hold: pick a mood"
               >
                 +
               </button>
