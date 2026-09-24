@@ -7,6 +7,8 @@ import type { LibraryContainer, Track } from "../types";
 import { art } from "../lib/art";
 import { IconBack, IconHeart, IconPlay, IconSparkle, IconX, IconFolder } from "./icons";
 import { useDialogs } from "./ui/Dialogs";
+import { Face } from "./faces";
+import { moodById, type MoodId } from "../data/mood";
 
 const stagger = {
   hidden: {},
@@ -57,6 +59,7 @@ export function LibraryScreen({
   let accent = "#FF3D71";
   let playlistId: string | null = null;
   let icon = <IconFolder size={15} />;
+  let mood: MoodId | null = null;
   let rules: {
     allowRepeats: boolean;
     includeBuried: boolean;
@@ -78,6 +81,8 @@ export function LibraryScreen({
     title = pl?.name ?? "Playlist";
     tracks = pl?.tracks ?? [];
     accent = pl?.accent ?? accent;
+    mood = pl?.mood ?? null;
+    if (mood) icon = <Face mood={mood} size={15} />;
     rules = {
       allowRepeats: pl?.allowRepeats ?? false,
       includeBuried: pl?.includeBuried ?? false,
@@ -143,7 +148,7 @@ export function LibraryScreen({
           <div className="library-hero-meta">
             <span className="library-kicker">
               {icon}
-              {playlistId ? "playlist" : "collection"}
+              {playlistId ? (mood ? `${moodById(mood)?.label ?? mood} playlist` : "playlist") : "collection"}
               {isSaveTarget && <em>· saving here</em>}
             </span>
             <h2 className="library-title">{title}</h2>

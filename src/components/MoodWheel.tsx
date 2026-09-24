@@ -1,46 +1,54 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
-import { moodAtPush, MOODS, wheelAngle, type MoodId } from "../data/mood";
+import { moodAtPush, MOODS, wedgePath, wedgePoint, type MoodId } from "../data/mood";
 import type { Verdict } from "../data/predict";
 import { Face } from "./faces";
 import { faceIdle } from "./faceMotion";
 
 /**
- * The mood ring — six faces orbiting the thumb that summoned them.
+ * The mood ring — a wheel of six wedges around the thumb that summoned it.
  *
- * The first version of this was a big wheel. At 84% of the screen width a
- * wheel that size has nowhere to go but the middle, so wherever you held, it
- * appeared somewhere else and your eye had to travel to find it. That is the
- * one thing a press-and-hold menu must never make you do: the whole point of
- * holding is that your attention is already where your finger is.
+ * It started as six small bubbles on a faint orbit. They were hard to hit and
+ * harder to read as one thing: loose buttons floating over the artwork, with
+ * nothing showing how far each one's territory reached. The push rule already
+ * gives every face a full 60 degrees (moodAtPush), so the ring now draws
+ * exactly that — a solid donut split into six keys, like a game's emote
+ * wheel. What you see is what the finger can hit.
  *
- * So the ring is small and it is centred on the fingertip. The faces fly out
- * FROM the finger to their places, which is what tells you where the centre
- * is without drawing anything there — the thumb covers the centre anyway.
- *
- * Designed around the thumb, not just near it:
- *   - The radius clears a fingertip (~90px) without leaving the thumb's reach.
- *   - Whatever sits directly under the thumb is hidden by it, so the name of
- *     the face being aimed at is shown ABOVE the ring, never in the middle.
- *   - Directions are fixed — up is hyped, down-left is tender — so it becomes
- *     muscle memory. Near an edge the ring nudges inward only as far as it has
- *     to; it never rearranges, because a menu that moves its items is a menu
- *     that has to be read every time.
- *   - Release in the middle cancels. Release without aiming leaves the ring up
- *     to be tapped. Arrow keys walk it for anyone without a thumb.
+ * Designed around the thumb:
+ *   - Centred on the fingertip, nudged inward near an edge only as far as it
+ *     has to; directions never change, so the wheel becomes muscle memory.
+ *   - The hole in the middle is where the thumb is. Pushing out aims a wedge;
+ *     coming back into the hole and letting go cancels.
+ *   - The aimed wedge fills with its colour and steps out toward the finger,
+ *     and its name rides above the ring where the hand can't cover it.
+ *   - Released without ever moving, it stays up to be tapped. Arrow keys walk
+ *     it for anyone without a thumb.
  */
 
-/** ring radius, px — far enough to clear a fingertip */
-const RING = 92;
-/** each face's circle, px */
-const BUBBLE = 54;
+/** outer edge of the wheel, px */
+const R_OUT = 116;
+/** the hole — where the thumb sits */
+const R_IN = 46;
+/** where each face and its name sit along the wedge */
+const FACE_R = 80;
+/** the face rides a little above that point, the name a little below it —
+    stacked, not radial, so the side wedges never run name into face */
+const FACE_DY = -8;
+const NAME_DY = 16;
+/** trim on each side of a wedge, degrees — the dark seams between keys */
+const GAP = 1.1;
+/** how far the aimed wedge steps out */
+const POP = 6;
 /** push less than this and nothing is selected — release cancels */
 const DEAD = 38;
-/** room kept between the outermost bubble and the frame edge */
-const EDGE = 8;
+/** room kept between the wheel and the frame edge */
+const EDGE = 6;
 /** height of the hint strip at the bottom, which the ring must not cover */
 const HINT_ROOM = 44;
+/** the svg canvas: the wheel plus room for the popped wedge and its glow */
+const CANVAS = (R_OUT + POP + 14) * 2;
 
 export interface WheelOrigin {
   /** viewport coordinates of the press that opened it */
@@ -103,7 +111,7 @@ export function MoodWheel({
   const hostH = frame.clientHeight || host.height;
 
   // Centred on the finger, nudged inward only as far as the ring needs.
-  const reach = RING + BUBBLE / 2 + EDGE;
+  const reach = R_OUT + POP + EDGE;
   const fx = origin.x - hostX;
   const fy = origin.y - hostY;
   const cx = Math.min(Math.max(fx, reach), hostW - reach);
@@ -178,7 +186,7 @@ export function MoodWheel({
   const lead = aimed !== null ? MOODS[aimed] : null;
   // the label rides above the ring — unless the ring is already at the top of
   // the frame, where it drops below instead of running off it
-  const labelBelow = cy - RING - BUBBLE / 2 - 58 < 0;
+  const labelBelow = cy - R_OUT - 64 < 0;
 
   return createPortal(
     <>
@@ -200,45 +208,92 @@ export function MoodWheel({
         aria-label="Pick a mood"
         style={{ left: cx, top: cy }}
       >
-        {/* the orbit itself, faint — it is what makes six faces read as one
-            round thing rather than six loose buttons */}
-        <motion.span
-          className="ring-track"
-          style={{ width: RING * 2, height: RING * 2, marginLeft: -RING, marginTop: -RING }}
-          initial={{ scale: instant ? 1 : 0.35, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: instant ? 1 : 0.6, opacity: 0 }}
-          transition={{ type: "spring", stiffness: 520, damping: 32 }}
-        />
+        {/* the wheel: six wedges, one per push direction */}
+        <motion.div
+          className="ring-wheel"
+          style={{ width: CANVAS, height: CANVAS, marginLeft: -CANVAS / 2, marginTop: -CANVAS / 2 }}
+          initial={{ scale: instant ? 1 : 0.5, rotate: instant ? 0 : -24, opacity: 0 }}
+          animate={{ scale: 1, rotate: 0, opacity: 1 }}
+          exit={{ scale: instant ? 1 : 0.7, opacity: 0, transition: { duration: 0.12 } }}
+          transition={{ type: "spring", stiffness: 460, damping: 30 }}
+        >
+          <svg
+            width={CANVAS}
+            height={CANVAS}
+            viewBox={`${-CANVAS / 2} ${-CANVAS / 2} ${CANVAS} ${CANVAS}`}
+            aria-hidden="true"
+          >
+            {/* the rim: one thin line round the outside makes six keys one object */}
+            <circle className="ring-rim" r={R_OUT + 3} />
+            {MOODS.map((m, i) => {
+              const on = aimed === i;
+              const out = wedgePoint(i, on ? POP : 0);
+              return (
+                <g
+                  key={m.id}
+                  className={`ring-wedge${on ? " on" : ""}${active === m.id ? " lens" : ""}`}
+                  style={{ ["--face" as string]: m.accent, transform: `translate(${out.x}px, ${out.y}px)` }}
+                  onPointerEnter={() => {
+                    if (!dragging) setKeyIndex(i);
+                  }}
+                  onPointerLeave={() => {
+                    if (!dragging) setKeyIndex(null);
+                  }}
+                  onClick={() => onCommit(m.id)}
+                >
+                  <path d={wedgePath(i, R_IN, R_OUT, GAP)} />
+                  {picked === m.id && (
+                    // what you already said about this song: a dot on the rim
+                    <circle className="ring-picked" r={3.5} cx={wedgePoint(i, R_OUT - 9).x} cy={wedgePoint(i, R_OUT - 9).y} />
+                  )}
+                  <text
+                    className="ring-name"
+                    x={wedgePoint(i, FACE_R).x}
+                    y={wedgePoint(i, FACE_R).y + NAME_DY}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                  >
+                    {m.label}
+                  </text>
+                </g>
+              );
+            })}
+            {/* the hole's edge; the aimed direction lights the arc facing it */}
+            <circle className="ring-hole" r={R_IN - 6} />
+            {aimed !== null && (
+              <path
+                className="ring-pointer"
+                style={{ ["--face" as string]: MOODS[aimed].accent }}
+                d={wedgePath(aimed, R_IN - 7.5, R_IN - 4.5, 8)}
+              />
+            )}
+            {dragging && aimed === null && everAimed.current && (
+              // back in the middle: this is where letting go cancels
+              <g className="ring-cancel">
+                <path d="M -7 -7 L 7 7 M 7 -7 L -7 7" />
+              </g>
+            )}
+          </svg>
+        </motion.div>
 
         {MOODS.map((m, i) => {
-          const a = (wheelAngle(i) * Math.PI) / 180;
-          const x = Math.cos(a) * RING;
-          const y = Math.sin(a) * RING;
           const on = aimed === i;
+          const p = wedgePoint(i, FACE_R + (on ? POP : 0));
           return (
             <motion.button
               key={m.id}
               type="button"
-              className={`ring-face${on ? " on" : ""}${picked === m.id ? " picked" : ""}${
-                active === m.id ? " lens" : ""
-              }`}
-              style={{
-                width: BUBBLE,
-                height: BUBBLE,
-                marginLeft: -BUBBLE / 2,
-                marginTop: -BUBBLE / 2,
-                ["--face" as string]: m.accent,
-              }}
-              // out of the fingertip and into orbit
+              className={`ring-face${on ? " on" : ""}`}
+              style={{ ["--face" as string]: m.accent }}
+              // out of the fingertip and into the wheel
               initial={{ x: 0, y: 0, scale: instant ? 1 : 0.3, opacity: 0 }}
-              animate={{ x, y, scale: on ? 1.2 : 1, opacity: 1 }}
+              animate={{ x: p.x, y: p.y + FACE_DY, scale: on ? 1.18 : 1, opacity: 1 }}
               exit={{ x: 0, y: 0, scale: 0.3, opacity: 0 }}
               transition={{
                 type: "spring",
                 stiffness: 560,
                 damping: 30,
-                delay: instant ? 0 : i * 0.022,
+                delay: instant ? 0 : 0.03 + i * 0.02,
               }}
               // Hover aims only once the finger is up. While it's held, the push
               // decides: a ring nudged away from the edge can put a face right
@@ -254,13 +309,13 @@ export function MoodWheel({
               aria-label={`${m.label} — ${m.line}`}
               aria-pressed={picked === m.id}
             >
-              {/* its own element, so the idle loop never fights the orbit spring */}
+              {/* its own element, so the idle loop never fights the spring */}
               {motionPref === "full" ? (
                 <motion.span className="ring-face-anim" {...faceIdle(m.id, i, on)}>
-                  <Face mood={m.id} size={30} />
+                  <Face mood={m.id} size={28} />
                 </motion.span>
               ) : (
-                <Face mood={m.id} size={30} />
+                <Face mood={m.id} size={28} />
               )}
             </motion.button>
           );
@@ -270,8 +325,8 @@ export function MoodWheel({
           className={`ring-label${labelBelow ? " below" : ""}`}
           style={{
             ...(labelBelow
-              ? { top: RING + BUBBLE / 2 + 12 }
-              : { bottom: RING + BUBBLE / 2 + 12 }),
+              ? { top: R_OUT + 16 }
+              : { bottom: R_OUT + 16 }),
           }}
           initial={{ opacity: 0, y: labelBelow ? -6 : 6 }}
           animate={{ opacity: 1, y: 0 }}

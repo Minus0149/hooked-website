@@ -3194,10 +3194,10 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 }
 
 /* ---------- the mood ring ----------
-   Six faces orbiting the thumb that summoned them. Nothing is drawn at the
-   centre — the thumb is there — so the track and the faces carry the shape,
-   and the name of the aimed face floats above the ring where a hand can't
-   cover it. */
+   A wheel of six wedges around the thumb that summoned it. The hole in the
+   middle is where the thumb is (and where letting go cancels); the aimed
+   wedge fills with its colour and its name floats above the ring, where a
+   hand can't cover it. */
 
 .ring-backdrop {
   position: absolute;
@@ -3217,39 +3217,82 @@ html[data-motion="reduced"] .drift { animation: none !important; }
   outline: none;
   touch-action: none;
 }
-.ring-track {
+/* the wheel's canvas; the wedges inside it are the push targets */
+.ring-wheel {
   position: absolute;
   left: 0;
   top: 0;
-  border-radius: 999px;
-  border: 1.5px solid rgba(244, 242, 238, 0.16);
   pointer-events: none;
 }
+.ring-wheel svg { display: block; overflow: visible; }
+.ring-rim {
+  fill: none;
+  stroke: rgba(244, 242, 238, 0.1);
+  stroke-width: 1;
+}
+.ring-wedge {
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.ring-wedge path {
+  fill: rgba(16, 16, 23, 0.9);
+  stroke: rgba(244, 242, 238, 0.08);
+  stroke-width: 1;
+  transition: fill 0.12s ease, stroke 0.12s ease;
+}
+/* the deck's current lens: its wedge keeps a thin line of its colour */
+.ring-wedge.lens path { stroke: color-mix(in srgb, var(--face) 70%, transparent); stroke-width: 1.5; }
+.ring-wedge.on path {
+  fill: var(--face);
+  stroke: var(--face);
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--face) 55%, transparent));
+}
+.ring-name {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  fill: rgba(244, 242, 238, 0.5);
+  pointer-events: none;
+  transition: fill 0.12s ease;
+}
+.ring-wedge.on .ring-name { fill: rgba(11, 11, 16, 0.78); }
+.ring-picked { fill: var(--face); }
+.ring-wedge.on .ring-picked { fill: #0b0b10; }
+.ring-hole {
+  fill: none;
+  stroke: rgba(244, 242, 238, 0.12);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+.ring-pointer { fill: var(--face); }
+.ring-cancel path {
+  fill: none;
+  stroke: rgba(244, 242, 238, 0.7);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+/* the faces ride on the wedges; the wedge underneath takes the click too */
 .ring-face {
   position: absolute;
-  left: 0;
-  top: 0;
+  left: -22px;
+  top: -22px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   padding: 0;
+  border: 0;
   border-radius: 999px;
-  background: rgba(11, 11, 16, 0.92);
-  border: 1.5px solid color-mix(in srgb, var(--face) 42%, transparent);
+  background: none;
   color: var(--face);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease,
-    box-shadow 0.12s ease;
+  transition: color 0.12s ease;
 }
-.ring-face.picked,
-.ring-face.lens { border-width: 2px; border-color: var(--face); }
-.ring-face.on {
-  background: var(--face);
-  border-color: var(--face);
-  color: #0b0b10;
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--face) 24%, transparent),
-    0 10px 24px rgba(0, 0, 0, 0.5);
-}
+.ring-face.on { color: #0b0b10; }
+.ring-face-anim { display: grid; place-items: center; }
 
 /* The aimed face's name. Positioned with left/width rather than a transform,
    because motion animates `y` on this node and would replace the whole
@@ -3518,3 +3561,65 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 .sel-list li.chosen { color: var(--text); font-weight: 600; }
 .field .sel { width: 100%; }
 .field .sel-btn { min-height: 40px; }
+
+/* ---------- new playlist: mood + folded rules ---------- */
+.np-label { margin: 14px 0 8px; }
+.np-moods {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.np-mood {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+.np-mood small { font-size: 10.5px; font-weight: 600; transition: color 0.12s ease; }
+.np-mood-face {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--face) 30%, transparent);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--face);
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+.np-mood-any { font-size: 17px; color: var(--muted); }
+.np-mood.on .np-mood-face {
+  background: var(--face);
+  border-color: var(--face);
+  color: #0b0b10;
+  transform: scale(1.06);
+}
+.np-mood.on small { color: var(--text); }
+.np-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 6px;
+  padding: 4px 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.np-more svg { transition: transform 0.15s ease; }
+.np-more-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 11px;
+}
+.np-rules { overflow: hidden; }

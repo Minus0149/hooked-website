@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { authComponent } from "./auth";
+import { isMood } from "./moods";
 import { saveTarget, swipeAction, trackFields } from "./schema";
 import {
   cleanAccent,
@@ -116,6 +117,7 @@ export const getLibrary = query({
         allowRepeats: p.allowRepeats ?? false,
         includeBuried: p.includeBuried ?? false,
         includeBlockedArtists: p.includeBlockedArtists ?? false,
+        mood: p.mood && isMood(p.mood) ? p.mood : null,
         songs: songs.filter((s) => s.playlistId === p._id),
       })),
       neverArtists: never.map((n) => n.artist),
@@ -138,8 +140,9 @@ export const createPlaylist = mutation({
     allowRepeats: v.optional(v.boolean()),
     includeBuried: v.optional(v.boolean()),
     includeBlockedArtists: v.optional(v.boolean()),
+    mood: v.optional(v.string()),
   },
-  handler: async (ctx, { name, accent, allowRepeats, includeBuried, includeBlockedArtists }) => {
+  handler: async (ctx, { name, accent, allowRepeats, includeBuried, includeBlockedArtists, mood }) => {
     const user = await requireUser(ctx);
     const profile = await getProfile(ctx, user.id);
     ensureActiveProfile(profile);
@@ -153,6 +156,8 @@ export const createPlaylist = mutation({
       allowRepeats: allowRepeats === true,
       includeBuried: includeBuried === true,
       includeBlockedArtists: includeBlockedArtists === true,
+      // anything that isn't one of the six is dropped, not stored
+      ...(mood && isMood(mood) ? { mood } : {}),
     });
     return id;
   },

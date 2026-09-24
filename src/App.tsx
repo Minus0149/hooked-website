@@ -35,7 +35,7 @@ const CreatorDashboard = lazy(() =>
 );
 import { LibraryScreen } from "./components/LibraryScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
-import { NewPlaylistSheet } from "./components/NewPlaylistSheet";
+import { NewPlaylistSheet, type PlaylistRules } from "./components/NewPlaylistSheet";
 import { IconSettings, IconUser } from "./components/icons";
 import {
   DIR_TO_ACTION,
@@ -437,6 +437,7 @@ function Shell() {
           allowRepeats: p.allowRepeats,
           includeBuried: p.includeBuried,
           includeBlockedArtists: p.includeBlockedArtists,
+          mood: coerceMood(p.mood) ?? undefined,
           tracks: p.songs.map(toLocal),
         })),
         neverArtists: library.neverArtists,
@@ -820,16 +821,19 @@ function Shell() {
         includeBuried?: boolean;
         includeBlockedArtists?: boolean;
       },
+      mood?: MoodId | null,
     ): Promise<string> => {
       let id = `local-${Date.now()}`;
       if (signedIn) {
         try {
-          id = String(await createPlaylistMutation({ name, accent, ...rules }));
+          id = String(
+            await createPlaylistMutation({ name, accent, ...rules, ...(mood ? { mood } : {}) }),
+          );
         } catch {
           /* keep local id */
         }
       }
-      createPlaylist({ id, name, accent, tracks: [], ...rules });
+      createPlaylist({ id, name, accent, tracks: [], ...rules, ...(mood ? { mood } : {}) });
       showToast(`Playlist "${name}" created`, "✦");
       return id;
     },
@@ -867,11 +871,17 @@ function Shell() {
 
   /** FAB flow: create the playlist AND make it the swipe-down destination. */
   const handleCreateAndTarget = useCallback(
-    async (name: string, accent: string) => {
-      const id = await handleCreatePlaylist(name, accent);
+    async (name: string, accent: string, rules?: PlaylistRules, mood?: MoodId | null) => {
+      const id = await handleCreatePlaylist(name, accent, rules, mood);
       handleSaveTarget(`pl:${id}`);
+      if (mood) {
+        // a playlist made for a mood starts filling straight away: the lens
+        // goes on and the deck opens, the same as holding the + for it
+        setMood(mood);
+        setViewWithHistory("discover");
+      }
     },
-    [handleCreatePlaylist, handleSaveTarget],
+    [handleCreatePlaylist, handleSaveTarget, setMood, setViewWithHistory],
   );
 
   const makeMoodPlaylist = useCallback(
@@ -882,7 +892,7 @@ function Shell() {
       const existing = state.playlists.find(
         (p) => p.name.trim().toLowerCase() === name.toLowerCase(),
       );
-      const id = existing ? existing.id : await handleCreatePlaylist(name, face.accent);
+      const id = existing ? existing.id : await handleCreatePlaylist(name, face.accent, undefined, mood);
       handleSaveTarget(`pl:${id}`);
       setMood(mood);
       setViewWithHistory("discover");
@@ -895,10 +905,18 @@ function Shell() {
   const handleDiscoverInto = useCallback(
     (container: LibraryContainer) => {
       handleSaveTarget(container as SaveTarget);
+      // a mood playlist brings its lens with it, so what fills it still fits
+      const pl = container.startsWith("pl:")
+        ? state.playlists.find((p) => p.id === container.slice(3))
+        : undefined;
+      if (pl?.mood) setMood(pl.mood);
       setViewWithHistory("discover");
-      showToast("New saves land here now", "✦");
+      showToast(
+        pl?.mood ? `New saves land here — deck leaning ${moodById(pl.mood)?.label ?? pl.mood}` : "New saves land here now",
+        "✦",
+      );
     },
-    [handleSaveTarget, showToast],
+    [handleSaveTarget, showToast, state.playlists, setMood],
   );
 
   const handleDeletePlaylist = useCallback(

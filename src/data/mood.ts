@@ -424,6 +424,35 @@ export function wheelAngle(i: number): number {
 }
 
 /**
+ * The wedge face `i` owns on the ring, as an SVG path: an annular sector from
+ * `rIn` to `rOut`, centred on (0, 0), trimmed by `gapDeg` on each side so the
+ * wedges read as separate keys.
+ *
+ * The wedge IS the push target — every direction inside its 60 degrees picks
+ * it (moodAtPush) — so drawing the whole sector rather than a small bubble
+ * shows the finger exactly how much room it has.
+ */
+export function wedgePath(i: number, rIn: number, rOut: number, gapDeg = 0): string {
+  const mid = wheelAngle(i);
+  const half = WHEEL_STEP_DEG / 2 - gapDeg;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const pt = (r: number, d: number) =>
+    `${+(Math.cos(rad(d)) * r).toFixed(2)} ${+(Math.sin(rad(d)) * r).toFixed(2)}`;
+  const a0 = mid - half;
+  const a1 = mid + half;
+  return (
+    `M ${pt(rOut, a0)} A ${rOut} ${rOut} 0 0 1 ${pt(rOut, a1)} ` +
+    `L ${pt(rIn, a1)} A ${rIn} ${rIn} 0 0 0 ${pt(rIn, a0)} Z`
+  );
+}
+
+/** A point `r` out along face `i`'s bisector — where its face and label sit. */
+export function wedgePoint(i: number, r: number): { x: number; y: number } {
+  const a = (wheelAngle(i) * Math.PI) / 180;
+  return { x: Math.cos(a) * r, y: Math.sin(a) * r };
+}
+
+/**
  * Which mood a push of (dx, dy) selects, or null for "not far enough yet".
  *
  * `deadZone` is in the same units as dx/dy. Releasing inside it cancels, which

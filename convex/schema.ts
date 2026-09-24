@@ -115,6 +115,12 @@ export default defineSchema({
     allowRepeats: v.optional(v.boolean()),
     includeBuried: v.optional(v.boolean()),
     includeBlockedArtists: v.optional(v.boolean()),
+    /**
+     * The mood this playlist was made for, if any (MOOD_IDS). Discovering into
+     * it puts that mood's lens back on the deck, so it keeps filling with
+     * songs that fit.
+     */
+    mood: v.optional(v.string()),
   }).index("by_user", ["userId"]),
 
   swipes: defineTable({

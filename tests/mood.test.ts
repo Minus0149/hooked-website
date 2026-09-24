@@ -14,6 +14,8 @@ import {
   moodsOf,
   moodAtPush,
   wheelAngle,
+  wedgePath,
+  wedgePoint,
   type Daypart,
   type MoodId,
 } from "../src/data/mood";
@@ -270,5 +272,53 @@ describe("coverage of the real chart genres", () => {
 
   it("leaves the catch-alls to measurement rather than guessing", () => {
     for (const g of CATCH_ALLS) expect(moodsOf({ genre: g })).toEqual([]);
+  });
+});
+
+describe("the ring's wedges", () => {
+  const nums = (p: string) => (p.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+
+  it("puts each face on its own push direction", () => {
+    MOODS.forEach((m, i) => {
+      const p = wedgePoint(i, 90);
+      // a push toward where the face is drawn picks that face
+      expect(moodAtPush(p.x, p.y, 38)).toBe(m.id);
+    });
+  });
+
+  it("draws every wedge between the two radii", () => {
+    for (let i = 0; i < MOODS.length; i++) {
+      const n = nums(wedgePath(i, 50, 124, 1.5));
+      // M x y A r r 0 0 1 x y L x y A r r 0 0 0 x y
+      const pts = [
+        [n[0], n[1]],
+        [n[7], n[8]],
+        [n[9], n[10]],
+        [n[16], n[17]],
+      ];
+      const radii = pts.map(([x, y]) => Math.round(Math.hypot(x, y)));
+      expect(radii).toEqual([124, 124, 50, 50]);
+    }
+  });
+
+  it("keeps each wedge inside its own 60 degrees, so neighbours never overlap", () => {
+    for (let i = 0; i < MOODS.length; i++) {
+      const n = nums(wedgePath(i, 50, 124, 1.5));
+      for (const [x, y] of [
+        [n[0], n[1]],
+        [n[7], n[8]],
+      ]) {
+        // the corners sit just inside the wedge's own push sector
+        expect(moodAtPush(x * 0.99, y * 0.99, 1)).toBe(MOODS[i].id);
+      }
+    }
+  });
+
+  it("has the top wedge centred straight up", () => {
+    const n = nums(wedgePath(0, 50, 124));
+    // the two outer corners mirror each other across the vertical axis
+    expect(n[0]).toBeCloseTo(-n[7], 1);
+    expect(n[1]).toBeCloseTo(n[8], 1);
+    expect(n[1]).toBeLessThan(0);
   });
 });

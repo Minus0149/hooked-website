@@ -1,3 +1,4 @@
+import type { MoodId } from "./data/mood";
 ﻿/** A window into a track's audio. A preview supports one; full audio supports several. */
 export interface HookWindow {
   id: string;
@@ -61,6 +62,8 @@ export interface Playlist {
   allowRepeats?: boolean;
   includeBuried?: boolean;
   includeBlockedArtists?: boolean;
+  /** the mood it was made for — discovering into it puts that lens back on */
+  mood?: MoodId;
 }
 
 export type LibraryContainer = "liked" | "discoveries" | `pl:${string}`;
