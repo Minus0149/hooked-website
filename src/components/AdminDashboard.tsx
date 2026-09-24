@@ -17,6 +17,7 @@ import { ConfigPanel } from "./admin/ConfigPanel";
 import { ReportsPanel } from "./admin/ReportsPanel";
 import { FeedPanel } from "./admin/Feed";
 import { MoodsPanel } from "./admin/MoodsPanel";
+import { useDialogs } from "./ui/Dialogs";
 
 /**
  * The admin shell: which tabs this account may see, and the data each needs.
@@ -27,6 +28,7 @@ import { MoodsPanel } from "./admin/MoodsPanel";
  */
 
 export function AdminDashboard() {
+  const { confirm, notify } = useDialogs();
   const session = authClient.useSession();
   const access = useQuery(api.admin.myAccess);
   const stats = useQuery(api.admin.stats);
@@ -178,7 +180,7 @@ export function AdminDashboard() {
             data={creatorData}
             onDecide={(id, status) =>
               void decideCreator({ id: id as never, status }).catch((e: Error) =>
-                window.alert(e.message),
+                notify(e.message, "error"),
               )
             }
           />
@@ -187,14 +189,22 @@ export function AdminDashboard() {
           <RequestsPanel
             data={requests}
             onDecide={(id, status) =>
-              void decide({ id: id as never, status }).catch((e: Error) => window.alert(e.message))
+              void decide({ id: id as never, status }).catch((e: Error) => notify(e.message, "error"))
             }
             onInvited={(id, invited) =>
-              void markInvited({ id: id as never, invited }).catch((e: Error) => window.alert(e.message))
+              void markInvited({ id: id as never, invited }).catch((e: Error) =>
+                notify(e.message, "error"),
+              )
             }
-            onRemove={(id, email) => {
-              if (!window.confirm(`Remove the request from ${email}? This deletes the row.`)) return;
-              void removeRequest({ id: id as never }).catch((e: Error) => window.alert(e.message));
+            onRemove={async (id, email) => {
+              const ok = await confirm({
+                title: `Remove the request from ${email}?`,
+                body: "This deletes the row. Use it for spam and test submissions.",
+                confirmLabel: "Remove",
+                danger: true,
+              });
+              if (!ok) return;
+              void removeRequest({ id: id as never }).catch((e: Error) => notify(e.message, "error"));
             }}
           />
         )}
@@ -203,8 +213,8 @@ export function AdminDashboard() {
             data={userData}
             isAdmin={access?.isAdmin ?? false}
             onSetAdmin={(profileId, isAdmin) =>
-              void setAdmin({ profileId: profileId as never, isAdmin }).catch(
-                (e: Error) => window.alert(e.message),
+              void setAdmin({ profileId: profileId as never, isAdmin }).catch((e: Error) =>
+                notify(e.message, "error"),
               )
             }
             onSetPermission={(profileId, permission, granted) =>
@@ -223,13 +233,14 @@ export function AdminDashboard() {
             onBackfill={() =>
               backfillHooks({})
                 .then((r) =>
-                  window.alert(
+                  notify(
                     r.tracksFilled === 0
                       ? "Every track already has a hook."
                       : `Gave ${r.tracksFilled} track${r.tracksFilled === 1 ? "" : "s"} ${r.hooksCreated} hooks between them.`,
+                    "success",
                   ),
                 )
-                .catch((e: Error) => window.alert(e.message))
+                .catch((e: Error) => notify(e.message, "error"))
             }
           />
         )}

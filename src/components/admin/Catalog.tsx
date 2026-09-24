@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { art } from "../../lib/art";
+import { Select } from "../ui/Dialogs";
 
 type CatalogData = NonNullable<ReturnType<typeof useCatalogType>>;
 function useCatalogType() {
@@ -64,15 +65,12 @@ export function CatalogPanel({
         <button className="admin-perm" onClick={onBackfill} title="Give three windows to any track that has none">
           fix hookless tracks
         </button>
-        <select
-          className="admin-select"
+        <Select
+          label="genre"
           value={genre}
-          onChange={(e) => setGenre(e.target.value)}
-        >
-          {genres.map((g) => (
-            <option key={g} value={g}>{g}</option>
-          ))}
-        </select>
+          onChange={setGenre}
+          options={genres.map((g) => ({ value: g, label: g }))}
+        />
         <button
           className={`admin-perm ${hiddenOnly ? "on" : ""}`}
           onClick={() => setHiddenOnly(!hiddenOnly)}

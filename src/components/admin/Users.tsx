@@ -14,6 +14,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { art } from "../../lib/art";
 import { ACTION_COLOR, PERM_LABEL, timeAgo } from "./shared";
+import { useDialogs } from "../ui/Dialogs";
 
 type UsersData = NonNullable<ReturnType<typeof useUsersType>>;
 function useUsersType() {
@@ -199,6 +200,7 @@ function UserDetailPanel({
   canManage: boolean;
   onClose: () => void;
 }) {
+  const { confirm, notify } = useDialogs();
   const detail = useQuery(api.admin.userDetail, { profileId });
   const setSuspended = useMutation(api.admin.setSuspended);
   const deleteUserData = useMutation(api.admin.deleteUserData);
@@ -222,7 +224,7 @@ function UserDetailPanel({
             style={detail.suspended ? undefined : { color: "var(--more)" }}
             onClick={() =>
               void setSuspended({ profileId, suspended: !detail.suspended }).catch(
-                (e: Error) => window.alert(e.message),
+                (e: Error) => notify(e.message, "error"),
               )
             }
           >
@@ -233,16 +235,20 @@ function UserDetailPanel({
           <button
             className="admin-toggle"
             style={{ color: "var(--never)" }}
-            onClick={() => {
-              if (
-                window.confirm(
-                  `Delete ALL data for ${detail.email}? Swipes, library, playlists and profile are wiped. This cannot be undone.`,
-                )
-              ) {
-                void deleteUserData({ profileId })
-                  .then(onClose)
-                  .catch((e: Error) => window.alert(e.message));
-              }
+            onClick={async () => {
+              const ok = await confirm({
+                title: `Delete all data for ${detail.email}?`,
+                body: "Swipes, library, playlists and profile are wiped. This can't be undone.",
+                confirmLabel: "Delete everything",
+                danger: true,
+              });
+              if (!ok) return;
+              void deleteUserData({ profileId })
+                .then(() => {
+                  notify(`Deleted ${detail.email}'s data`, "success");
+                  onClose();
+                })
+                .catch((e: Error) => notify(e.message, "error"));
             }}
           >
             delete data

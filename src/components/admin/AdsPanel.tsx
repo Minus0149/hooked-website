@@ -2,6 +2,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { useDialogs, Select } from "../ui/Dialogs";
 
 /**
  * The ads studio: pacing rules on the left, campaigns on the right.
@@ -51,6 +52,7 @@ function presetIdFor(cfg: AdsConfig): string {
 }
 
 function CadenceCard({ config }: { config: AdsConfig }) {
+  const { confirm, notify } = useDialogs();
   const setConfig = useMutation(api.ads.setConfig);
   const [draft, setDraft] = useState<AdsConfig>(config);
   const [dirty, setDirty] = useState(false);
@@ -76,7 +78,7 @@ function CadenceCard({ config }: { config: AdsConfig }) {
       await setConfig({ ...draft });
       setDirty(false);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Could not save");
+      notify(e instanceof Error ? e.message : "Could not save", "error");
     } finally {
       setSaving(false);
     }
@@ -267,12 +269,16 @@ function CampaignEditor({
         </label>
         <label className="field">
           <span>status</span>
-          <select value={form.status}
-            onChange={(e) => setForm({ ...form, status: e.target.value as AdRow["status"] })}>
-            <option value="draft">draft</option>
-            <option value="live">live</option>
-            <option value="retired">retired</option>
-          </select>
+          <Select
+            label="status"
+            value={form.status}
+            onChange={(status) => setForm({ ...form, status })}
+            options={[
+              { value: "draft", label: "draft" },
+              { value: "live", label: "live" },
+              { value: "retired", label: "retired" },
+            ]}
+          />
         </label>
         <div className="field">
           <span>artwork</span>

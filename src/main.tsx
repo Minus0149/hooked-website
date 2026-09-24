@@ -4,6 +4,7 @@ import { ConvexReactClient } from "convex/react";
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
 import App from "./App";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
+import { DialogProvider } from "./components/ui/Dialogs";
 import { authClient } from "./lib/auth-client";
 import "./styles/global.css";
 
@@ -34,7 +35,9 @@ createRoot(document.getElementById("root")!).render(
       >
         {/* inner boundary: the app's crashes get the full report panel */}
         <AppErrorBoundary reportable>
-          <App />
+          <DialogProvider>
+            <App />
+          </DialogProvider>
         </AppErrorBoundary>
       </ConvexBetterAuthProvider>
     </AppErrorBoundary>

@@ -26,6 +26,7 @@ import {
   type MoodByTime,
 } from "../data/mood";
 import { IconBack, IconCheck, IconUser } from "./icons";
+import { useDialogs } from "./ui/Dialogs";
 
 const BETA_URL = import.meta.env.VITE_BETA_URL ?? "https://hookedcue.com/beta";
 
@@ -182,6 +183,7 @@ export function SettingsScreen({
     maxPerDay: number;
   } | null;
 }) {
+  const { confirm, notify } = useDialogs();
   const { state, setTaste } = useStore();
   const session = authClient.useSession();
   const deleteAccount = useMutation(api.library.deleteMyAccount);
@@ -197,8 +199,20 @@ export function SettingsScreen({
 
   // Google Play requires an in-app route to delete an account and its data.
   const removeAccount = async () => {
-    if (!window.confirm("Delete your account and everything in it? This can't be undone.")) return;
-    if (!window.confirm("Last check — your library, playlists and swipe history all go. Continue?")) return;
+    const first = await confirm({
+      title: "Delete your account?",
+      body: "Your account and everything in it goes. This can't be undone.",
+      confirmLabel: "Continue",
+      danger: true,
+    });
+    if (!first) return;
+    const last = await confirm({
+      title: "Last check",
+      body: "Your library, playlists and swipe history are deleted for good.",
+      confirmLabel: "Delete my account",
+      danger: true,
+    });
+    if (!last) return;
     setDeleting(true);
     try {
       await deleteAccount({ confirm: "DELETE" });
@@ -206,7 +220,7 @@ export function SettingsScreen({
       localStorage.removeItem("hooked.library.v2");
       window.location.reload();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Could not delete the account");
+      notify(err instanceof Error ? err.message : "Could not delete the account", "error");
       setDeleting(false);
     }
   };
@@ -666,11 +680,16 @@ export function SettingsScreen({
       </a>
       <button
         className="settings-row"
-        onClick={() => {
-          if (window.confirm("Clear your local library and history on this device?")) {
-            localStorage.removeItem("hooked.library.v2");
-            window.location.reload();
-          }
+        onClick={async () => {
+          const ok = await confirm({
+            title: "Clear this device?",
+            body: "Your local library and history on this device are removed. Anything synced to your account stays.",
+            confirmLabel: "Clear",
+            danger: true,
+          });
+          if (!ok) return;
+          localStorage.removeItem("hooked.library.v2");
+          window.location.reload();
         }}
       >
         <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>

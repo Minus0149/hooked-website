@@ -6,6 +6,7 @@ import { useStore } from "../state/store";
 import type { LibraryContainer, Track } from "../types";
 import { art } from "../lib/art";
 import { IconBack, IconHeart, IconPlay, IconSparkle, IconX, IconFolder } from "./icons";
+import { useDialogs } from "./ui/Dialogs";
 
 const stagger = {
   hidden: {},
@@ -46,6 +47,7 @@ export function LibraryScreen({
   onDeletePlaylist: (id: string) => void;
   onDiscoverInto: (container: LibraryContainer) => void;
 }) {
+  const { confirm, notify } = useDialogs();
   const { state, updatePlaylistRules } = useStore();
   const updateRulesOnServer = useMutation(api.library.updatePlaylistRules);
   const [showRules, setShowRules] = useState(false);
@@ -104,11 +106,16 @@ export function LibraryScreen({
             style={{ color: "var(--never)" }}
             aria-label="Delete playlist"
             title="Delete playlist"
-            onClick={() => {
-              if (window.confirm(`Delete "${title}"? The songs leave your library too.`)) {
-                onDeletePlaylist(playlistId!);
-                onBack();
-              }
+            onClick={async () => {
+              const ok = await confirm({
+                title: `Delete “${title}”?`,
+                body: "The songs in it leave your library too.",
+                confirmLabel: "Delete playlist",
+                danger: true,
+              });
+              if (!ok) return;
+              onDeletePlaylist(playlistId!);
+              onBack();
             }}
           >
             <IconX size={16} />

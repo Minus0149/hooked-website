@@ -15,12 +15,14 @@ import type { Track } from "./types";
 import { MS, clock, secs } from "./types";
 import { HookEditor } from "./HookEditor";
 import { computeFingerprint } from "../../lib/audio-fp";
+import { useDialogs } from "../ui/Dialogs";
 
 /** Overlap at/above this is a re-encoded copy, not a coincidence. */
 const DUPLICATE_BLOCK_SCORE = 0.35;
 const DUPLICATE_WARN_SCORE = 0.12;
 
 export function TrackCard({ track }: { track: Track }) {
+  const { confirm, notify } = useDialogs();
   const generateUploadUrl = useMutation(api.creators.generateUploadUrl);
   const attachAudio = useMutation(api.creators.attachAudio);
   const upsertHook = useMutation(api.creators.upsertHook);
@@ -107,11 +109,15 @@ export function TrackCard({ track }: { track: Track }) {
           );
         }
         if (worst && worst.score >= DUPLICATE_WARN_SCORE) {
-          const ok = window.confirm(
-            `Heads up: part of this resembles “${worst.title}” by ${worst.artist} ` +
+          const ok = await confirm({
+            title: "This resembles another track",
+            body:
+              `Part of it matches “${worst.title}” by ${worst.artist} ` +
               `(≈${Math.round(worst.score * 100)}% overlap). If that's a cleared ` +
               `sample or your own rework, continue; otherwise go back.`,
-          );
+            confirmLabel: "Upload anyway",
+            cancelLabel: "Go back",
+          });
           if (!ok) throw new Error("Upload cancelled");
         }
       } else {

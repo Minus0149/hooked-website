@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { moodAtPush, MOODS, wheelAngle, type MoodId } from "../data/mood";
 import type { Verdict } from "../data/predict";
@@ -79,19 +80,27 @@ export function MoodWheel({
   const [keyIndex, setKeyIndex] = useState<number | null>(null);
 
   /**
-   * Every overlay in this app is absolute inside the app's own box (on
-   * desktop, a phone-shaped frame in a bigger window), so the ring works in
-   * that box's coordinates rather than the viewport's.
+   * The ring draws into the app's own box — the `.phone` frame, which on
+   * desktop is a phone-shaped box in a bigger window — through a portal, and
+   * measures that same box.
+   *
+   * It used to render wherever its owner sat and measure its offsetParent.
+   * Inside the deck that owner is a transformed container, which becomes the
+   * containing block for absolute children but is NOT their offsetParent: on
+   * desktop the two differed by 119px, so the ring opened left of the finger,
+   * the backdrop covered only part of the phone and the hint sat in a corner.
+   * One element for both drawing and measuring makes that impossible.
    */
-  const [host, setHost] = useState<DOMRect | null>(null);
-  useEffect(() => {
-    const parent = ref.current?.offsetParent as HTMLElement | null;
-    setHost((parent ?? document.body).getBoundingClientRect());
-  }, []);
-  const hostX = host?.left ?? 0;
-  const hostY = host?.top ?? 0;
-  const hostW = host?.width ?? window.innerWidth;
-  const hostH = host?.height ?? window.innerHeight;
+  const frame = useMemo(
+    () => (document.querySelector(".phone") as HTMLElement | null) ?? document.body,
+    [],
+  );
+  const [host] = useState<DOMRect>(() => frame.getBoundingClientRect());
+  // the frame's border is outside the box its absolute children lay out in
+  const hostX = host.left + frame.clientLeft;
+  const hostY = host.top + frame.clientTop;
+  const hostW = frame.clientWidth || host.width;
+  const hostH = frame.clientHeight || host.height;
 
   // Centred on the finger, nudged inward only as far as the ring needs.
   const reach = RING + BUBBLE / 2 + EDGE;
@@ -117,13 +126,20 @@ export function MoodWheel({
   // Release on a face commits it; release in the middle leaves it up.
   const aimedRef = useRef<number | null>(null);
   aimedRef.current = aimed;
+  // Release decides: on a face, that face. Back in the middle after pushing
+  // out, a change of mind — the ring closes and nothing is picked. Released
+  // without ever moving, it stays up to be tapped (the fallback for anyone who
+  // holds but doesn't push).
+  const everAimed = useRef(false);
+  if (dragging && aimed !== null && keyIndex === null) everAimed.current = true;
   const wasDragging = useRef(dragging);
   useEffect(() => {
-    if (wasDragging.current && !dragging && aimedRef.current !== null) {
-      onCommit(MOODS[aimedRef.current].id);
+    if (wasDragging.current && !dragging) {
+      if (aimedRef.current !== null) onCommit(MOODS[aimedRef.current].id);
+      else if (everAimed.current) onCancel();
     }
     wasDragging.current = dragging;
-  }, [dragging, onCommit]);
+  }, [dragging, onCommit, onCancel]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -164,7 +180,7 @@ export function MoodWheel({
   // the frame, where it drops below instead of running off it
   const labelBelow = cy - RING - BUBBLE / 2 - 58 < 0;
 
-  return (
+  return createPortal(
     <>
       <motion.div
         className="ring-backdrop"
@@ -273,7 +289,13 @@ export function MoodWheel({
               <small>{lead.line}</small>
             </span>
           ) : (
-            <span>{dragging ? "push toward a face" : "tap a face"}</span>
+            <span>
+              {dragging
+                ? everAimed.current
+                  ? "let go here to cancel"
+                  : "push toward a face"
+                : "tap a face"}
+            </span>
           )}
         </motion.div>
       </div>
@@ -294,6 +316,7 @@ export function MoodWheel({
           <span>{hint ?? "how does this one feel?"}</span>
         )}
       </motion.div>
-    </>
+    </>,
+    frame,
   );
 }
