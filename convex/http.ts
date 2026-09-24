@@ -5,7 +5,9 @@ import { authComponent, createAuth } from "./auth";
 
 const http = httpRouter();
 
-const APP_ORIGIN = "https://app.hookedcue.com";
+// The web app's origin — the deployment's SITE_URL, so the dev deployment can
+// serve a local build while production stays locked to app.hookedcue.com.
+const APP_ORIGIN = process.env.SITE_URL ?? "https://app.hookedcue.com";
 const MAX_BODY_BYTES = 8 * 1024;
 
 // CORS handling is required because the SPA runs on a different origin.

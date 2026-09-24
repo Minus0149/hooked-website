@@ -4,6 +4,8 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 // @ts-expect-error - plain ESM shared with the tests
 import { connectSources, CONNECT_PLACEHOLDER } from "./scripts/lib/csp.mjs";
+// @ts-expect-error - plain ESM shared with the tests
+import { parseEnvFile, pinnedBackend } from "./scripts/lib/backend-env.mjs";
 
 /** Point the CSP's connect-src at whichever backend this build talks to. */
 function backendCsp(connect: string): Plugin {
@@ -24,6 +26,12 @@ function backendCsp(connect: string): Plugin {
 
 export default defineConfig(({ mode }) => {
   const isProduction = mode === "production";
+  // A production build talks to the backend the repo names, not whatever the
+  // host's build variables still say — set before Vite reads the env.
+  const committed = existsSync(".env.production")
+    ? parseEnvFile(readFileSync(".env.production", "utf8"))
+    : {};
+  Object.assign(process.env, pinnedBackend(mode, committed));
   const connect = connectSources(loadEnv(mode, process.cwd(), "VITE_"));
 
   return {
