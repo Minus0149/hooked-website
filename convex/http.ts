@@ -1,4 +1,5 @@
 import { httpRouter } from "convex/server";
+import { applyOriginAllowed } from "./applyOrigin";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent, createAuth } from "./auth";
@@ -86,8 +87,12 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const origin = request.headers.get("origin");
-    if (origin !== APP_ORIGIN) return new Response("forbidden", { status: 403 });
-    const headers = { ...corsHeaders(origin), "content-type": "application/json" };
+    if (!applyOriginAllowed(origin, APP_ORIGIN)) return new Response("forbidden", { status: 403 });
+    // CORS headers only mean something to a browser; the phone sends no Origin
+    const headers = {
+      ...(origin ? corsHeaders(origin) : {}),
+      "content-type": "application/json",
+    };
 
     const parsed = await readJson(request);
     if ("tooBig" in parsed) return new Response("too large", { status: 413, headers });
