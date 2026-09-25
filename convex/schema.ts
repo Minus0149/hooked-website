@@ -224,7 +224,10 @@ export default defineSchema({
     rightsConfirmedAt: v.optional(v.string()),
   })
     .index("by_trackId", ["trackId"])
-    .index("by_owner", ["ownerUserId"]),
+    .index("by_owner", ["ownerUserId"])
+    // lets the hourly heat job find the few tracks with heat > 0 instead of
+    // reading the whole catalogue every hour (see hooks.computeHeat)
+    .index("by_heat", ["heat"]),
 
   // ------------------------------------------------------------------ ads
   //

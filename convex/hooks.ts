@@ -167,25 +167,52 @@ export const rerank = internalMutation({
  * catalogue query reads, so that invalidation is hourly, not per swipe.
  * Writes only when a value moved, keeping no-op runs free.
  */
+/**
+ * The heat each track should have, for exactly the tracks that can change:
+ * every track with plays, plus every track that is hot now (it may have lost
+ * its plays). Everything else is cold and stays cold, so it is never read.
+ */
+export function planHeat(
+  playsByTrack: Map<string, number>,
+  hotNow: { trackId: string; heat?: number }[],
+): Map<string, number> {
+  let leader = 0;
+  for (const plays of playsByTrack.values()) if (plays > leader) leader = plays;
+  const next = new Map<string, number>();
+  for (const [trackId, plays] of playsByTrack) {
+    next.set(trackId, leader > 0 ? Math.round((plays / leader) * 1000) / 1000 : 0);
+  }
+  for (const t of hotNow) if (!next.has(t.trackId)) next.set(t.trackId, 0);
+  return next;
+}
+
 export const computeHeat = internalMutation({
   args: {},
   handler: async (ctx) => {
+    // This used to read every track, every hour, on every deployment: ~2k
+    // documents carrying sound profiles, which alone was enough to walk the
+    // project toward the free plan's database bandwidth. Now it reads the
+    // stats, the tracks that are hot, and the tracks that have plays.
     const stats = await ctx.db.query("hookStats").collect();
     const playsByTrack = new Map<string, number>();
     for (const s of stats) {
       playsByTrack.set(s.trackId, (playsByTrack.get(s.trackId) ?? 0) + s.plays);
     }
+    const hot = await ctx.db
+      .query("tracks")
+      .withIndex("by_heat", (q) => q.gt("heat", 0))
+      .collect();
+    const byId = new Map(hot.map((t) => [t.trackId, t]));
 
-    let leader = 0;
-    for (const plays of playsByTrack.values()) {
-      if (plays > leader) leader = plays;
-    }
-
-    const tracks = await ctx.db.query("tracks").collect();
     let changed = 0;
-    for (const track of tracks) {
-      const plays = playsByTrack.get(track.trackId) ?? 0;
-      const heat = leader > 0 ? Math.round((plays / leader) * 1000) / 1000 : 0;
+    for (const [trackId, heat] of planHeat(playsByTrack, hot)) {
+      const track =
+        byId.get(trackId) ??
+        (await ctx.db
+          .query("tracks")
+          .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
+          .unique());
+      if (!track) continue;
       // absent and zero mean the same thing; don't grow rows that never played
       if (heat === 0 && track.heat === undefined) continue;
       if (track.heat !== heat) {
@@ -193,6 +220,6 @@ export const computeHeat = internalMutation({
         changed++;
       }
     }
-    return { tracks: tracks.length, changed, leader };
+    return { considered: playsByTrack.size + hot.length, changed };
   },
 });

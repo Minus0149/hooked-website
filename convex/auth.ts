@@ -1,10 +1,11 @@
 import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex, crossDomain } from "@convex-dev/better-auth/plugins";
 import { betterAuth } from "better-auth/minimal";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import authConfig from "./auth.config";
+import { smtpSettings } from "./emailConfig";
 
 const siteUrl = process.env.SITE_URL ?? "https://app.hookedcue.com";
 const authSiteUrl = process.env.BETTER_AUTH_URL ?? "https://cnx.hookedcue.com";
@@ -13,27 +14,27 @@ const authSecret = process.env.BETTER_AUTH_SECRET;
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
 /**
- * Send one transactional email through Resend's plain HTTPS API. Without a key
- * the link is logged to the Convex dashboard instead — the honest fallback, and
- * enough to hand a link to a tester by hand while email isn't set up.
+ * Hand one transactional email to the SMTP sender (convex/email.ts). Without
+ * the SMTP settings the link is logged to the Convex dashboard instead — the
+ * honest fallback, and enough to pass a link to a tester by hand.
  */
-async function sendEmail(to: string, subject: string, html: string, logLine: string) {
-  const key = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM ?? "hooked <onboarding@resend.dev>";
-  if (!key) {
-    console.warn(`[auth] ${logLine} — set RESEND_API_KEY to email these`);
+async function sendEmail(
+  ctx: GenericCtx<DataModel>,
+  to: string,
+  subject: string,
+  html: string,
+  logLine: string,
+) {
+  const smtp = smtpSettings(process.env);
+  if (!smtp.ok) {
+    console.warn(`[auth] ${logLine} — set ${smtp.missing.join(", ")} to email these`);
     return;
   }
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-      body: JSON.stringify({ from, to: [to], subject, html }),
-    });
-    if (!res.ok) console.error(`[auth] ${subject} failed:`, await res.text());
-  } catch (err) {
-    console.error(`[auth] ${subject} error:`, err);
+  if (!("scheduler" in ctx)) {
+    console.error(`[auth] ${subject}: no scheduler in this context, email not queued`);
+    return;
   }
+  await ctx.scheduler.runAfter(0, internal.email.send, { to, subject, html });
 }
 
 export const createAuth = (ctx: GenericCtx<DataModel>) => {
@@ -63,13 +64,13 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
-      // Password resets need somewhere to send the link. Resend's plain HTTPS
-      // API keeps this dependency-free; without a key the link is logged to
-      // the Convex dashboard instead, which is the honest self-host fallback.
+      // Password resets need somewhere to send the link: our own mail server
+      // (see sendEmail). Without SMTP settings the link is logged instead.
       sendResetPassword: async ({ user, url }) => {
         await sendEmail(
+          ctx,
           user.email,
-          "reset your hooked. password",
+          "reset your hookedcue password",
           `<p>Someone (hopefully you) asked to reset the password for <b>${user.email}</b>.</p>` +
             `<p><a href="${url}">Choose a new password</a> — the link works once and expires in an hour.</p>` +
             `<p>If it wasn't you, ignore this and your password stays as it was.</p>`,
@@ -87,9 +88,10 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
       expiresIn: 60 * 60 * 24,
       sendVerificationEmail: async ({ user, url }) => {
         await sendEmail(
+          ctx,
           user.email,
-          "confirm your email for hooked.",
-          `<p>Confirm <b>${user.email}</b> to finish setting up hooked.</p>` +
+          "confirm your email for hookedcue",
+          `<p>Confirm <b>${user.email}</b> to finish setting up hookedcue.</p>` +
             `<p><a href="${url}">Confirm my email</a> — the link works for 24 hours.</p>` +
             `<p>If you didn't sign up, ignore this.</p>`,
           `verify ${user.email}: ${url}`,
