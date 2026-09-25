@@ -17,6 +17,8 @@ import type * as charts from "../charts.js";
 import type * as collab from "../collab.js";
 import type * as creators from "../creators.js";
 import type * as crons from "../crons.js";
+import type * as email from "../email.js";
+import type * as emailConfig from "../emailConfig.js";
 import type * as errors from "../errors.js";
 import type * as hooks from "../hooks.js";
 import type * as http from "../http.js";
@@ -45,6 +47,8 @@ declare const fullApi: ApiFromModules<{
   collab: typeof collab;
   creators: typeof creators;
   crons: typeof crons;
+  email: typeof email;
+  emailConfig: typeof emailConfig;
   errors: typeof errors;
   hooks: typeof hooks;
   http: typeof http;
