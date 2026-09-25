@@ -312,10 +312,10 @@ export function MoodWheel({
               {/* its own element, so the idle loop never fights the spring */}
               {motionPref === "full" ? (
                 <motion.span className="ring-face-anim" {...faceIdle(m.id, i, on)}>
-                  <Face mood={m.id} size={28} />
+                  <Face mood={m.id} size={30} animated delay={i * 0.13} />
                 </motion.span>
               ) : (
-                <Face mood={m.id} size={28} />
+                <Face mood={m.id} size={30} />
               )}
             </motion.button>
           );

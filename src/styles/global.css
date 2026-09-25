@@ -2979,6 +2979,7 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 }
 .mood-chip.is-on { color: var(--text); }
 .mood-chip.is-on .mood-disc {
+  --face-cut: var(--face, var(--accent));
   color: #0b0b10;
   background: var(--face, var(--accent));
   border-color: var(--face, var(--accent));
@@ -3287,7 +3288,7 @@ html[data-motion="reduced"] .drift { animation: none !important; }
   cursor: pointer;
   transition: color 0.12s ease;
 }
-.ring-face.on { color: #0b0b10; }
+.ring-face.on { color: #0b0b10; --face-cut: var(--face); }
 .ring-face-anim { display: grid; place-items: center; }
 
 /* The aimed face's name. Positioned with left/width rather than a transform,
@@ -3590,6 +3591,7 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 }
 .np-mood-any { font-size: 17px; color: var(--muted); }
 .np-mood.on .np-mood-face {
+  --face-cut: var(--face);
   background: var(--face);
   border-color: var(--face);
   color: #0b0b10;

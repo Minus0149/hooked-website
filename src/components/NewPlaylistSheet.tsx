@@ -136,7 +136,7 @@ export function NewPlaylistSheet({
               onClick={() => pickMood(m.id)}
             >
               <span className="np-mood-face">
-                <Face mood={m.id} size={22} />
+                <Face mood={m.id} size={24} animated={mood === m.id} />
               </span>
               <small>{m.label}</small>
             </button>

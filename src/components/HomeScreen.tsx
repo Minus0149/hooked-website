@@ -172,7 +172,7 @@ export function HomeScreen({
                 title={mood.line}
               >
                 <span className="mood-disc">
-                  <Face mood={mood.id} size={24} />
+                  <Face mood={mood.id} size={26} animated={isOn && state.prefs.motion === "full"} />
                 </span>
                 <span className="mood-chip-label">{mood.label}</span>
               </button>
