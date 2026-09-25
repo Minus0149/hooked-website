@@ -1,3 +1,4 @@
+import { TOUR_COPY, tasteStepButton } from "../lib/tourCopy";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   AnimatePresence,
@@ -291,12 +292,9 @@ export function Onboarding({
             exit={{ opacity: 0, y: -18 }}
           >
             <h1 className="ob-headline">
-              your next favorite song is <em>one swipe away</em>
+              {TOUR_COPY.welcome.headline.lead} <em>{TOUR_COPY.welcome.headline.accent}</em>
             </h1>
-            <p className="ob-copy">
-              We play you the best part of songs you've never heard. Four swipes
-              teach us exactly what you love.
-            </p>
+            <p className="ob-copy">{TOUR_COPY.welcome.copy}</p>
             <span className="eq" style={{ height: 22 }}>
               <span /><span /><span /><span />
             </span>
@@ -312,12 +310,9 @@ export function Onboarding({
             exit={{ opacity: 0, y: -18 }}
           >
             <h1 className="ob-headline">
-              what do you listen <em>in?</em>
+              {TOUR_COPY.languages.headline.lead} <em>{TOUR_COPY.languages.headline.accent}</em>
             </h1>
-            <p className="ob-copy">
-              Pick as many as you like. This matters more than genre — being fed
-              songs in a language you don't speak gets old fast.
-            </p>
+            <p className="ob-copy">{TOUR_COPY.languages.copy}</p>
             <div className="ob-chips">
               {options.languages.map((l) => (
                 <button
@@ -342,12 +337,9 @@ export function Onboarding({
             exit={{ opacity: 0, y: -18 }}
           >
             <h1 className="ob-headline">
-              and what <em>sounds?</em>
+              {TOUR_COPY.genres.headline.lead} <em>{TOUR_COPY.genres.headline.accent}</em>
             </h1>
-            <p className="ob-copy">
-              A rough steer, not a filter — everything else still shows up, just
-              further down the deck.
-            </p>
+            <p className="ob-copy">{TOUR_COPY.genres.copy}</p>
             <div className="ob-chips">
               {options.genres.map((g) => (
                 <button
@@ -372,7 +364,7 @@ export function Onboarding({
             exit={{ opacity: 0, y: -18 }}
           >
             <h1 className="ob-headline">
-              how far <em>off the map?</em>
+              {TOUR_COPY.adventure.headline.lead} <em>{TOUR_COPY.adventure.headline.accent}</em>
             </h1>
             <div className="ob-choices">
               {ADVENTURE.map((a) => (
@@ -466,7 +458,7 @@ export function Onboarding({
             <p className="ob-copy">
               {mood
                 ? `Nice — we'll open with ${moodById(mood)?.label.toLowerCase()}. Hold any card to change it, any time.`
-                : "Hold the card, push toward a face, let go. It steers the deck that way and tells us what the song feels like — one gesture, both jobs."}
+                : TOUR_COPY.hold.copy}
             </p>
           </motion.div>
         )}
@@ -519,16 +511,13 @@ export function Onboarding({
 
       {step === 0 && (
         <button className="ob-primary" onClick={() => setStep(1)}>
-          Let's start
+          {TOUR_COPY.start}
         </button>
       )}
       {step >= 1 && step <= TASTE_STEPS && (
         <button className="ob-primary" onClick={() => setStep(step + 1)}>
           {/* never blocked on an answer — an empty one simply tilts nothing */}
-          {(step === 1 && taste.languages.length === 0) ||
-          (step === 2 && taste.genres.length === 0)
-            ? "Skip this"
-            : "Next"}
+          {tasteStepButton(step, taste)}
         </button>
       )}
       {step === LAST_STEP && (
@@ -553,7 +542,7 @@ export function Onboarding({
       )}
       {step < LAST_STEP && (
         <button className="ob-skip" onClick={finish}>
-          Skip the tour
+          {TOUR_COPY.skip}
         </button>
       )}
     </motion.div>

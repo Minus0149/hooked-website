@@ -1,3 +1,4 @@
+import { storedVolume } from "../lib/volume";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HookWindow, Track } from "../types";
 
@@ -49,12 +50,7 @@ export function usePlayer(
   hooksRef.current = hooks;
   const hookIndexRef = useRef(0);
   hookIndexRef.current = hookIndex;
-  const [volume, setVolumeState] = useState(() => {
-    const raw = localStorage.getItem("hooked.volume");
-    if (raw === null) return 1; // Number(null) is 0 — don't start muted
-    const saved = Number(raw);
-    return Number.isFinite(saved) && saved >= 0 && saved <= 1 ? saved : 1;
-  });
+  const [volume, setVolumeState] = useState(() => storedVolume(localStorage.getItem("hooked.volume")));
 
   if (audioRef.current === null && typeof Audio !== "undefined") {
     audioRef.current = new Audio();

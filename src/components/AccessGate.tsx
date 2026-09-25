@@ -2,26 +2,21 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { authClient } from "../lib/auth-client";
 import { AuthForm } from "./ProfileScreen";
+import {
+  ACCESS_GENRES as GENRES,
+  MAX_ACCESS_GENRES as MAX_GENRES,
+  applyBody,
+  emailLooksValid,
+  stageAfterApply,
+  toggleAccessGenre,
+  type AccessStage as Stage,
+  type ApplyResult,
+} from "../lib/accessApply";
 
 // the apply endpoint is an HTTP route, not a mutation, so the server can see
 // the caller's IP and rate limit on it — a websocket mutation can't
-const SITE_URL = import.meta.env.VITE_CONVEX_SITE_URL ?? "https://cnx.hookedcue.com";
-
-const GENRES = [
-  "afrobeats", "psych pop", "bollywood", "house", "soul",
-  "reggaeton", "indie folk", "k-pop", "hip hop", "classic rock",
-  "punjabi", "electronic",
-] as const;
-const MAX_GENRES = 8;
-
-type Stage = "form" | "details" | "sent" | "already" | "signin";
-
-interface ApplyResult {
-  ok?: boolean;
-  duplicate?: boolean;
-  status?: string;
-  message?: string;
-}
+const SITE_URL =
+  import.meta.env.VITE_CONVEX_SITE_URL ?? "https://shocking-goldfinch-745.convex.site";
 
 /**
  * The wall after the free swipes run out.
@@ -53,29 +48,20 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
     startedAt.current = Date.now();
   }, []);
 
-  const toggleGenre = (g: string) =>
-    setGenres((list) =>
-      list.includes(g)
-        ? list.filter((x) => x !== g)
-        : list.length < MAX_GENRES
-          ? [...list, g]
-          : list,
-    );
+  const toggleGenre = (g: string) => setGenres((list) => toggleAccessGenre(list, g));
 
-  const apply = async (extra: Record<string, unknown>): Promise<ApplyResult | null> => {
+  const apply = async (
+    extra: { device?: string; notes?: string; genres?: string[] },
+  ): Promise<ApplyResult | null> => {
     setError(null);
     setBusy(true);
     try {
       const res = await fetch(`${SITE_URL}/access/apply`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          website: trap,
-          startedAt: startedAt.current,
-          ...extra,
-        }),
+        body: JSON.stringify(
+          applyBody({ name, email, trap, startedAt: startedAt.current }, extra),
+        ),
       });
       const data = (await res.json().catch(() => ({}))) as ApplyResult;
       if (!res.ok || !data.ok) {
@@ -94,18 +80,14 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy) return;
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+    if (!emailLooksValid(email)) {
       setError("that email doesn't look right");
       return;
     }
     const data = await apply({});
     if (!data) return;
-    if (data.duplicate) {
-      setExisting(data.status ?? "pending");
-      setStage(data.status === "approved" ? "signin" : data.status === "pending" ? "details" : "already");
-    } else {
-      setStage("details");
-    }
+    if (data.duplicate) setExisting(data.status ?? "pending");
+    setStage(stageAfterApply(data));
   };
 
   const sendDetails = async (e: FormEvent) => {
@@ -116,11 +98,7 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
       setStage("sent");
       return;
     }
-    const data = await apply({
-      device: device.trim() || undefined,
-      notes: notes.trim() || undefined,
-      genres: genres.length ? genres : undefined,
-    });
+    const data = await apply({ device, notes, genres });
     if (data) setStage("sent");
   };
 

@@ -1,4 +1,5 @@
 ﻿import { useState, type ReactNode } from "react";
+import { DELETE_ACCOUNT_ARGS } from "../lib/accountDeletion";
 import { AnimatePresence, motion } from "motion/react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -216,7 +217,7 @@ export function SettingsScreen({
     if (!last) return;
     setDeleting(true);
     try {
-      await deleteAccount({ confirm: "DELETE" });
+      await deleteAccount(DELETE_ACCOUNT_ARGS);
       await authClient.signOut();
       localStorage.removeItem("hooked.library.v2");
       window.location.reload();

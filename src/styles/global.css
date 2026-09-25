@@ -993,6 +993,10 @@ button {
   transition: transform 0.15s ease;
 }
 .ob-primary:active { transform: scale(0.97); }
+/* a disabled primary looked exactly like a live one (the new-playlist
+   button with no name yet); the phone app already dims it */
+.ob-primary:disabled { opacity: 0.4; cursor: default; }
+.ob-primary:disabled:active { transform: none; }
 .ob-skip {
   /* was a 16px-tall target — the text height and nothing else. Anything you
      are meant to be able to tap needs a finger's worth of box around it. */
