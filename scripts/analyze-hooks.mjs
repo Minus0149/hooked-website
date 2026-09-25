@@ -13,7 +13,8 @@
  *   npx convex env set HOOK_ANALYZE_KEY "<random-32-bytes>"
  *
  * Usage:
- *   node scripts/analyze-hooks.mjs [--limit 50] [--base https://cnx.hookedcue.com]
+ *   node scripts/analyze-hooks.mjs [--limit 50] [--base https://<deployment>.convex.site]
+ *   node scripts/analyze-hooks.mjs --from tracks.jsonl --limit 5000   # re-measure after the finder changes
  *   node scripts/analyze-hooks.mjs --energy-only   # re-measure energy after a recalibration
  *
  * --energy-only asks for tracks whose energy came from an older calibration
@@ -28,7 +29,7 @@ const flag = (name, fallback) => {
   return i >= 0 ? args[i + 1] : fallback;
 };
 
-const BASE = (flag("base", "https://cnx.hookedcue.com")).replace(/\/+$/, "");
+const BASE = (flag("base", "https://shocking-goldfinch-745.convex.site")).replace(/\/+$/, "");
 const LIMIT = Number(flag("limit", 50));
 const KEY = process.env.HOOK_ANALYZE_KEY;
 const ENERGY_ONLY = args.includes("--energy-only");
@@ -41,21 +42,38 @@ if (!KEY) {
 
 const headers = { "x-analyzer-key": KEY };
 
-const res = await fetch(
-  `${BASE}/analyzer/pending?limit=${encodeURIComponent(LIMIT)}` +
-    (ENERGY_ONLY ? `&energyCal=${ENERGY_CALIBRATION}` : ""),
-  { headers },
-);
-if (!res.ok) {
-  console.error(`pending request failed: ${res.status} ${await res.text()}`);
-  process.exit(1);
+// --from <tracks.jsonl> re-measures tracks that were already analysed — after
+// the hook finder itself changes. Export the list with
+//   npx convex data tracks --prod --limit 20000 --format jsonLines > tracks.jsonl
+// Artist-marked hooks survive: the ingest only replaces analyser/system ones.
+const FROM = flag("from", null);
+let tracks;
+if (FROM) {
+  const { readFileSync } = await import("node:fs");
+  tracks = readFileSync(FROM, "utf8")
+    .split(/\r?\n/)
+    .filter((l) => l.trim().startsWith("{"))
+    .map((l) => JSON.parse(l))
+    .filter((t) => t.trackId && t.previewUrl)
+    .slice(0, LIMIT);
+  console.log(`${tracks.length} track(s) to re-measure from ${FROM}`);
+} else {
+  const res = await fetch(
+    `${BASE}/analyzer/pending?limit=${encodeURIComponent(LIMIT)}` +
+      (ENERGY_ONLY ? `&energyCal=${ENERGY_CALIBRATION}` : ""),
+    { headers },
+  );
+  if (!res.ok) {
+    console.error(`pending request failed: ${res.status} ${await res.text()}`);
+    process.exit(1);
+  }
+  ({ tracks } = await res.json());
+  console.log(
+    ENERGY_ONLY
+      ? `${tracks.length} track(s) with energy older than calibration ${ENERGY_CALIBRATION}`
+      : `${tracks.length} track(s) waiting for analysis`,
+  );
 }
-const { tracks } = await res.json();
-console.log(
-  ENERGY_ONLY
-    ? `${tracks.length} track(s) with energy older than calibration ${ENERGY_CALIBRATION}`
-    : `${tracks.length} track(s) waiting for analysis`,
-);
 
 let done = 0;
 let scored = 0;

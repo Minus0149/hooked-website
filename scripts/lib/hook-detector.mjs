@@ -171,47 +171,90 @@ export async function measureAudio(encodedAudio, fallbackMs) {
 
 /**
  * Repetition score for the window starting at `startS` seconds, length L
- * seconds: how strongly its band-energy shape echoes at phrase-length lags.
- * A window inside a chorus scores high — the chorus comes back. An intro or
- * bridge never repeats within earshot and scores near zero.
+ * seconds: how strongly its band-energy shape echoes one phrase away. A window
+ * inside a chorus scores high — the chorus comes back. An intro or bridge never
+ * repeats within earshot and scores low.
+ *
+ * Two things the first version got wrong, both of which piled hooks up at the
+ * edges of the preview:
+ *  - it only looked FORWARD for the echo, so a window near the end had no lag
+ *    left to test and a window at 0 was refused outright. A chorus that closes
+ *    the preview repeats what came before it; both directions count now.
+ *  - it compared raw band energies. Every frame of mastered music is positive
+ *    and about equally loud, so two unrelated passages scored ~0.75 against a
+ *    true repeat's 1.0. Centring each band on the window's own mean makes it a
+ *    correlation: unrelated passages sit near 0.
  */
 function repetitionScore(profile, startS, L) {
   const { bands } = profile;
   const hopS = HOP / SR;
-  const from = Math.floor(startS / hopS);
-  const len = Math.max(4, Math.floor(L / hopS)); // ~frames in the window
-  if (from <= 0 || from + len >= bands.low.length) return 0;
+  const frames = bands.low.length;
+  const from = Math.max(0, Math.floor(startS / hopS));
+  const len = Math.max(4, Math.floor(L / hopS));
+  if (from + len > frames) return 0;
+
+  const mean = (arr, a) => {
+    let s = 0, n = 0;
+    for (let i = 0; i < len; i += 4) { s += arr[a + i]; n++; }
+    return n ? s / n : 0;
+  };
+  const mA = [mean(bands.low, from), mean(bands.mid, from), mean(bands.high, from)];
 
   let best = 0;
   for (let lagS = 4; lagS <= 12; lagS += 1) {
-    const lag = Math.round(lagS / hopS);
-    if (from + lag + len >= bands.low.length) continue;
-    let dot = 0, na = 0, nb = 0, n = 0;
-    for (let i = 0; i < len; i += 4) { // sampled — precision is irrelevant here
-      // A = frame at from+i, B = the same frame one phrase later
-      const a0 = bands.low[from + i], a1 = bands.mid[from + i], a2 = bands.high[from + i];
-      const b0 = bands.low[from + lag + i], b1 = bands.mid[from + lag + i], b2 = bands.high[from + lag + i];
-      dot += a0 * b0 + a1 * b1 + a2 * b2;
-      na += a0 * a0 + a1 * a1 + a2 * a2;
-      nb += b0 * b0 + b1 * b1 + b2 * b2;
-      n++;
+    for (const dir of [1, -1]) {
+      const at = from + dir * Math.round(lagS / hopS);
+      if (at < 0 || at + len > frames) continue;
+      const mB = [mean(bands.low, at), mean(bands.mid, at), mean(bands.high, at)];
+      let dot = 0, na = 0, nb = 0;
+      for (let i = 0; i < len; i += 4) { // sampled — precision is irrelevant here
+        const a = [bands.low[from + i] - mA[0], bands.mid[from + i] - mA[1], bands.high[from + i] - mA[2]];
+        const b = [bands.low[at + i] - mB[0], bands.mid[at + i] - mB[1], bands.high[at + i] - mB[2]];
+        dot += a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        na += a[0] * a[0] + a[1] * a[1] + a[2] * a[2];
+        nb += b[0] * b[0] + b[1] * b[1] + b[2] * b[2];
+      }
+      if (na === 0 || nb === 0) continue;
+      best = Math.max(best, dot / Math.sqrt(na * nb));
     }
-    if (n === 0 || na === 0 || nb === 0) continue;
-    best = Math.max(best, dot / Math.sqrt(na * nb));
   }
-  return best;
+  return Math.max(0, best);
+}
+
+/** Scale a list of numbers onto 0..1 (all-equal lists become all 0.5). */
+function spread(values) {
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  return values.map((v) => (hi - lo > 1e-9 ? (v - lo) / (hi - lo) : 0.5));
 }
 
 /**
- * Pick `count` distinct windows out of measured audio, catchiest first.
+ * Pick up to `count` windows out of measured audio, catchiest first.
  *
- * Candidates are scored everywhere at one-second steps (not just fixed thirds)
- * and picked greedily with an exclusion neighbourhood, so the winner doesn't
- * simply reappear as the runner-up. Starts snap to transients afterwards.
+ * Why this was rewritten: a preview is ~30 s and the windows are ~10 s, and the
+ * first version insisted on `count` windows that never overlapped. Three
+ * ten-second windows that can't overlap only fit in a thirty-second clip one
+ * way — 0, 10, 20 — so "measured" hooks were even thirds with a second of
+ * jitter, and one of the three was always the intro. Now:
+ *
+ *  - windows may overlap by up to half, so two good starting points inside one
+ *    long chorus are both allowed;
+ *  - a window is only kept if it scores within reach of the best one — a quiet
+ *    intro is no longer promoted to hook #3 just to fill the quota;
+ *  - three measured signals, each spread onto 0..1 across this track's own
+ *    candidates so that each one actually discriminates:
+ *      loudness   mean level of the window (the chorus of a produced track is
+ *                 its loudest part)
+ *      repetition does this passage come round again a phrase away
+ *      entry      a rise in level into the window — where a chorus lands
+ *  - and a window whose tail is fading out is marked down, because a hook
+ *    that dies in the preview's fade is a bad first impression.
  */
 export function planHooks(profile, count = 3) {
   const MIN_HOOK_MS = 6000;
   const MAX_HOOK_MS = 15000;
+  const STEP_MS = 500;
+  const KEEP_RATIO = 0.6;
 
   const raw = profile?.durationMs || profile?.fallbackMs || 30000;
   const trimmed = usableEnd(profile?.rms);
@@ -224,49 +267,59 @@ export function planHooks(profile, count = 3) {
   if (windowMs < MIN_HOOK_MS) return [{ startMs: 0, durationMs: total, score: 0 }];
 
   const rms = profile?.rms ?? [];
-  const maxRms = rms.length ? Math.max(...rms) : 0;
+  const sorted = [...rms].sort((a, b) => a - b);
+  const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
+  const meanOf = (a, b) => {
+    const s = rms.slice(Math.max(0, Math.floor(a)), Math.max(0, Math.ceil(b)));
+    return s.length ? s.reduce((x, y) => x + y, 0) / s.length : 0;
+  };
 
-  const candidates = [];
-  for (let s = 0; s + windowMs <= total; s += 1000) {
-    const from = Math.floor(s / 1000);
-    const to = Math.min(rms.length, Math.ceil((s + windowMs) / 1000));
-    const slice = rms.slice(from, to);
-    const loud = slice.length
-      ? slice.reduce((a, b) => a + b, 0) / slice.length / (maxRms || 1)
-      : 0;
-    const rep = profile ? repetitionScore(profile, s / 1000, windowMs / 1000) : 0;
-    candidates.push({ startMs: s, durationMs: windowMs, score: 0.55 * loud + 0.45 * rep });
-  }
+  const starts = [];
+  for (let s = 0; s + windowMs <= total; s += STEP_MS) starts.push(s);
+  const loud = starts.map((s) => meanOf(s / 1000, (s + windowMs) / 1000));
+  const rep = starts.map((s) => (profile?.bands ? repetitionScore(profile, s / 1000, windowMs / 1000) : 0));
+  // entry: how much louder the first 3 s are than the 3 s before. Nothing
+  // precedes 0, so the opening window is scored neutral rather than punished.
+  const entryRaw = starts.map((s) =>
+    s >= 2000 ? meanOf(s / 1000, s / 1000 + 3) - meanOf(s / 1000 - 3, s / 1000) : null,
+  );
+  const known = entryRaw.filter((v) => v !== null);
+  const entryScaled = known.length ? spread(known) : [];
+  let k = 0;
+  const entry = entryRaw.map((v) => (v === null ? 0.5 : entryScaled[k++]));
+  const loudN = spread(loud);
+  const repN = spread(rep);
+
+  const candidates = starts.map((s, i) => {
+    const endS = (s + windowMs) / 1000;
+    const tail = meanOf(endS - 2, endS);
+    const fading = median > 0 && tail < median * 0.5 ? 0.35 : 0;
+    return {
+      startMs: s,
+      durationMs: windowMs,
+      score: 0.4 * loudN[i] + 0.35 * repN[i] + 0.25 * entry[i] - fading,
+    };
+  });
   candidates.sort((a, b) => b.score - a.score);
 
-  // greedy pick with exclusion so near-identical neighbours don't win twice
+  // greedy pick: at least half a window apart, and only while still good
+  const minGap = Math.floor(windowMs / 2);
+  const bestScore = candidates[0]?.score ?? 0;
   const picked = [];
   for (const c of candidates) {
-    if (picked.every((p) => Math.abs(p.startMs - c.startMs) >= windowMs)) {
+    if (picked.length > 0 && c.score < bestScore * KEEP_RATIO) break;
+    if (picked.every((p) => Math.abs(p.startMs - c.startMs) >= minGap)) {
       picked.push(c);
       if (picked.length >= count) break;
     }
   }
-  while (picked.length < count && picked.length > 0) {
-    const last = picked[picked.length - 1];
-    const next = Math.min(total - windowMs, last.startMs + windowMs);
-    if (next <= last.startMs) break;
-    picked.push({ startMs: next, durationMs: windowMs, score: 0 });
-  }
-  if (picked.length === 0) {
-    picked.push({ startMs: 0, durationMs: windowMs, score: 0 });
-  }
+  if (picked.length === 0) picked.push({ startMs: 0, durationMs: windowMs, score: 0 });
 
   // put each start on a transient rather than an arbitrary tick of the clock
   if (profile?.onsets) {
     for (const w of picked) {
       const snapped = snapToOnset(profile.onsets, w.startMs);
       if (snapped >= 0 && snapped + w.durationMs <= raw) w.startMs = snapped;
-    }
-    picked.sort((a, b) => a.startMs - b.startMs);
-    for (let i = 1; i < picked.length; i++) {
-      const prevEnd = picked[i - 1].startMs + picked[i - 1].durationMs;
-      if (picked[i].startMs < prevEnd) picked[i].startMs = prevEnd;
     }
   }
 
