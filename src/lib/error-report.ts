@@ -39,7 +39,7 @@ export function buildWebReport(
 
 export function reportToText(r: ErrorReport): string {
   return [
-    `hooked. error report`,
+    `hookedcue error report`,
     `at:      ${r.at}`,
     `platform:${r.platform} ${r.appVersion ?? ""}`,
     `url:     ${r.url ?? "-"}`,
@@ -54,7 +54,7 @@ export function reportToText(r: ErrorReport): string {
 
 export function mailtoHref(r: ErrorReport): string {
   return `mailto:${REPORT_EMAIL}?subject=${encodeURIComponent(
-    "hooked. error report",
+    "hookedcue error report",
   )}&body=${encodeURIComponent(reportToText({ ...r, description: r.description ?? "(add notes here)" }))}`;
 }
 

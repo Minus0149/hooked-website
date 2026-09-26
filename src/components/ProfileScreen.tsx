@@ -34,7 +34,7 @@ export function ProfileScreen({
           <IconBack />
         </button>
         <span className="wordmark">
-          hooked<span className="dot">.</span>
+          hookedcue<span className="dot">.</span>
         </span>
         <span style={{ width: 42 }} />
       </header>

@@ -59,7 +59,7 @@ export function TopBar({
         </button>
       ) : (
         <span className="wordmark">
-          hooked<span className="dot">.</span>
+          hookedcue<span className="dot">.</span>
         </span>
       )}
 

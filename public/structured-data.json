@@ -1,7 +1,7 @@
 {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  "name": "hooked.",
+  "name": "hookedcue",
   "applicationCategory": "MusicApplication",
   "operatingSystem": "Web, Android",
   "url": "https://app.hookedcue.com/",

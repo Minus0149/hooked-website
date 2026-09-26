@@ -119,7 +119,7 @@ export function AdminDashboard() {
       <aside className="admin-side">
         <div className="admin-side-brand">
           <span className="wordmark" style={{ fontSize: 18 }}>
-            hooked<span className="dot">.</span>
+            hookedcue<span className="dot">.</span>
           </span>
           <span className="admin-chip">{access?.isAdmin ? "admin" : "staff"}</span>
         </div>

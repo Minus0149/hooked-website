@@ -162,7 +162,7 @@ export function DiscFX({
         <div className="sleeve2-front" style={{ borderColor: `color-mix(in srgb, ${track.accent} 55%, #2a2430)` }}>
           <img src={track.artwork} alt="" draggable={false} />
           <span className="sleeve2-tint" style={{ background: `linear-gradient(160deg, color-mix(in srgb, ${track.accent} 38%, transparent), rgba(8, 8, 12, 0.9))` }} />
-          <span className="sleeve2-wordmark">hooked.</span>
+          <span className="sleeve2-wordmark">hookedcue.</span>
         </div>
         <motion.span
           className="sleeve-sticker"

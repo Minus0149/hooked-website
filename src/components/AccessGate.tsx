@@ -214,7 +214,7 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
     <form className="access-form" onSubmit={submit} noValidate>
       <p className="gate-kicker">that was your {freeSwipes} free tastes</p>
       <p className="gate-copy">
-        hooked. is invite-only while it's in testing. leave your email and we'll let you in.
+        hookedcue is invite-only while it's in testing. leave your email and we'll let you in.
       </p>
 
       <label className="access-field">

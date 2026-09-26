@@ -103,7 +103,7 @@ export function LibraryScreen({
           <IconBack />
         </button>
         <span className="wordmark">
-          hooked<span className="dot">.</span>
+          hookedcue<span className="dot">.</span>
         </span>
         {playlistId ? (
           <button

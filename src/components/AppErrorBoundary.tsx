@@ -48,7 +48,7 @@ export class AppErrorBoundary extends Component<Props, State> {
     return (
       <main className="fatal-screen">
         <section className="fatal-card" aria-live="assertive">
-          <p className="fatal-kicker">Hooked is not ready yet</p>
+          <p className="fatal-kicker">hookedcue is not ready yet</p>
           <h1>{isConvexDeployError ? "Backend deploy required" : "Something broke"}</h1>
           <p className="fatal-copy">
             {isConvexDeployError

@@ -90,7 +90,7 @@ function PageShell({
           <IconBack />
         </button>
         <span className="wordmark">
-          hooked<span className="dot">.</span>
+          hookedcue<span className="dot">.</span>
         </span>
         <span style={{ width: 42 }} />
       </header>
@@ -249,7 +249,7 @@ export function SettingsScreen({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "hooked-library.json";
+    a.download = "hookedcue-library.json";
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -265,7 +265,7 @@ export function SettingsScreen({
   // ---------------------------------------------------------- sub-pages
 
   const appearancePage = (
-    <PageShell title="Appearance" sub="How hooked looks on this screen." onBack={() => onOpenPage("hub")}>
+    <PageShell title="Appearance" sub="How hookedcue looks on this screen." onBack={() => onOpenPage("hub")}>
       <div className="prefs-block">
         <span className="prefs-label">Accent</span>
         <Segmented<AccentMode>
@@ -509,7 +509,7 @@ export function SettingsScreen({
 
   const supportPage = (
     <PageShell
-      title="Support hooked"
+      title="Support hookedcue"
       sub="The cards that keep the deck independent."
       onBack={() => onOpenPage("hub")}
     >
@@ -528,7 +528,7 @@ export function SettingsScreen({
             onClick={() => onSetPrefs({ adsOptOut: false })}
             aria-pressed={!state.prefs.adsOptOut}
           >
-            On — keep hooked independent
+            On — keep hookedcue independent
           </button>
           <button
             className={`prefs-chip ${state.prefs.adsOptOut ? "on" : ""}`}
@@ -622,7 +622,7 @@ export function SettingsScreen({
               )}
               <span className="prefs-hint">
                 pick a unit, set the number — the daily and weekly ceilings set
-                by hooked always hold, and music never stops for a card
+                by hookedcue always hold, and music never stops for a card
               </span>
             </div>
           </>
@@ -634,7 +634,7 @@ export function SettingsScreen({
   const dataPage = (
     <PageShell
       title="Data & privacy"
-      sub="What hooked keeps about you, and what you can do about it."
+      sub="What hookedcue keeps about you, and what you can do about it."
       onBack={() => onOpenPage("hub")}
     >
       <button className="settings-row" onClick={exportData}>
@@ -729,7 +729,7 @@ export function SettingsScreen({
           <IconBack />
         </button>
         <span className="wordmark">
-          hooked<span className="dot">.</span>
+          hookedcue<span className="dot">.</span>
         </span>
         <span style={{ width: 42 }} />
       </header>
@@ -792,12 +792,12 @@ export function SettingsScreen({
           />
         </div>
 
-        <Group>hooked</Group>
+        <Group>hookedcue</Group>
         <div className="settings-card">
           <NavRow
             icon={<IconHeart size={17} />}
             iconColor={state.prefs.adsOptOut ? "var(--muted)" : "var(--accent)"}
-            title="Support hooked"
+            title="Support hookedcue"
             sub={state.prefs.adsOptOut ? "house ads off" : "house ads on"}
             onOpen={() => onOpenPage("support")}
           />
@@ -828,7 +828,7 @@ export function SettingsScreen({
             </a>
           )}
         </div>
-        <p className="settings-foot">hooked. web · {BUILD_TAG}</p>
+        <p className="settings-foot">hookedcue web · {BUILD_TAG}</p>
       </motion.div>
       </>
     );
@@ -858,7 +858,7 @@ export function SettingsScreen({
             >
               <h3 className="sheet-title">Before you go…</h3>
               <p className="ad-ask-copy">
-                hooked has no investors and no label money. Those few quiet cards
+                hookedcue has no investors and no label money. Those few quiet cards
                 between songs are what pay for the servers, the licences and the
                 hours this takes. Turning them off won't cost you anything — but
                 if a few hundred people do, this deck goes quiet with them.

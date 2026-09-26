@@ -990,7 +990,7 @@ function Shell() {
                   <IconUser />
                 </button>
                 <span className="wordmark">
-                  hooked<span className="dot">.</span>
+                  hookedcue<span className="dot">.</span>
                 </span>
                 <button
                   className="topbar-btn"
@@ -1264,7 +1264,7 @@ export default function App() {
     return (
       <div className="notfound">
         <span className="wordmark">
-          hooked<span className="dot">.</span>
+          hookedcue<span className="dot">.</span>
         </span>
         <h1>404</h1>
         <p>That page doesn&apos;t exist. The songs are all still where you left them.</p>
