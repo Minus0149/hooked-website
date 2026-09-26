@@ -3,6 +3,7 @@ import { applyOriginAllowed } from "./applyOrigin";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent, createAuth } from "./auth";
+import { razorpayWebhook } from "./promotions";
 
 const http = httpRouter();
 
@@ -356,5 +357,9 @@ http.route({
     return Response.json({ ok: true, written, heard }, { status: 200 });
   }),
 });
+
+// Razorpay payment and refund events for paid promotion (convex/promotions.ts);
+// the handler checks the signature and deduplicates retries itself
+http.route({ path: "/razorpay/webhook", method: "POST", handler: razorpayWebhook });
 
 export default http;

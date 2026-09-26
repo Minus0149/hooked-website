@@ -30,6 +30,8 @@ import type * as imports from "../imports.js";
 import type * as library from "../library.js";
 import type * as matching from "../matching.js";
 import type * as moods from "../moods.js";
+import type * as promotionRules from "../promotionRules.js";
+import type * as promotions from "../promotions.js";
 import type * as recommend from "../recommend.js";
 import type * as retention from "../retention.js";
 import type * as runtime from "../runtime.js";
@@ -65,6 +67,8 @@ declare const fullApi: ApiFromModules<{
   library: typeof library;
   matching: typeof matching;
   moods: typeof moods;
+  promotionRules: typeof promotionRules;
+  promotions: typeof promotions;
   recommend: typeof recommend;
   retention: typeof retention;
   runtime: typeof runtime;

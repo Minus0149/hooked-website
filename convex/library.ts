@@ -633,11 +633,16 @@ export const ACCOUNT_DELETION = {
     "errorReports",
     "accessRequests",
     "creators",
+    "promotionCampaigns",
+    "promotionRates",
+    "promotionViews",
     // and in the auth component: the user (email, name, password), sessions and linked accounts
   ],
   kept: {
     // anonymous per-hook play counters with no person attached
     hookStats: "anonymous counts",
+    // payment records: Indian tax law requires keeping them for 8 years
+    promotionOrders: "payment records, 8 years",
   } as Record<string, string>,
 } as const;
 
@@ -667,6 +672,27 @@ export const deleteMyAccount = mutation({
     for (const doc of [...swipes, ...songs, ...never, ...buried, ...playlists, ...votes, ...imports, ...adEvents, ...reports]) {
       await ctx.db.delete(doc._id);
     }
+
+    // paid promotion: a running campaign has to be cancelled first (that is
+    // what refunds its unused listens); ended ones, a personal rate and this
+    // person's views of other artists' promotions are deleted. The payment
+    // records themselves stay (promotionOrders, see ACCOUNT_DELETION.kept).
+    const campaigns = await ctx.db
+      .query("promotionCampaigns")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    if (campaigns.some((c) => c.status === "active")) {
+      throw new Error("You have a promotion running — cancel it first (unused listens are refunded).");
+    }
+    const rate = await ctx.db
+      .query("promotionRates")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const views = await ctx.db
+      .query("promotionViews")
+      .withIndex("by_viewer_day", (q) => q.eq("viewer", `u:${userId}`))
+      .collect();
+    for (const d of [...campaigns, ...views, ...(rate ? [rate] : [])]) await ctx.db.delete(d._id);
 
     // a creator's uploads leave with them: tracks, their hooks and
     // fingerprints, and the audio files themselves

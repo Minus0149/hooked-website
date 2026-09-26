@@ -548,4 +548,104 @@ export default defineSchema({
     neighbors: v.array(v.object({ trackId: v.string(), score: v.number() })),
     computedAt: v.string(),
   }).index("by_trackId", ["trackId"]),
+
+  // ------------------------------------------------ paid promotion (convex/promotions.ts)
+
+  /**
+   * One checkout. The amount is worked out on the server (promotionRules.quote)
+   * and stored before Razorpay ever sees it. Kept after account deletion: tax
+   * law requires keeping payment records for 8 years (see library.ACCOUNT_DELETION).
+   */
+  promotionOrders: defineTable({
+    userId: v.string(),
+    trackId: v.string(),
+    packageId: v.string(),
+    listeners: v.number(),
+    basePaise: v.number(),
+    launchOffPaise: v.number(),
+    codeOffPaise: v.number(),
+    totalPaise: v.number(),
+    currency: v.literal("INR"),
+    code: v.optional(v.string()),
+    razorpayOrderId: v.optional(v.string()),
+    razorpayPaymentId: v.optional(v.string()),
+    status: v.union(v.literal("created"), v.literal("paid"), v.literal("failed")),
+    createdAt: v.number(),
+    paidAt: v.optional(v.number()),
+  })
+    .index("by_rzp_order", ["razorpayOrderId"])
+    .index("by_user", ["userId", "createdAt"]),
+
+  /** What a paid order buys: a number of distinct listeners hearing the hook. */
+  promotionCampaigns: defineTable({
+    userId: v.string(),
+    trackId: v.string(),
+    orderId: v.id("promotionOrders"),
+    listeners: v.number(),
+    delivered: v.number(),
+    stats: v.object({
+      listens: v.number(),
+      saves: v.number(),
+      skips: v.number(),
+      more: v.number(),
+      never: v.number(),
+    }),
+    status: v.union(v.literal("active"), v.literal("completed"), v.literal("expired"), v.literal("cancelled")),
+    startedAt: v.number(),
+    endsAt: v.number(),
+    endedAt: v.optional(v.number()),
+    refundPaise: v.optional(v.number()),
+    refundId: v.optional(v.string()),
+    refundStatus: v.optional(v.union(v.literal("pending"), v.literal("done"), v.literal("failed"))),
+  })
+    .index("by_status", ["status", "startedAt"])
+    .index("by_user", ["userId"])
+    .index("by_track", ["trackId"]),
+
+  /**
+   * One listener meeting one campaign. The unique (campaign, viewer) row is
+   * what makes a listen count once; viewer is "u:<userId>" or "a:<anonKey>".
+   */
+  promotionViews: defineTable({
+    campaignId: v.id("promotionCampaigns"),
+    viewer: v.string(),
+    day: v.string(),
+    listened: v.boolean(),
+    outcome: v.optional(v.string()),
+    at: v.number(),
+  })
+    .index("by_campaign_viewer", ["campaignId", "viewer"])
+    .index("by_viewer_day", ["viewer", "day"]),
+
+  /** An admin-set price for one artist: a rate per 1,000 listeners and/or their own packages. */
+  promotionRates: defineTable({
+    userId: v.string(),
+    per1000Paise: v.optional(v.number()),
+    customPackages: v.optional(
+      v.array(v.object({ id: v.string(), name: v.string(), listeners: v.number(), pricePaise: v.number() })),
+    ),
+    note: v.optional(v.string()),
+    updatedAt: v.number(),
+    updatedBy: v.string(),
+  }).index("by_userId", ["userId"]),
+
+  /** Launch and discount codes: expiry, use limit, optionally one artist only. */
+  promotionCodes: defineTable({
+    code: v.string(),
+    percentOff: v.optional(v.number()),
+    amountOffPaise: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
+    maxUses: v.optional(v.number()),
+    uses: v.number(),
+    active: v.boolean(),
+    creatorUserId: v.optional(v.string()),
+    createdAt: v.number(),
+    createdBy: v.string(),
+  }).index("by_code", ["code"]),
+
+  /** Razorpay retries webhooks; one row per x-razorpay-event-id handled. */
+  razorpayEvents: defineTable({
+    eventId: v.string(),
+    at: v.number(),
+  }).index("by_eventId", ["eventId"]),
 });
