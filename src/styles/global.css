@@ -3888,7 +3888,9 @@ a.sheet-option { color: var(--text); text-decoration: none; }
 .promote-sum div { display: flex; justify-content: space-between; font-size: 13.5px; color: var(--muted); padding: 2px 0; }
 .promote-sum dd { margin: 0; }
 .promote-sum .total { color: var(--text); font-weight: 700; font-size: 15px; padding-top: 6px; }
-.promote-pay { align-self: stretch; padding: 13px; font-weight: 700; }
+.promote-pay { align-self: stretch; padding: 13px; font-weight: 700; font-size: 15px; }
+.promote-pay:not(:disabled) { background: var(--accent); border-color: var(--accent); color: #0b0b10; }
+.promote-pay:not(:disabled):hover { filter: brightness(1.08); color: #0b0b10; }
 .promote-fine { margin: 0; font-size: 12px; color: var(--muted); }
 .promote-campaigns { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
 .promote-campaigns h4 { margin: 0; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }

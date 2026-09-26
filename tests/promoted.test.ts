@@ -3,6 +3,7 @@ import {
   DEFAULT_EVERY_N_CARDS,
   PROMOTED_LABEL,
   insertPromoted,
+  promotedFollowUp,
   promotedDue,
   promotedOutcome,
 } from "../src/lib/promoted";
@@ -38,5 +39,12 @@ describe("promoted songs in the deck", () => {
     expect(promotedOutcome("up")).toBe("skip");
     expect(promotedOutcome("right")).toBe("more");
     expect(promotedOutcome("left")).toBe("never");
+  });
+
+  it("come back if a queue rebuild drops them before they play", () => {
+    expect(promotedFollowUp(["a", "b"], "p")).toBe("reinject");
+    expect(promotedFollowUp(["a", "p", "b"], "p")).toBe("wait");
+    expect(promotedFollowUp(["p", "b"], "p")).toBe("clear");
+    expect(promotedFollowUp(["a"], null)).toBe("wait");
   });
 });

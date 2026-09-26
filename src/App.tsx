@@ -7,7 +7,7 @@ import { coerceTaste } from "./data/taste";
 import { coercePrefs } from "./data/prefs";
 import type { UserPrefs } from "./data/prefs";
 import { shouldAskForAd } from "./lib/ads-scheduler";
-import { PROMOTED_LISTEN_MS, promotedDue, promotedOutcome } from "./lib/promoted";
+import { PROMOTED_LISTEN_MS, promotedDue, promotedFollowUp, promotedOutcome } from "./lib/promoted";
 import { enqueue, flush } from "./lib/outbox";
 import { SponsoredCard, type AdCardData } from "./components/SponsoredCard";
 import { authClient } from "./lib/auth-client";
@@ -722,6 +722,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
   const promoSwipes = useRef(0);
   const promoEvery = useRef(10);
   const [promoDue, setPromoDue] = useState(false);
+  const pendingPromo = useRef<Track | null>(null);
   const promoPick = useQuery(
     api.promotions.nextPromoted,
     promoDue ? { anonKey: anonKeyRef.current ?? undefined } : "skip",
@@ -732,7 +733,9 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     promoSwipes.current = 0;
     if (!promoPick) return;
     promoEvery.current = promoPick.everyNCards;
-    injectNext({ ...toLocal(promoPick.track as ServerTrackWithHooks), promotedCampaignId: promoPick.campaignId });
+    const promoted = { ...toLocal(promoPick.track as ServerTrackWithHooks), promotedCampaignId: promoPick.campaignId };
+    pendingPromo.current = promoted;
+    injectNext(promoted);
     void recordPromoted({
       campaignId: promoPick.campaignId,
       anonKey: anonKeyRef.current ?? undefined,
@@ -745,6 +748,13 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
       setPromoDue(true);
     }
   }, [state.prefs.adsOptOut]);
+
+  // a rebuild behind the card on screen must not lose a paid song (lib/promoted.ts)
+  useEffect(() => {
+    const step = promotedFollowUp(state.queue.map((t) => t.id), pendingPromo.current?.id ?? null);
+    if (step === "clear") pendingPromo.current = null;
+    else if (step === "reinject" && pendingPromo.current) injectNext(pendingPromo.current);
+  }, [state.queue, injectNext]);
 
   const onDeck = state.queue[0] ?? null;
   const next = state.queue[1] ?? null;

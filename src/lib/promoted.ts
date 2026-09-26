@@ -47,3 +47,16 @@ export type SwipeKind = "up" | "down" | "right" | "left";
 export function promotedOutcome(dir: SwipeKind): "skip" | "save" | "more" | "never" {
   return dir === "down" ? "save" : dir === "right" ? "more" : dir === "left" ? "never" : "skip";
 }
+
+/**
+ * A promoted song waits next in line until it plays. Some things rebuild the
+ * queue behind the card on screen — a new catalogue arriving, a mood picked,
+ * signing in — and would silently drop it: the listener was "shown" it on the
+ * server, so it would never come back and the artist loses that listener.
+ * "reinject" puts it back; "clear" once it has reached the screen.
+ */
+export function promotedFollowUp(queueIds: string[], pendingId: string | null): "clear" | "reinject" | "wait" {
+  if (!pendingId) return "wait";
+  if (queueIds[0] === pendingId) return "clear";
+  return queueIds.includes(pendingId) ? "wait" : "reinject";
+}

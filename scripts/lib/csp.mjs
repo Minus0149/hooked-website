@@ -23,8 +23,11 @@ export const FETCHED_HOSTS = [
   "https://lumberjack.razorpay.com",
 ];
 
-/** Razorpay Standard Checkout: its script, and the iframe it renders the payment page in. */
-export const CHECKOUT_SCRIPT = "https://checkout.razorpay.com";
+/**
+ * Razorpay Standard Checkout: its script (which loads a risk-check bundle from
+ * cdn.razorpay.com), and the iframe it renders the payment page in.
+ */
+export const CHECKOUT_SCRIPT = "https://checkout.razorpay.com https://cdn.razorpay.com";
 export const CHECKOUT_FRAMES = "https://checkout.razorpay.com https://api.razorpay.com";
 
 export function connectSources(env) {
