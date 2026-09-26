@@ -11,6 +11,8 @@ import { enqueue, flush } from "./lib/outbox";
 import { SponsoredCard, type AdCardData } from "./components/SponsoredCard";
 import { authClient } from "./lib/auth-client";
 import { StoreProvider, useStore } from "./state/store";
+import { useCatalog } from "./lib/useCatalog";
+import type { CatalogTrack } from "./lib/catalogCodec";
 import { usePlayer } from "./audio/usePlayer";
 import { SwipeDeck } from "./components/SwipeDeck";
 import { coerceMood, DAYPART_MOOD, daypartAt, moodById, moodPlaylistName, PLUS_DOWN_GAIN, type MoodId } from "./data/mood";
@@ -224,7 +226,6 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
   const { isAuthenticated: backendAuthed } = useConvexAuth();
   const profileStage = profileCheck(signedIn, backendAuthed);
   const library = useQuery(api.library.getLibrary);
-  const serverTracks = useQuery(api.tracks.list);
   const ensureProfile = useMutation(api.library.ensureProfile);
   const recordSwipe = useMutation(api.library.recordSwipe);
   const revertSwipe = useMutation(api.library.revertSwipe);
@@ -593,16 +594,17 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     return v;
   }, [model, sound, deckTrack, state.crowdMoods]);
 
-  useEffect(() => {
-    // An empty server catalogue is a real state (admin hid everything, or the
-    // table is fresh) — honour it instead of dealing tracks the server buried.
-    if (serverTracks !== undefined && serverTracks !== null) {
-      // Full tracks, not just ids. Passing ids only meant the deck kept
-      // dealing the bundled copies, so hooks, creator uploads and imported
-      // songs never reached a card.
-      applyCatalog(serverTracks.map(toLocal));
-    }
-  }, [serverTracks, applyCatalog]);
+  // The catalogue comes as a versioned file over HTTP, cached per version
+  // (lib/useCatalog.ts), not as a reactive query: as the first message on the
+  // websocket, its 2 MB held up everything queued behind it. An empty
+  // catalogue is still a real state (admin hid everything) and is honoured.
+  // Full tracks, not just ids — ids alone meant the deck kept dealing the
+  // bundled copies, so hooks, creator uploads and imports never reached a card.
+  const onCatalog = useCallback(
+    (tracks: CatalogTrack[]) => applyCatalog(tracks.map(toLocal)),
+    [applyCatalog],
+  );
+  useCatalog(onCatalog);
 
   // ----- playback -----
   // ----- house ads: server owns the caps, the deck owns the pacing -----

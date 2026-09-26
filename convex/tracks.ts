@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { cleanText, enforceRateLimit, requirePermission } from "./security";
+import { touchCatalog } from "./catalog";
 
 /**
  * Public feed catalog — hidden tracks are excluded for everyone.
@@ -98,6 +99,9 @@ export const setHidden = mutation({
       .query("tracks")
       .withIndex("by_trackId", (q) => q.eq("trackId", safeTrackId))
       .unique();
-    if (track) await ctx.db.patch(track._id, { hidden });
+    if (track) {
+      await ctx.db.patch(track._id, { hidden });
+      await touchCatalog(ctx);
+    }
   },
 });

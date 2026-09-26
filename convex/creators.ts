@@ -13,6 +13,7 @@ import {
   requirePermission,
   requireUser,
 } from "./security";
+import { touchCatalog } from "./catalog";
 
 /**
  * The creator side: artists publish their own music and mark the hooks in it.
@@ -222,6 +223,7 @@ export const attachAudio = mutation({
       audioDurationMs,
       rightsConfirmedAt: new Date().toISOString(),
     });
+    await touchCatalog(ctx);
   },
 });
 
@@ -414,6 +416,7 @@ export const setTrackHidden = mutation({
       }
     }
     await ctx.db.patch(track._id, { hidden });
+    await touchCatalog(ctx);
   },
 });
 
@@ -463,6 +466,7 @@ export const upsertHook = mutation({
         order: args.order ?? hook.order,
         active: args.active ?? hook.active,
       });
+      await touchCatalog(ctx);
       return { hookId: args.hookId };
     }
 
@@ -484,6 +488,7 @@ export const upsertHook = mutation({
       createdBy: user.id,
       source: curator ? "curated" : "artist",
     });
+    await touchCatalog(ctx);
     return { hookId };
   },
 });
@@ -496,6 +501,7 @@ export const deleteHook = mutation({
     if (!hook) return;
     await requireOwnedTrack(ctx, hook.trackId, curator, user.id);
     await ctx.db.delete(hookId);
+    await touchCatalog(ctx);
   },
 });
 

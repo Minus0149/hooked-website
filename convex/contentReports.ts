@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { authComponent } from "./auth";
 import { cleanText, enforceRateLimit, requirePermission } from "./security";
 import { renderEmail } from "./emailTemplate";
+import { touchCatalog } from "./catalog";
 
 /**
  * "Report this song" — Google Play's user-generated-content policy asks for an
@@ -168,7 +169,10 @@ export const resolve = mutation({
         .query("tracks")
         .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
         .unique();
-      if (t && !t.hidden) await ctx.db.patch(t._id, { hidden: true });
+      if (t && !t.hidden) {
+        await ctx.db.patch(t._id, { hidden: true });
+        await touchCatalog(ctx);
+      }
     }
     const open = await ctx.db
       .query("contentReports")

@@ -362,4 +362,44 @@ http.route({
 // the handler checks the signature and deduplicates retries itself
 http.route({ path: "/razorpay/webhook", method: "POST", handler: razorpayWebhook });
 
+/**
+ * One part of the catalogue file (convex/catalog.ts), by version. Public data —
+ * the same songs every guest is dealt — so any origin may read it.
+ *
+ * ?v=<current version> is immutable: a new catalogue is a new version and new
+ * URLs, so a browser may keep these responses forever. Any other ?v gets the
+ * current part uncached, and the document says which version it is. The HTTP
+ * layer gzips the response itself when the client accepts it.
+ */
+http.route({
+  path: "/catalog",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const part = Math.max(0, Math.floor(Number(url.searchParams.get("part") ?? 0)) || 0);
+    const cur = await ctx.runQuery(internal.catalog.current, { part });
+    const base = { "access-control-allow-origin": "*" };
+    if (!cur) {
+      return new Response("catalogue is being built", {
+        status: 503,
+        headers: { ...base, "retry-after": "30", "cache-control": "no-store" },
+      });
+    }
+    if (!cur.fileId) return new Response("no such part", { status: 404, headers: base });
+    const file = await ctx.storage.get(cur.fileId);
+    if (!file) return new Response("catalogue file missing", { status: 503, headers: base });
+    const isCurrent = url.searchParams.get("v") === String(cur.version);
+    return new Response(file, {
+      status: 200,
+      headers: {
+        ...base,
+        "content-type": "application/json; charset=utf-8",
+        "x-catalog-version": String(cur.version),
+        "x-catalog-parts": String(cur.parts),
+        "cache-control": isCurrent ? "public, max-age=31536000, immutable" : "no-store",
+      },
+    });
+  }),
+});
+
 export default http;

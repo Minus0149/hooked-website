@@ -16,6 +16,7 @@ import {
   type TrackInput,
   validateSaveTarget,
 } from "./security";
+import { touchCatalog } from "./catalog";
 
 export type ProfileVerdict =
   | "create"
@@ -713,6 +714,7 @@ export const deleteMyAccount = mutation({
       if (t.audioStorageId) await ctx.storage.delete(t.audioStorageId);
       await ctx.db.delete(t._id);
     }
+    if (owned.length > 0) await touchCatalog(ctx);
     if (creator) await ctx.db.delete(creator._id);
 
     const email = (profile.email ?? "").toLowerCase();

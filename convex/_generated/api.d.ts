@@ -14,6 +14,7 @@ import type * as ads from "../ads.js";
 import type * as analyzer from "../analyzer.js";
 import type * as applyOrigin from "../applyOrigin.js";
 import type * as auth from "../auth.js";
+import type * as catalog from "../catalog.js";
 import type * as charts from "../charts.js";
 import type * as collab from "../collab.js";
 import type * as contentReports from "../contentReports.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   analyzer: typeof analyzer;
   applyOrigin: typeof applyOrigin;
   auth: typeof auth;
+  catalog: typeof catalog;
   charts: typeof charts;
   collab: typeof collab;
   contentReports: typeof contentReports;

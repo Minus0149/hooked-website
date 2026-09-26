@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";
 import { enforceRateLimit, requirePermission } from "./security";
 import { runtimeFor } from "./runtime";
+import { touchCatalog } from "./catalog";
 
 /**
  * Hooks for songs nobody has marked by hand.
@@ -91,6 +92,7 @@ export const backfill = mutation({
       filled++;
     }
 
+    if (created > 0) await touchCatalog(ctx);
     return { tracksFilled: filled, hooksCreated: created, remaining: tracks.length - filled };
   },
 });
@@ -152,6 +154,7 @@ export const rerank = internalMutation({
         }
       }
     }
+    if (changed > 0) await touchCatalog(ctx);
     return { tracks: byTrack.size, changed };
   },
 });
@@ -220,6 +223,7 @@ export const computeHeat = internalMutation({
         changed++;
       }
     }
+    if (changed > 0) await touchCatalog(ctx);
     return { considered: playsByTrack.size + hot.length, changed };
   },
 });

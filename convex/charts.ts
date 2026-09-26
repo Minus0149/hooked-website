@@ -8,6 +8,7 @@ import {
 } from "./_generated/server";
 import { planWindows } from "./hooks";
 import { cleanText, cleanTrack, requirePermission } from "./security";
+import { touchCatalog } from "./catalog";
 
 /**
  * Keeping the deck's catalogue alive.
@@ -373,6 +374,7 @@ export const absorb = internalMutation({
       added++;
     }
 
+    if (added > 0) await touchCatalog(ctx);
     return { added, unusable };
   },
 });

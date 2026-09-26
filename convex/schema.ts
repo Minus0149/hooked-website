@@ -648,4 +648,22 @@ export default defineSchema({
     eventId: v.string(),
     at: v.number(),
   }).index("by_eventId", ["eventId"]),
+
+  /**
+   * The catalogue file's bookkeeping (convex/catalog.ts): one row. `version`
+   * is what clients watch; `dirtySeq` counts writes since, `builtSeq` what the
+   * published file covers; the file itself lives in storage.
+   */
+  catalogMeta: defineTable({
+    key: v.string(),
+    version: v.number(),
+    dirtySeq: v.number(),
+    builtSeq: v.number(),
+    scheduled: v.boolean(),
+    partIds: v.optional(v.array(v.id("_storage"))),
+    prevPartIds: v.optional(v.array(v.id("_storage"))),
+    bytes: v.optional(v.number()),
+    tracks: v.optional(v.number()),
+    builtAt: v.optional(v.number()),
+  }).index("by_key", ["key"]),
 });

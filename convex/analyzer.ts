@@ -1,6 +1,7 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { cleanText } from "./security";
+import { touchCatalog } from "./catalog";
 
 /**
  * Server side of the external hook analyzer.
@@ -84,6 +85,7 @@ export const ingestEnergy = internalMutation({
     // stamped even when the audio wouldn't decode, so a dead preview isn't
     // downloaded again on every run
     await ctx.db.patch(track._id, { energy: safe, energyCal: cal });
+    await touchCatalog(ctx);
     return { ok: true as const, written: 0, energy: safe ?? null };
   },
 });
@@ -137,6 +139,7 @@ export const ingestSound = internalMutation({
       vocal: goodVocal,
       soundVersion: Math.floor(version),
     });
+    await touchCatalog(ctx);
     return { ok: true as const, heard: goodSound !== undefined };
   },
 });
@@ -181,7 +184,10 @@ export const ingestHooks = internalMutation({
       typeof energy === "number" && Number.isFinite(energy)
         ? Math.min(Math.max(energy, 0), 1)
         : undefined;
-    if (safeEnergy !== undefined) await ctx.db.patch(track._id, { energy: safeEnergy, energyCal });
+    if (safeEnergy !== undefined) {
+      await ctx.db.patch(track._id, { energy: safeEnergy, energyCal });
+      await touchCatalog(ctx);
+    }
 
     const safeWindows = windows
       .slice(0, MAX_WINDOWS)
@@ -221,6 +227,7 @@ export const ingestHooks = internalMutation({
       });
     }
 
+    await touchCatalog(ctx);
     await ctx.db.patch(track._id, { analyzedAt: stamp });
     return {
       ok: true as const,
