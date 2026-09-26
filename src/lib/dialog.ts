@@ -26,7 +26,10 @@ export function useDialog({
     const focusable = node.querySelector<HTMLElement>(
       "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
     );
-    (focusable ?? node).focus();
+    // preventScroll: a sheet is focused while it is still parked below the frame
+    // (it slides in from y 110%), and a plain focus() scrolled the whole app
+    // frame up to meet it — the report form opened with its title off-screen
+    (focusable ?? node).focus({ preventScroll: true });
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -45,10 +48,10 @@ export function useDialog({
       const last = items[items.length - 1];
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!e.shiftKey && document.activeElement === last) {
         e.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     };
 

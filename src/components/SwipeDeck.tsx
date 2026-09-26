@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { ReportSong } from "./ReportSong";
 import { REPORT_COPY } from "../lib/contentReport";
 import {
@@ -194,6 +195,10 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
   const dialog = useDialog({ onClose });
   // "Report this song" turns this sheet into the report form (Play's UGC policy)
   const [reporting, setReporting] = useState(false);
+  // Drawn into the app's frame (.phone), like the mood wheel: inside the deck
+  // it was positioned against the Discover screen, which on a short window is
+  // scrolled up inside the frame — the report form's title sat off the top.
+  const host = typeof document === "undefined" ? null : (document.querySelector(".phone") as HTMLElement | null);
   const q = encodeURIComponent(`${track.title} ${track.artist}`);
   // the song itself on Apple Music when the preview is Apple's (lib/attribution)
   const services = [
@@ -201,7 +206,7 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
     { name: "Spotify", href: `https://open.spotify.com/search/${q}` },
     { name: "YouTube", href: `https://www.youtube.com/results?search_query=${q}` },
   ];
-  return (
+  return createPortal(
     <>
       <motion.div
         className="sheet-backdrop"
@@ -248,7 +253,8 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
         </>
         )}
       </motion.div>
-    </>
+    </>,
+    host ?? document.body,
   );
 }
 

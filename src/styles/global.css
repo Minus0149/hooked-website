@@ -3836,3 +3836,8 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 /* the full-song sheet's options are links: without this they fell back to the
    browser's blue underline */
 a.sheet-option { color: var(--text); text-decoration: none; }
+
+/* The app frame never scrolls — each screen scrolls itself. With overflow:hidden
+   a focus() or scrollIntoView could still scroll it (parked, off-screen sheets
+   and sleeves make it 910px tall inside 700), shifting everything; clip can't. */
+.phone { overflow: hidden; overflow: clip; }
