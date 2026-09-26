@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "../lib/auth-client";
 import type { Tab } from "./admin/shared";
+import type { PERMISSIONS as ADMIN_PERMS } from "../../convex/schema";
 
 type Group = "today" | "people" | "catalogue" | "system";
 import { Overview } from "./admin/Overview";
@@ -31,13 +32,6 @@ export function AdminDashboard() {
   const { confirm, notify } = useDialogs();
   const session = authClient.useSession();
   const access = useQuery(api.admin.myAccess);
-  const stats = useQuery(api.admin.stats);
-  const userData = useQuery(api.admin.users);
-  const catalog = useQuery(api.admin.catalog);
-  const requests = useQuery(api.access.list);
-  const analytics = useQuery(api.admin.analytics, {});
-  const creatorData = useQuery(api.creators.listCreators);
-  const moodSummary = useQuery(api.moods.adminSummary);
   const decideCreator = useMutation(api.creators.decideCreator);
   const decide = useMutation(api.access.decide);
   const markInvited = useMutation(api.access.markInvited);
@@ -60,32 +54,59 @@ export function AdminDashboard() {
     { id: "system", label: "System" },
   ];
 
+  /**
+   * Which tabs this account gets comes from myAccess alone, and each tab's data
+   * is fetched only while that tab is open. Every query used to be subscribed
+   * up front — including a 2 MB catalogue and a full-catalogue mood summary —
+   * and Convex answers a batch of new subscriptions together, so the whole
+   * dashboard sat on "Loading…" until the slowest of eight had finished (and
+   * re-ran them all whenever any track changed).
+   */
+  const can = (p: (typeof ADMIN_PERMS)[number]) =>
+    !!access && (access.isAdmin || access.permissions.includes(p));
   const tabs = useMemo(() => {
     const t: { id: Tab; label: string; icon: string; group: Group }[] = [];
-    if (stats !== null) t.push({ group: "today", id: "overview", label: "Overview", icon: "◈" });
-    if (analytics !== null) t.push({ group: "system", id: "analytics", label: "Analytics", icon: "▤" });
-    if (requests !== null) {
-      const pending = requests?.pending ?? 0;
-      t.push({ group: "people", id: "requests", label: pending ? `Requests (${pending})` : "Requests", icon: "✦" });
+    if (!access) return t;
+    const allowed = (p: (typeof ADMIN_PERMS)[number]) =>
+      access.isAdmin || access.permissions.includes(p);
+    if (allowed("stats.view")) {
+      t.push({ group: "today", id: "overview", label: "Overview", icon: "◈" });
+      t.push({ group: "today", id: "feed", label: "Live feed", icon: "≋" });
     }
-    if (creatorData !== null) {
-      const pending = creatorData?.pending ?? 0;
-      t.push({ group: "people", id: "creators", label: pending ? `Creators (${pending})` : "Creators", icon: "✸" });
+    if (allowed("users.view")) {
+      t.push({ group: "people", id: "requests", label: "Requests", icon: "✦" });
+      t.push({ group: "people", id: "creators", label: "Creators", icon: "✸" });
+      t.push({ group: "people", id: "users", label: "Users", icon: "◉" });
     }
-    if (userData !== null) t.push({ group: "people", id: "users", label: "Users", icon: "◉" });
-    if (catalog !== null) t.push({ group: "catalogue", id: "catalog", label: "Catalog", icon: "♪" });
-    if (moodSummary !== null) t.push({ group: "catalogue", id: "moods", label: "Moods", icon: "◐" });
-    if (access?.permissions.includes("ads.manage") || access?.isAdmin)
-      t.push({ group: "catalogue", id: "ads", label: "Ads", icon: "▣" });
-    if (access?.permissions.includes("config.manage") || access?.isAdmin)
-      t.push({ group: "system", id: "config", label: "Config", icon: "⚙" });
+    if (allowed("catalog.curate")) t.push({ group: "catalogue", id: "catalog", label: "Catalog", icon: "♪" });
+    if (allowed("stats.view")) t.push({ group: "catalogue", id: "moods", label: "Moods", icon: "◐" });
+    if (allowed("ads.manage")) t.push({ group: "catalogue", id: "ads", label: "Ads", icon: "▣" });
+    if (allowed("stats.view")) t.push({ group: "system", id: "analytics", label: "Analytics", icon: "▤" });
+    if (allowed("config.manage")) t.push({ group: "system", id: "config", label: "Config", icon: "⚙" });
     t.push({ group: "system", id: "reports", label: "Reports", icon: "⚠" });
-    if (stats !== null) t.push({ group: "today", id: "feed", label: "Live feed", icon: "≋" });
     return t;
-  }, [stats, userData, catalog, requests, analytics, creatorData, access, moodSummary]);
+  }, [access]);
 
   const [tab, setTab] = useState<Tab>("overview");
   const activeTab = tabs.some((t) => t.id === tab) ? tab : (tabs[0]?.id ?? "overview");
+  const open = (...ids: Tab[]) => ids.includes(activeTab);
+
+  // each tab's data, only while it is on screen
+  const stats = useQuery(api.admin.stats, can("stats.view") && open("overview", "feed") ? {} : "skip");
+  const analytics = useQuery(api.admin.analytics, can("stats.view") && open("analytics") ? {} : "skip");
+  const moodSummary = useQuery(api.moods.adminSummary, can("stats.view") && open("moods") ? {} : "skip");
+  const userData = useQuery(api.admin.users, can("users.view") && open("users") ? {} : "skip");
+  const catalog = useQuery(api.admin.catalog, can("catalog.curate") && open("catalog") ? {} : "skip");
+  // small tables, and their pending counts badge the sidebar, so these stay live
+  const requests = useQuery(api.access.list, can("users.view") ? {} : "skip");
+  const creatorData = useQuery(api.creators.listCreators, can("users.view") ? {} : "skip");
+  const badge = (id: Tab) =>
+    id === "requests" && requests?.pending
+      ? ` (${requests.pending})`
+      : id === "creators" && creatorData?.pending
+        ? ` (${creatorData.pending})`
+        : "";
+  const waiting = <p className="admin-empty">Loading…</p>;
 
   const loading = access === undefined;
   const noAccess = access === null || access?.any === false;
@@ -94,7 +115,7 @@ export function AdminDashboard() {
   useEffect(() => {
     if (!loading && noAccess) {
       const t = window.setTimeout(() => {
-        window.location.hash = "#/";
+        window.location.assign("/");
       }, 2500);
       return () => window.clearTimeout(t);
     }
@@ -143,6 +164,7 @@ export function AdminDashboard() {
                   >
                     <span className="admin-side-icon">{t.icon}</span>
                     {t.label}
+                    {badge(t.id)}
                   </button>
                 ))}
               </div>
@@ -151,7 +173,7 @@ export function AdminDashboard() {
         </nav>
         <div className="admin-side-foot">
           {session.data && <span className="admin-user">{session.data.user.email}</span>}
-          <a className="admin-back" href="#/">← back to the app</a>
+          <a className="admin-back" href="/">← back to the app</a>
         </div>
       </aside>
 
@@ -162,8 +184,11 @@ export function AdminDashboard() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
       >
+        {open("overview", "feed") && stats === undefined && waiting}
         {activeTab === "overview" && stats && <Overview stats={stats} />}
+        {activeTab === "moods" && moodSummary === undefined && waiting}
         {activeTab === "moods" && moodSummary && <MoodsPanel summary={moodSummary} />}
+        {activeTab === "analytics" && analytics === undefined && waiting}
         {activeTab === "analytics" && analytics && !("catalogue" in analytics) && (
           // a snapshot written before computeSnapshot awaited its payload holds
           // only a timestamp; reading it as a full one crashed the app
@@ -175,6 +200,7 @@ export function AdminDashboard() {
         {activeTab === "analytics" && analytics && "catalogue" in analytics && (
           <AnalyticsPanel a={analytics as import("./admin/Analytics").AnalyticsSnapshot} />
         )}
+        {activeTab === "creators" && creatorData === undefined && waiting}
         {activeTab === "creators" && creatorData && (
           <CreatorsPanel
             data={creatorData}
@@ -185,6 +211,7 @@ export function AdminDashboard() {
             }
           />
         )}
+        {activeTab === "requests" && requests === undefined && waiting}
         {activeTab === "requests" && requests && (
           <RequestsPanel
             data={requests}
@@ -208,6 +235,7 @@ export function AdminDashboard() {
             }}
           />
         )}
+        {activeTab === "users" && userData === undefined && waiting}
         {activeTab === "users" && userData && (
           <UsersPanel
             data={userData}
@@ -226,6 +254,7 @@ export function AdminDashboard() {
             }
           />
         )}
+        {activeTab === "catalog" && catalog === undefined && waiting}
         {activeTab === "catalog" && catalog && (
           <CatalogPanel
             catalog={catalog}

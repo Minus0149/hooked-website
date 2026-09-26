@@ -13,6 +13,8 @@ import { api } from "../../../convex/_generated/api";
 import { art } from "../../lib/art";
 import { Select } from "../ui/Dialogs";
 
+const PAGE = 200;
+
 type CatalogData = NonNullable<ReturnType<typeof useCatalogType>>;
 function useCatalogType() {
   return useQuery(api.admin.catalog);
@@ -30,6 +32,8 @@ export function CatalogPanel({
   const [search, setSearch] = useState("");
   const [genre, setGenre] = useState("all");
   const [hiddenOnly, setHiddenOnly] = useState(false);
+  // drawing all ~2,600 rows at once froze the tab for a second; page through them
+  const [shown, setShown] = useState(PAGE);
 
   const genres = useMemo(
     () => ["all", ...new Set(catalog.map((t) => t.genre))],
@@ -80,7 +84,7 @@ export function CatalogPanel({
       </div>
       <section className="admin-panel">
         <div className="admin-catalog">
-          {rows.map((t) => {
+          {rows.slice(0, shown).map((t) => {
             const rate = t.plays > 0 ? Math.round((t.saves / t.plays) * 100) : 0;
             return (
               <div className={`admin-row ${t.hidden ? "is-hidden" : ""}`} key={t._id}>
@@ -110,6 +114,11 @@ export function CatalogPanel({
             );
           })}
           {rows.length === 0 && <p className="admin-dim">No tracks match.</p>}
+          {rows.length > shown && (
+            <button className="admin-perm" onClick={() => setShown(shown + PAGE)}>
+              show {Math.min(PAGE, rows.length - shown)} more of {rows.length - shown}
+            </button>
+          )}
         </div>
       </section>
     </>

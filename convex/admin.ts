@@ -740,12 +740,27 @@ export const catalog = query({
       ctx.db.query("tracks").collect(),
       ctx.db.query("swipes").collect(),
     ]);
-    return tracks.map((t) => {
-      const ts = swipes.filter((s) => s.trackId === t.trackId);
-      const saves = ts.filter((s) => s.action === "save").length;
-      const nevers = ts.filter((s) => s.action === "never").length;
-      return { ...t, plays: ts.length, saves, nevers };
-    });
+    // One pass over the swipes, and only the fields the panel draws. Returning
+    // whole track documents (sound profiles, audio moods, markets…) made this
+    // 2 MB, and filtering all swipes once per track was tracks × swipes.
+    const tally = new Map<string, { plays: number; saves: number; nevers: number }>();
+    for (const s of swipes) {
+      const t = tally.get(s.trackId) ?? { plays: 0, saves: 0, nevers: 0 };
+      t.plays++;
+      if (s.action === "save") t.saves++;
+      if (s.action === "never") t.nevers++;
+      tally.set(s.trackId, t);
+    }
+    return tracks.map((t) => ({
+      _id: t._id,
+      trackId: t.trackId,
+      title: t.title,
+      artist: t.artist,
+      genre: t.genre,
+      artwork: t.artwork,
+      hidden: t.hidden,
+      ...(tally.get(t.trackId) ?? { plays: 0, saves: 0, nevers: 0 }),
+    }));
   },
 });
 
