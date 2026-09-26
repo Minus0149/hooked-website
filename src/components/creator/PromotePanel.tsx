@@ -16,7 +16,7 @@ import type { Track } from "./types";
  */
 
 const rupees = (paise: number) =>
-  `₹${(paise / 100).toLocaleString("en-IN", { maximumFractionDigits: paise % 100 ? 2 : 0 })}`;
+  `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
 type RazorpayOptions = {
   key: string;

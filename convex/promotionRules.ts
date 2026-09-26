@@ -163,13 +163,15 @@ export function quote(opts: {
   code: DiscountCode | null;
 }): Quote {
   const base = opts.pkg.pricePaise;
+  // discounts round down to whole rupees, so a price reads ₹50, not ₹49.50
+  const wholeRupees = (paise: number) => Math.floor(paise / 100) * 100;
   let launchOff =
-    opts.launchOffer.enabled && opts.firstCampaign ? Math.floor((base * opts.launchOffer.percentOff) / 100) : 0;
+    opts.launchOffer.enabled && opts.firstCampaign ? wholeRupees((base * opts.launchOffer.percentOff) / 100) : 0;
   const afterLaunch = base - launchOff;
   let codeOff = 0;
   if (opts.code) {
-    if (opts.code.percentOff) codeOff = Math.floor((afterLaunch * Math.min(opts.code.percentOff, 90)) / 100);
-    else if (opts.code.amountOffPaise) codeOff = Math.min(opts.code.amountOffPaise, afterLaunch);
+    if (opts.code.percentOff) codeOff = wholeRupees((afterLaunch * Math.min(opts.code.percentOff, 90)) / 100);
+    else if (opts.code.amountOffPaise) codeOff = Math.min(wholeRupees(opts.code.amountOffPaise), afterLaunch);
   }
   const floor = Math.min(MIN_ORDER_PAISE, base);
   const total = Math.max(floor, base - launchOff - codeOff);

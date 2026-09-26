@@ -43,7 +43,9 @@ describe("prices", () => {
   it("applies the launch offer only to a first campaign", () => {
     const first = quote({ pkg: starter, launchOffer: cfg.launchOffer, firstCampaign: true, code: null });
     const second = quote({ pkg: starter, launchOffer: cfg.launchOffer, firstCampaign: false, code: null });
-    expect(first.totalPaise).toBe(starter.pricePaise / 2);
+    // ₹399 at 50% off is ₹200, not ₹199.50: discounts round down to whole rupees
+    expect(first.totalPaise).toBe(20_000);
+    expect(first.totalPaise % 100).toBe(0);
     expect(second.totalPaise).toBe(starter.pricePaise);
   });
 

@@ -10,7 +10,7 @@ import { Select, useDialogs } from "../ui/Dialogs";
  * the server; this form can't set a price the server wouldn't.
  */
 
-const rupees = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+const rupees = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 const toPaise = (rupeesText: string) => Math.round(Number(rupeesText) * 100);
 
 type Pkg = { id: string; name: string; listeners: number; pricePaise: number };
