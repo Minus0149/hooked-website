@@ -56,18 +56,25 @@ export function AuthForm({
     setError(null);
     setNotApproved(false);
     setBusy(true);
-    const result =
-      mode === "join"
-        ? await authClient.signUp.email({
-            email: email.trim(),
-            password,
-            name: email.trim().split("@")[0],
-            // the confirmation link lands back in the app
-            callbackURL: `${window.location.origin}/`,
-          })
-        : await authClient.signIn.email({ email: email.trim(), password });
+    // a request that throws (offline, a timeout) instead of returning an error
+    // used to leave the button on "Signing in…" for good
+    let result: { error?: { message?: string } | null } | undefined;
+    try {
+      result =
+        mode === "join"
+          ? await authClient.signUp.email({
+              email: email.trim(),
+              password,
+              name: email.trim().split("@")[0],
+              // the confirmation link lands back in the app
+              callbackURL: `${window.location.origin}/`,
+            })
+          : await authClient.signIn.email({ email: email.trim(), password });
+    } catch (err) {
+      result = { error: { message: err instanceof Error ? err.message : "" } };
+    }
     setBusy(false);
-    if (result.error) {
+    if (result?.error) {
       const message = result.error.message ?? "";
       const refused = isNotApproved(message);
       setNotApproved(refused);
