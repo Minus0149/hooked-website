@@ -1,4 +1,6 @@
 ﻿import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { ReportSong } from "./ReportSong";
+import { REPORT_COPY } from "../lib/contentReport";
 import {
   AnimatePresence,
   motion,
@@ -190,6 +192,8 @@ function ScrubBar({
 /** Links out to where the track can legally play in full. */
 function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }) {
   const dialog = useDialog({ onClose });
+  // "Report this song" turns this sheet into the report form (Play's UGC policy)
+  const [reporting, setReporting] = useState(false);
   const q = encodeURIComponent(`${track.title} ${track.artist}`);
   // the song itself on Apple Music when the preview is Apple's (lib/attribution)
   const services = [
@@ -214,6 +218,10 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
         transition={{ type: "spring", stiffness: 380, damping: 34 }}
         {...dialog}
       >
+        {reporting ? (
+          <ReportSong track={track} onBack={() => setReporting(false)} onDone={onClose} />
+        ) : (
+        <>
         <h3 className="sheet-title">Hear the whole thing</h3>
         <p className="sheet-sub">
           "{track.title}" — {track.artist}. Previews stop at 30 seconds; pick where
@@ -234,6 +242,11 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
           </a>
         ))}
         {needsItunesCredit(track) && <p className="sheet-credit">preview {ITUNES_CREDIT}</p>}
+        <button type="button" className="sheet-report" onClick={() => setReporting(true)}>
+          {REPORT_COPY.link}
+        </button>
+        </>
+        )}
       </motion.div>
     </>
   );

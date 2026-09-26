@@ -19,6 +19,7 @@ import { ConfigPanel } from "./admin/ConfigPanel";
 import { ReportsPanel } from "./admin/ReportsPanel";
 import { FeedPanel } from "./admin/Feed";
 import { MoodsPanel } from "./admin/MoodsPanel";
+import { SongReportsPanel } from "./admin/SongReports";
 import { useDialogs } from "./ui/Dialogs";
 
 /**
@@ -79,7 +80,10 @@ export function AdminDashboard() {
       t.push({ group: "people", id: "creators", label: "Creators", icon: "✸" });
       t.push({ group: "people", id: "users", label: "Users", icon: "◉" });
     }
-    if (allowed("catalog.curate")) t.push({ group: "catalogue", id: "catalog", label: "Catalog", icon: "♪" });
+    if (allowed("catalog.curate")) {
+      t.push({ group: "catalogue", id: "catalog", label: "Catalog", icon: "♪" });
+      t.push({ group: "catalogue", id: "songReports", label: "Song reports", icon: "⚑" });
+    }
     if (allowed("stats.view")) t.push({ group: "catalogue", id: "moods", label: "Moods", icon: "◐" });
     if (allowed("ads.manage")) t.push({ group: "catalogue", id: "ads", label: "Ads", icon: "▣" });
     if (allowed("stats.view")) t.push({ group: "system", id: "analytics", label: "Analytics", icon: "▤" });
@@ -100,12 +104,17 @@ export function AdminDashboard() {
   // small tables, and their pending counts badge the sidebar, so these stay live
   const requests = useQuery(api.access.list, can("users.view") ? {} : "skip");
   const creatorData = useQuery(api.creators.listCreators, can("users.view") ? {} : "skip");
+  // open song reports: few, and their count badges the sidebar
+  const songReports = useQuery(api.contentReports.listOpen, can("catalog.curate") ? {} : "skip");
+  const resolveReport = useMutation(api.contentReports.resolve);
   const badge = (id: Tab) =>
     id === "requests" && requests?.pending
       ? ` (${requests.pending})`
       : id === "creators" && creatorData?.pending
         ? ` (${creatorData.pending})`
-        : "";
+        : id === "songReports" && songReports?.length
+          ? ` (${songReports.length})`
+          : "";
   const waiting = <p className="admin-empty">Loading…</p>;
 
   const loading = access === undefined;
@@ -273,6 +282,26 @@ export function AdminDashboard() {
         )}
         {activeTab === "feed" && stats && <FeedPanel recent={stats.recent} />}
         {activeTab === "reports" && <ReportsPanel />}
+        {activeTab === "songReports" && songReports === undefined && waiting}
+        {activeTab === "songReports" && songReports && (
+          <SongReportsPanel
+            groups={songReports}
+            onResolve={async (trackId, action, title) => {
+              if (action === "hide") {
+                const ok = await confirm({
+                  title: `Hide “${title}” for everyone?`,
+                  body: "It leaves every deck straight away and its reports are closed. You can unhide it from Catalog.",
+                  confirmLabel: "Hide song",
+                  danger: true,
+                });
+                if (!ok) return;
+              }
+              void resolveReport({ trackId, action })
+                .then(() => notify(action === "hide" ? `Hid “${title}”` : "Report dismissed", "success"))
+                .catch((e: Error) => notify(e.message, "error"));
+            }}
+          />
+        )}
         {activeTab === "ads" && <AdsPanel />}
         {activeTab === "config" && <ConfigPanel />}
       </motion.main>

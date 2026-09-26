@@ -307,6 +307,35 @@ export default defineSchema({
    * limits, hard size caps, and nothing here is trusted — it's a letter box,
    * not an API.
    */
+  /**
+   * "Report this song" — listeners flagging a track (Google Play's UGC policy).
+   * Distinct from errorReports, which are crash reports. One open report per
+   * reporter per track; resolved as dismissed, or actioned when the track was
+   * hidden.
+   */
+  contentReports: defineTable({
+    trackId: v.string(),
+    title: v.string(),
+    artist: v.string(),
+    reason: v.union(
+      v.literal("copyright"),
+      v.literal("offensive"),
+      v.literal("sexual"),
+      v.literal("spam"),
+      v.literal("other"),
+    ),
+    note: v.optional(v.string()),
+    /** "user:<id>" or "anon:<device key>" — for dedupe and rate limits */
+    reporter: v.string(),
+    status: v.union(v.literal("open"), v.literal("dismissed"), v.literal("actioned")),
+    createdAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    resolvedBy: v.optional(v.string()),
+  })
+    .index("by_status", ["status", "createdAt"])
+    .index("by_track_status", ["trackId", "status"])
+    .index("by_reporter_track", ["reporter", "trackId"]),
+
   errorReports: defineTable({
     message: v.string(),
     stack: v.optional(v.string()),

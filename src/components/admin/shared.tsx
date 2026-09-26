@@ -23,6 +23,7 @@ export type Tab =
   | "moods"
   | "ads"
   | "reports"
+  | "songReports"
   | "config"
   | "feed";
 

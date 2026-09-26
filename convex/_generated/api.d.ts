@@ -16,6 +16,7 @@ import type * as applyOrigin from "../applyOrigin.js";
 import type * as auth from "../auth.js";
 import type * as charts from "../charts.js";
 import type * as collab from "../collab.js";
+import type * as contentReports from "../contentReports.js";
 import type * as creators from "../creators.js";
 import type * as crons from "../crons.js";
 import type * as email from "../email.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   charts: typeof charts;
   collab: typeof collab;
+  contentReports: typeof contentReports;
   creators: typeof creators;
   crons: typeof crons;
   email: typeof email;
