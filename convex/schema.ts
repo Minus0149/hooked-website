@@ -350,7 +350,9 @@ export default defineSchema({
     /** stable per-install id for anonymous reports */
     anonKey: v.optional(v.string()),
     at: v.number(),
-  }),
+  })
+    // account deletion removes a person's crash reports (library.deleteMyAccount)
+    .index("by_userId", ["userId"]),
 
   // ---------------------------------------------------------- fingerprints
 

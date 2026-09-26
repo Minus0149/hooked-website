@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import { components } from "./_generated/api";
 import { authComponent } from "./auth";
 import { isMood } from "./moods";
 import { saveTarget, swipeAction, trackFields } from "./schema";
@@ -611,6 +612,35 @@ export const setPrefs = mutation({
  * without a profile; ensureProfile will refuse to recreate one unless the email
  * is approved again.
  */
+/**
+ * What deleting an account removes, and what it deliberately keeps. Every
+ * table that holds a person's id or email must appear in one list or the
+ * other — tests/account-deletion.test.ts reads the schema and fails when a
+ * new user-keyed table is added without a decision here. hookedcue.com's
+ * /data-deletion page is the public version of this list.
+ */
+export const ACCOUNT_DELETION = {
+  deleted: [
+    "profiles",
+    "librarySongs",
+    "playlists",
+    "swipes",
+    "neverArtists",
+    "neverTracks",
+    "moodVotes",
+    "imports",
+    "adEvents",
+    "errorReports",
+    "accessRequests",
+    "creators",
+    // and in the auth component: the user (email, name, password), sessions and linked accounts
+  ],
+  kept: {
+    // anonymous per-hook play counters with no person attached
+    hookStats: "anonymous counts",
+  } as Record<string, string>,
+} as const;
+
 export const deleteMyAccount = mutation({
   args: { confirm: v.literal("DELETE") },
   handler: async (ctx) => {
@@ -623,19 +653,42 @@ export const deleteMyAccount = mutation({
     }
 
     const userId = profile.userId;
-    const [swipes, songs, never, buried, playlists] = await Promise.all([
+    const [swipes, songs, never, buried, playlists, votes, imports, adEvents, reports] = await Promise.all([
       ctx.db.query("swipes").withIndex("by_userId", (q) => q.eq("userId", userId)).collect(),
       ctx.db.query("librarySongs").withIndex("by_user_kind", (q) => q.eq("userId", userId)).collect(),
       ctx.db.query("neverArtists").withIndex("by_user_artist", (q) => q.eq("userId", userId)).collect(),
       ctx.db.query("neverTracks").withIndex("by_user_track", (q) => q.eq("userId", userId)).collect(),
       ctx.db.query("playlists").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("moodVotes").withIndex("by_user_track", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("imports").withIndex("by_userId", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("adEvents").withIndex("by_user_day", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("errorReports").withIndex("by_userId", (q) => q.eq("userId", userId)).collect(),
     ]);
-    for (const doc of [...swipes, ...songs, ...never, ...buried, ...playlists]) {
+    for (const doc of [...swipes, ...songs, ...never, ...buried, ...playlists, ...votes, ...imports, ...adEvents, ...reports]) {
       await ctx.db.delete(doc._id);
     }
 
-    // drop the access request too, so the address isn't left sitting in the
-    // queue after the person has asked to be forgotten
+    // a creator's uploads leave with them: tracks, their hooks and
+    // fingerprints, and the audio files themselves
+    const creator = await ctx.db
+      .query("creators")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const owned = await ctx.db
+      .query("tracks")
+      .withIndex("by_owner", (q) => q.eq("ownerUserId", userId))
+      .collect();
+    for (const t of owned) {
+      const [hooks, prints] = await Promise.all([
+        ctx.db.query("hooks").withIndex("by_trackId", (q) => q.eq("trackId", t.trackId)).collect(),
+        ctx.db.query("fingerprints").withIndex("by_trackId", (q) => q.eq("trackId", t.trackId)).collect(),
+      ]);
+      for (const d of [...hooks, ...prints]) await ctx.db.delete(d._id);
+      if (t.audioStorageId) await ctx.storage.delete(t.audioStorageId);
+      await ctx.db.delete(t._id);
+    }
+    if (creator) await ctx.db.delete(creator._id);
+
     const email = (profile.email ?? "").toLowerCase();
     if (email) {
       const request = await ctx.db
@@ -646,6 +699,19 @@ export const deleteMyAccount = mutation({
     }
 
     await ctx.db.delete(profile._id);
+
+    // Last, the sign-in itself. Deleting only the app's data used to leave the
+    // Better Auth user (email, name, password hash) and its sessions behind —
+    // a "deleted" account that could still sign in.
+    for (const model of ["session", "account"] as const) {
+      await ctx.runMutation(components.betterAuth.adapter.deleteMany, {
+        input: { model, where: [{ field: "userId", value: userId }] },
+        paginationOpts: { numItems: 500, cursor: null },
+      });
+    }
+    await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+      input: { model: "user", where: [{ field: "_id", value: userId }] },
+    });
     return { deleted: true };
   },
 });
