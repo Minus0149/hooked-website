@@ -1,17 +1,26 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { motion } from "motion/react";
 import { authClient } from "../lib/auth-client";
 import { useStore } from "../state/store";
 import { IconBack, IconCheck, IconHeart } from "./icons";
+import { AccessGate } from "./AccessGate";
+import { AuthForm } from "./AuthForm";
 
 export function ProfileScreen({
   isAdmin,
   onBack,
+  joinEmail,
 }: {
   isAdmin: boolean;
   onBack: () => void;
+  /** set when the page was opened from an invite link (/join?email=…) */
+  joinEmail?: string;
 }) {
   const session = authClient.useSession();
+  // "Not in the beta yet? Apply" swaps the sign-in form for the application
+  const [applying, setApplying] = useState(
+    () => new URLSearchParams(window.location.search).get("apply") === "1",
+  );
   const { state } = useStore();
 
   const allSaved = [
@@ -92,7 +101,7 @@ export function ProfileScreen({
           )}
 
           {isAdmin && (
-            <a className="ob-primary profile-admin-link" href="#/admin">
+            <a className="ob-primary profile-admin-link" href="/admin">
               Open admin dashboard
             </a>
           )}
@@ -103,148 +112,26 @@ export function ProfileScreen({
             Sign out
           </button>
         </motion.div>
+      ) : applying ? (
+        <div className="profile-body auth-body">
+          <AccessGate
+            freeSwipes={0}
+            intro={{
+              kicker: "join the beta",
+              copy: "hookedcue is invite-only while it's in testing. Leave your email and we'll send you an invite when you're in.",
+            }}
+            onSignIn={() => setApplying(false)}
+          />
+        </div>
       ) : (
-        <AuthForm />
+        <div className="profile-body auth-body">
+          <AuthForm
+            initialMode={joinEmail !== undefined ? "join" : "signin"}
+            initialEmail={joinEmail ?? ""}
+            onApply={() => setApplying(true)}
+          />
+        </div>
       )}
     </div>
-  );
-}
-
-export function AuthForm() {
-  const [mode, setMode] = useState<"signin" | "signup">("signup");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
-  const [resetting, setResetting] = useState(false);
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-    const result =
-      mode === "signup"
-        ? await authClient.signUp.email({
-            email,
-            password,
-            name: email.split("@")[0],
-            // the confirmation link lands back in the app
-            callbackURL: `${window.location.origin}/#/`,
-          })
-        : await authClient.signIn.email({ email, password });
-    setBusy(false);
-    if (result.error) {
-      setError(result.error.message ?? "Something went wrong");
-    }
-  };
-
-  const sendReset = async () => {
-    if (!email || resetting) return;
-    setResetting(true);
-    setError(null);
-    try {
-      // the link lands on the app origin; Better Auth appends its token
-      const res = await authClient.requestPasswordReset({
-        email,
-        redirectTo: `${window.location.origin}/#/`,
-      });
-      if (res.error) throw new Error(res.error.message ?? "Couldn't send it");
-      setResetSent(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't send a reset link");
-    } finally {
-      setResetting(false);
-    }
-  };
-
-  return (
-    <motion.form
-      className="profile-body"
-      onSubmit={submit}
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-    >
-      <h2 className="ob-headline" style={{ fontSize: 24 }}>
-        {mode === "signup" ? (
-          <>
-            keep your taste <em>forever</em>
-          </>
-        ) : (
-          <>
-            welcome <em>back</em>
-          </>
-        )}
-      </h2>
-      <p className="ob-copy">
-        {mode === "signup"
-          ? "Create an account and every swipe, like and playlist follows you across devices."
-          : "Sign in to pick up your library where you left it."}
-      </p>
-
-      {/* plain labelled fields — the numbered boxes-in-a-card read as a
-          form within a form */}
-      <div className="access-field auth-field">
-        <span className="access-label">email</span>
-        <input
-          className="auth-input"
-          type="email"
-          required
-          placeholder="you@example.com"
-          value={email}
-          autoComplete="email"
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <span className="prefs-hint">
-          {mode === "signup"
-            ? "the email your library will follow across devices"
-            : resetSent
-              ? "reset link sent — check that inbox (and the promotions tab)"
-              : "the one you signed up with"}
-        </span>
-      </div>
-
-      <div className="access-field auth-field">
-        <span className="access-label">password</span>
-        <input
-          className="auth-input"
-          type="password"
-          required
-          minLength={8}
-          placeholder={mode === "signup" ? "create a password (8+ characters)" : "your password"}
-          value={password}
-          autoComplete={mode === "signup" ? "new-password" : "current-password"}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <span className="prefs-hint">
-          {mode === "signup"
-            ? "hashed on our side — even we can't read it"
-            : mode === "signin" && !resetSent && (
-                <button
-                  type="button"
-                  className="linklike"
-                  onClick={() => void sendReset()}
-                >
-                  {resetting ? "sending…" : "forgot it? send a reset link"}
-                </button>
-              )}
-        </span>
-      </div>
-
-      {error && <p className="auth-error">{error}</p>}
-
-      <button className="ob-primary" type="submit" disabled={busy}>
-        {busy ? "…" : mode === "signup" ? "Create account" : "Sign in"}
-      </button>
-      <button
-        type="button"
-        className="ob-skip"
-        onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
-      >
-        {mode === "signup"
-          ? "Already have an account? Sign in"
-          : "New here? Create an account"}
-      </button>
-    </motion.form>
   );
 }

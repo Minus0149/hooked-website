@@ -463,14 +463,27 @@ export function moodAtPush(
   dx: number,
   dy: number,
   deadZone: number,
+  downGain = 1,
 ): MoodId | null {
-  if (Math.sqrt(dx * dx + dy * dy) < deadZone) return null;
-  const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  // Below the finger there is often little room — the + sits at the bottom of
+  // the screen — so a downward push can be made to count for more: with a
+  // gain of 1.8 a 21px drag down aims as surely as a 38px drag up.
+  const y = dy > 0 ? dy * downGain : dy;
+  if (Math.sqrt(dx * dx + y * y) < deadZone) return null;
+  const deg = (Math.atan2(y, dx) * 180) / Math.PI;
   const shifted =
     (deg - WHEEL_START_DEG + WHEEL_STEP_DEG / 2 + 720) % 360;
   const i = Math.floor(shifted / WHEEL_STEP_DEG) % MOODS.length;
   return MOODS[i].id;
 }
+
+/**
+ * How much more a downward push counts on the ring opened from the + button.
+ * The + sits near the bottom of the screen, so there is far less room to drag
+ * down than up (Minus, 2026-09-26: "less movement when going down … there is
+ * no space when going down").
+ */
+export const PLUS_DOWN_GAIN = 1.8;
 
 /**
  * What a mood playlist made from the + is called. One name per mood, so

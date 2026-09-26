@@ -67,6 +67,7 @@ export function MoodWheel({
   onCancel,
   motionPref = "full",
   hint,
+  downGain = 1,
 }: {
   origin: WheelOrigin;
   /** what this listener already said about the track under the ring */
@@ -83,6 +84,8 @@ export function MoodWheel({
   motionPref?: "full" | "reduced" | "off";
   /** the line under everything; defaults to the card's "what are you in the mood for?" */
   hint?: string;
+  /** how much more a downward push counts (the + ring sits near the bottom; see PLUS_DOWN_GAIN) */
+  downGain?: number;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [keyIndex, setKeyIndex] = useState<number | null>(null);
@@ -127,9 +130,9 @@ export function MoodWheel({
     // meant a thumb that hadn't moved at all was already 60px "off-centre" —
     // aiming at a face it never chose, and committing it on release. The
     // gesture is "push from here"; the direction of the push is the choice.
-    const mood = moodAtPush(pointer.x - origin.x, pointer.y - origin.y, DEAD);
+    const mood = moodAtPush(pointer.x - origin.x, pointer.y - origin.y, DEAD, downGain);
     return mood === null ? null : MOODS.findIndex((m) => m.id === mood);
-  }, [pointer, keyIndex, origin.x, origin.y]);
+  }, [pointer, keyIndex, origin.x, origin.y, downGain]);
 
   // Release on a face commits it; release in the middle leaves it up.
   const aimedRef = useRef<number | null>(null);

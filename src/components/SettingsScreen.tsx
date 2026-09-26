@@ -804,7 +804,7 @@ export function SettingsScreen({
             sub={state.prefs.adsOptOut ? "house ads off" : "house ads on"}
             onOpen={() => onOpenPage("support")}
           />
-          <a className="settings-row" href="#/creator" style={{ textDecoration: "none" }}>
+          <a className="settings-row" href="/creator" style={{ textDecoration: "none" }}>
             <span className="settings-row-icon" style={{ color: "var(--more)" }}>
               <IconMic />
             </span>
@@ -817,7 +817,7 @@ export function SettingsScreen({
             </span>
           </a>
           {isAdmin && (
-            <a className="settings-row" href="#/admin" style={{ textDecoration: "none" }}>
+            <a className="settings-row" href="/admin" style={{ textDecoration: "none" }}>
               <span className="settings-row-icon" style={{ color: "var(--accent)" }}>
                 <IconChart />
               </span>

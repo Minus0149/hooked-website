@@ -3708,3 +3708,98 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 .auth-field { margin-bottom: 14px; text-align: left; }
 .auth-field .auth-input { width: 100%; font-size: 16px; }
 .auth-field .prefs-hint { font-size: 12px; }
+
+/* ------------------------------------------------------------------ auth forms
+   Sign in, invite (create account), reset password, and the beta application.
+   One column, capped width, centred headline over left-aligned fields; labels
+   above inputs; one error style (a tinted box, never just red text); the brand
+   pink for the one action that matters on each screen. Mirrored by the phone
+   app's AuthForm styles. */
+.auth-page { min-height: 100%; display: flex; flex-direction: column; }
+.auth-body { justify-content: center; }
+.auth-form { display: flex; flex-direction: column; gap: 14px; width: 100%; }
+.auth-title { margin-bottom: 0; }
+.auth-copy { margin: -4px auto 6px; max-width: 300px; }
+.auth-field { display: flex; flex-direction: column; gap: 7px; margin: 0; text-align: left; }
+.auth-label,
+.auth-label-row .auth-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted);
+}
+.auth-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.auth-input {
+  width: 100%; min-height: 50px; padding: 13px 16px; font-size: 16px;
+  border-radius: 14px; border: 1px solid var(--line); background: var(--surface);
+}
+.auth-input::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); }
+/* focus is a quiet brightening, not pink — a pink ring on an empty,
+   just-focused field read as "you did something wrong" */
+.auth-input:focus {
+  border-color: color-mix(in srgb, var(--text) 45%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--text) 7%, transparent);
+}
+.auth-input.has-error { border-color: color-mix(in srgb, var(--never) 70%, transparent); }
+.auth-pass { position: relative; display: block; }
+.auth-pass .auth-input { padding-right: 68px; }
+.auth-pass-toggle {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  min-width: 52px; min-height: 38px; padding: 0 10px; border-radius: 10px;
+  font-size: 12.5px; font-weight: 700; color: var(--muted);
+}
+.auth-pass-toggle:hover { color: var(--text); }
+.auth-link {
+  font-size: 13px; font-weight: 600; color: var(--muted);
+  padding: 8px 0; min-height: 36px; text-decoration: none;
+}
+.auth-link:hover { color: var(--text); }
+.auth-link-center { align-self: center; padding: 10px 12px; min-height: 44px; }
+.auth-note {
+  font-size: 13px; line-height: 1.5; color: var(--save);
+  background: color-mix(in srgb, var(--save) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--save) 30%, transparent);
+  border-radius: 12px; padding: 10px 12px; margin: 0;
+}
+.auth-form .auth-error,
+.profile-body .auth-error,
+.auth-error {
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  text-align: left; font-size: 13.5px; font-weight: 600; line-height: 1.45;
+  color: #ff9a9a;
+  background: color-mix(in srgb, var(--never) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--never) 32%, transparent);
+  border-radius: 12px; padding: 11px 13px; margin: 0;
+}
+.auth-error p { margin: 0; }
+.auth-error-action {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  border-bottom: 1px solid currentColor; padding: 2px 0;
+}
+.ob-primary.auth-submit {
+  background: var(--accent-default, #ff3d71); color: #0b0b10;
+  min-height: 52px; padding: 15px; border-radius: 16px; margin-top: 4px;
+  display: flex; align-items: center; justify-content: center; text-decoration: none;
+}
+.auth-alt { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-top: 4px; }
+.auth-secondary {
+  min-height: 50px; border-radius: 16px; border: 1px solid var(--line);
+  font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--text);
+  background: transparent;
+}
+.auth-secondary:hover { border-color: color-mix(in srgb, var(--text) 30%, transparent); }
+
+/* the beta application shares the look */
+.access-form .auth-input:focus,
+.access-done .auth-input:focus { border-color: color-mix(in srgb, var(--text) 45%, transparent); }
+.access-form .access-error,
+.access-error {
+  font-size: 13.5px; font-weight: 600; line-height: 1.45; color: #ff9a9a;
+  background: color-mix(in srgb, var(--never) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--never) 32%, transparent);
+  border-radius: 12px; padding: 10px 12px; margin: 2px 0 0;
+}
+.access-form .ob-primary,
+.access-done .ob-primary { background: var(--accent-default, #ff3d71); color: #0b0b10; }
+.auth-body .access-form,
+.auth-body .access-done { width: 100%; }
+.auth-copy, .gate-copy, .auth-title, .gate-kicker { text-wrap: balance; }
+.auth-page a.wordmark { color: var(--text); }

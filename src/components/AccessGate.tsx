@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { authClient } from "../lib/auth-client";
-import { AuthForm } from "./ProfileScreen";
+import { AuthForm } from "./AuthForm";
 import {
   ACCESS_GENRES as GENRES,
   MAX_ACCESS_GENRES as MAX_GENRES,
@@ -31,7 +31,17 @@ const SITE_URL =
  * you play — is optional and skippable; it is sent as a second application for
  * the same email, which the server uses only to fill details left blank.
  */
-export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
+export function AccessGate({
+  freeSwipes,
+  intro,
+  onSignIn,
+}: {
+  freeSwipes: number;
+  /** a heading of its own, when it's opened on purpose rather than as the wall */
+  intro?: { kicker: string; copy: string };
+  /** where "already have an account? sign in" goes; without it the gate shows its own sign-in */
+  onSignIn?: () => void;
+}) {
   const [stage, setStage] = useState<Stage>("form");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -49,6 +59,7 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
   }, []);
 
   const toggleGenre = (g: string) => setGenres((list) => toggleAccessGenre(list, g));
+  const toSignIn = () => (onSignIn ? onSignIn() : setStage("signin"));
 
   const apply = async (
     extra: { device?: string; notes?: string; genres?: string[] },
@@ -105,8 +116,6 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
   if (stage === "signin") {
     return (
       <div className="access-done">
-        <p className="gate-kicker">you're approved</p>
-        <p className="gate-copy">sign in and the deck never stops.</p>
         <AuthForm />
       </div>
     );
@@ -126,10 +135,10 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
         <p className="gate-copy">
           {rejected
             ? "this email isn't on the list for the current round. nothing else to do for now."
-            : "we'll email you when you're in. then create an account with this address and pick up right where you left off."}
+            : "we'll email you an invite when you're in — the link in it creates your account."}
         </p>
-        <button className="gate-close" onClick={() => setStage("signin")}>
-          already approved? sign in
+        <button className="gate-close" onClick={toSignIn}>
+          already have an account? sign in
         </button>
       </motion.div>
     );
@@ -212,9 +221,10 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
 
   return (
     <form className="access-form" onSubmit={submit} noValidate>
-      <p className="gate-kicker">that was your {freeSwipes} free tastes</p>
+      <p className="gate-kicker">{intro?.kicker ?? `that was your ${freeSwipes} free tastes`}</p>
       <p className="gate-copy">
-        hookedcue is invite-only while it's in testing. leave your email and we'll let you in.
+        {intro?.copy ??
+          "hookedcue is invite-only while it's in testing. leave your email and we'll send you an invite."}
       </p>
 
       <label className="access-field">
@@ -275,8 +285,8 @@ export function AccessGate({ freeSwipes }: { freeSwipes: number }) {
         <button className="ob-primary" type="submit" disabled={busy || !email.trim()}>
           {busy ? "sending…" : "put me on the list"}
         </button>
-        <button type="button" className="gate-close" onClick={() => setStage("signin")}>
-          already approved? sign in
+        <button type="button" className="gate-close" onClick={toSignIn}>
+          already have an account? sign in
         </button>
       </div>
     </form>
@@ -300,7 +310,7 @@ export function AccessPending({
   const resend = async () => {
     setResent("sending");
     const res = await authClient
-      .sendVerificationEmail({ email, callbackURL: `${window.location.origin}/#/` })
+      .sendVerificationEmail({ email, callbackURL: `${window.location.origin}/` })
       .catch(() => ({ error: true }));
     setResent(res && "error" in res && res.error ? "failed" : "sent");
   };

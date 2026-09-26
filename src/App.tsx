@@ -13,7 +13,7 @@ import { authClient } from "./lib/auth-client";
 import { StoreProvider, useStore } from "./state/store";
 import { usePlayer } from "./audio/usePlayer";
 import { SwipeDeck } from "./components/SwipeDeck";
-import { coerceMood, DAYPART_MOOD, daypartAt, moodById, moodPlaylistName, type MoodId } from "./data/mood";
+import { coerceMood, DAYPART_MOOD, daypartAt, moodById, moodPlaylistName, PLUS_DOWN_GAIN, type MoodId } from "./data/mood";
 import { MoodWheel } from "./components/MoodWheel";
 import { verdict as verdictFor } from "./data/predict";
 import { soundScore } from "./data/sound";
@@ -38,6 +38,8 @@ import { SettingsScreen } from "./components/SettingsScreen";
 import { NewPlaylistSheet, type PlaylistRules } from "./components/NewPlaylistSheet";
 import { inkOn } from "./lib/contrast";
 import { IconSettings, IconUser } from "./components/icons";
+import { pathForView, pathFromLegacyHash, routeFor, type View } from "./lib/routes";
+import { ResetPasswordScreen } from "./components/ResetPasswordScreen";
 import {
   DIR_TO_ACTION,
   type LibraryContainer,
@@ -59,25 +61,12 @@ const TOAST_FOR: Record<SwipeDir, { msg: string; icon: string } | null> = {
   left: { msg: "Never again", icon: "✕" },
 };
 
-type View =
-  | "home"
-  | "discover"
-  | "profile"
-  | "settings"
-  | `settings:${string}`
-  | `library:${string}`;
-
-/** The URL is the truth: "#/", "#/profile", "#/settings/appearance", … */
-function viewFromHash(): View {
+/** The screen the address points at — "/" and "/join" both open the app. */
+function viewFromPath(): View {
   if (typeof window === "undefined") return "home";
-  const h = window.location.hash.replace(/^#\/?/, "");
-  if (!h) return "home";
-  const [head, sub] = h.split("/");
-  if (head === "settings" && sub) return `settings:${sub}` as View;
-  if (head === "library" && sub) return `library:${sub}` as View;
-  if (head === "home" || head === "discover" || head === "profile" || head === "settings") {
-    return head as View;
-  }
+  const r = routeFor(window.location.pathname, window.location.search);
+  if (r.kind === "app") return r.view;
+  if (r.kind === "join") return "profile";
   return "home";
 }
 
@@ -143,7 +132,7 @@ const toLocal = (t: ServerTrackWithHooks): Track => ({
   accent: t.accent,
 });
 
-function Shell() {
+function Shell({ joinEmail }: { joinEmail?: string }) {
   const {
     state,
     swipe,
@@ -173,14 +162,14 @@ function Shell() {
   // prefs push below reads state.prefs at fire time, not capture time)
   const stateRef = useRef(state);
   stateRef.current = state;
-  const [view, setView] = useState<View>(() => viewFromHash());
+  const [view, setView] = useState<View>(() => viewFromPath());
   // browser back must walk the app's screens, not leave the site — every
-  // view change gets a real URL (#/profile, #/settings/appearance, …) so the
+  // view change gets a real URL (/profile, /settings/appearance, …) so the
   // address is honest, a refresh stays where you were, and back/forward walk
   // the screens
   useEffect(() => {
     const onPop = () => {
-      setViewNoHistory(viewFromHash());
+      setViewNoHistory(viewFromPath());
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -194,9 +183,8 @@ function Shell() {
   const setViewWithHistory = useCallback((v: View) => {
     if (v === viewRef.current) return;
     setView(v);
-    const hash = v === "home" ? "#/" : `#/${v.replace(":", "/")}`;
     try {
-      window.history.pushState({ view: v }, "", hash);
+      window.history.pushState({ view: v }, "", pathForView(v));
     } catch {
       /* history unavailable — navigation still works */
     }
@@ -1060,6 +1048,7 @@ function Shell() {
             <ProfileScreen
               isAdmin={library?.isAdmin ?? false}
               onBack={() => setViewWithHistory("home")}
+              joinEmail={joinEmail}
             />
           )}
           {(view === "settings" || view.startsWith("settings:")) && (
@@ -1167,6 +1156,7 @@ function Shell() {
               pointer={plusPointer}
               motionPref={state.prefs.motion}
               hint="pick a mood — a playlist that fills as you keep songs"
+              downGain={PLUS_DOWN_GAIN}
               onCommit={(mood) => {
                 closePlusRing();
                 void makeMoodPlaylist(mood);
@@ -1233,34 +1223,34 @@ function Shell() {
 }
 
 export default function App() {
-  const [route, setRoute] = useState(() => window.location.hash);
+  // Old "#/…" addresses (in emails already sent, bookmarks) become paths first.
+  const [route, setRoute] = useState(() => {
+    const legacy = pathFromLegacyHash(window.location.hash);
+    if (legacy) window.history.replaceState(null, "", legacy);
+    return routeFor(window.location.pathname, window.location.search);
+  });
   useEffect(() => {
-    const onHash = () => setRoute(window.location.hash);
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    const onPop = () => setRoute(routeFor(window.location.pathname, window.location.search));
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  if (route.startsWith("#/admin") || route.startsWith("#/creator")) {
-    const Screen = route.startsWith("#/admin") ? AdminDashboard : CreatorDashboard;
+  if (route.kind === "admin" || route.kind === "creator") {
+    const Screen = route.kind === "admin" ? AdminDashboard : CreatorDashboard;
     return (
       <Suspense
-        fallback={<div className="admin admin-v2"><p className="admin-empty">Loading⬦</p></div>}
+        fallback={<div className="admin admin-v2"><p className="admin-empty">Loading…</p></div>}
       >
         <Screen />
       </Suspense>
     );
   }
-  // anything else under #/ that isn't a real route gets the 404 — silently
-  // rendering the deck for a mistyped link hid the mistake. Real views are
-  // known: profile, settings (+ sub-pages), library containers.
-  const KNOWN_VIEW = /^#\/(home|discover|profile|settings(\/[a-z]+)?|library\/[^\s]+)\/?$/;
-  if (
-    route.startsWith("#/") &&
-    route !== "#/" &&
-    route !== "#" &&
-    route !== "" &&
-    !KNOWN_VIEW.test(route)
-  ) {
+  if (route.kind === "reset") {
+    return <ResetPasswordScreen token={route.token} error={route.error} />;
+  }
+  // an unknown address gets the 404 — silently rendering the deck for a
+  // mistyped link hid the mistake
+  if (route.kind === "notfound") {
     return (
       <div className="notfound">
         <span className="wordmark">
@@ -1268,19 +1258,14 @@ export default function App() {
         </span>
         <h1>404</h1>
         <p>That page doesn&apos;t exist. The songs are all still where you left them.</p>
-        <a className="notfound-home" href="#/">back to the deck</a>
+        <a className="notfound-home" href="/">back to the deck</a>
       </div>
     );
   }
 
   return (
     <StoreProvider>
-      <Shell />
+      <Shell joinEmail={route.kind === "join" ? route.email : undefined} />
     </StoreProvider>
   );
 }
-
-
-
-
-
