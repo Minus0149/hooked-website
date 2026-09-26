@@ -286,3 +286,64 @@ export const markInvited = mutation({
     await ctx.db.patch(id, { invited });
   },
 });
+
+/**
+ * Normalise an operator's list of emails: lowercase, trimmed, de-duplicated,
+ * and split into the addresses we can store and the ones we can't.
+ */
+export function operatorEmails(list: string[]): { valid: string[]; invalid: string[] } {
+  const valid: string[] = [];
+  const invalid: string[] = [];
+  for (const raw of list) {
+    const email = raw.trim().toLowerCase();
+    if (!email) continue;
+    if (!EMAIL_RE.test(email)) invalid.push(raw);
+    else if (!valid.includes(email)) valid.push(email);
+  }
+  return { valid, invalid };
+}
+
+/**
+ * Approve people from the command line. Operator-only: internal, so no client
+ * can call it — only `npx convex run` by someone holding deploy access, the
+ * same trust as admin:grantAdmin. For the Play reviewer's account and for
+ * pre-approving closed-test testers before any admin exists:
+ *
+ *   npx convex run --prod access:approve '{"emails":["a@gmail.com","b@gmail.com"]}'
+ *
+ * An existing request is approved (a rejection included — the operator is
+ * vouching); a new one is created already approved. Approval alone is not
+ * access: the person still signs up and confirms their email (profileGate).
+ */
+export const approve = internalMutation({
+  args: { emails: v.array(v.string()), note: v.optional(v.string()) },
+  handler: async (ctx, { emails, note }) => {
+    const { valid, invalid } = operatorEmails(emails);
+    const now = new Date().toISOString();
+    const done: { email: string; was: string }[] = [];
+    for (const email of valid) {
+      const existing = await ctx.db
+        .query("accessRequests")
+        .withIndex("by_email", (q) => q.eq("email", email))
+        .unique();
+      if (existing) {
+        await ctx.db.patch(existing._id, { status: "approved", decidedAt: now, decidedBy: "operator" });
+        done.push({ email, was: existing.status });
+      } else {
+        await ctx.db.insert("accessRequests", {
+          email,
+          name: nameFor("", email),
+          source: "landing",
+          status: "approved",
+          notes: cleanText(note ?? "added by operator", MAX.notes),
+          submittedAt: now,
+          decidedAt: now,
+          decidedBy: "operator",
+          invited: false,
+        });
+        done.push({ email, was: "new" });
+      }
+    }
+    return { approved: done, invalid };
+  },
+});

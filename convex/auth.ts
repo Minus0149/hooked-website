@@ -6,9 +6,11 @@ import type { DataModel } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import authConfig from "./auth.config";
 import { smtpSettings } from "./emailConfig";
+import { resetEmail, verifyEmail } from "./emailTemplate";
 
 const siteUrl = process.env.SITE_URL ?? "https://app.hookedcue.com";
-const authSiteUrl = process.env.BETTER_AUTH_URL ?? "https://cnx.hookedcue.com";
+// falls back to the deployment's own HTTP URL, which Convex provides to every function
+const authSiteUrl = process.env.BETTER_AUTH_URL ?? process.env.CONVEX_SITE_URL;
 const authSecret = process.env.BETTER_AUTH_SECRET;
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
@@ -67,15 +69,8 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
       // Password resets need somewhere to send the link: our own mail server
       // (see sendEmail). Without SMTP settings the link is logged instead.
       sendResetPassword: async ({ user, url }) => {
-        await sendEmail(
-          ctx,
-          user.email,
-          "reset your hookedcue password",
-          `<p>Someone (hopefully you) asked to reset the password for <b>${user.email}</b>.</p>` +
-            `<p><a href="${url}">Choose a new password</a> — the link works once and expires in an hour.</p>` +
-            `<p>If it wasn't you, ignore this and your password stays as it was.</p>`,
-          `password reset for ${user.email}: ${url}`,
-        );
+        const mail = resetEmail(user.email, url);
+        await sendEmail(ctx, user.email, mail.subject, mail.html, `password reset for ${user.email}: ${url}`);
       },
       resetPasswordTokenExpiresIn: 3600,
     },
@@ -87,15 +82,8 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
       autoSignInAfterVerification: true,
       expiresIn: 60 * 60 * 24,
       sendVerificationEmail: async ({ user, url }) => {
-        await sendEmail(
-          ctx,
-          user.email,
-          "confirm your email for hookedcue",
-          `<p>Confirm <b>${user.email}</b> to finish setting up hookedcue.</p>` +
-            `<p><a href="${url}">Confirm my email</a> — the link works for 24 hours.</p>` +
-            `<p>If you didn't sign up, ignore this.</p>`,
-          `verify ${user.email}: ${url}`,
-        );
+        const mail = verifyEmail(user.email, url);
+        await sendEmail(ctx, user.email, mail.subject, mail.html, `verify ${user.email}: ${url}`);
       },
     },
     plugins: [crossDomain({ siteUrl }), convex({ authConfig })],
