@@ -1,80 +1,60 @@
 /**
- * Every track, and whether it is fit to be dealt.
+ * Every track, and whether it is fit to be dealt — a page at a time.
  *
  * Split out of AdminDashboard.tsx, which had grown to 1290 lines holding
- * fourteen components — every change to one screen meant scrolling past six
- * others. The markup is deliberately unchanged: these screens need a signed-in
- * admin to look at, so restyling them blind would be guesswork. Each adopts the
- * shared primitives in ui/ as it is next worked on.
+ * fourteen components. It used to receive the whole catalogue (every track
+ * with its swipe counts) from the dashboard up front, which made opening the
+ * tab read ~4 MB and sometimes hang for half a minute. It now loads 100 tracks
+ * at a time, newest first, and the search box runs the title/artist search
+ * indexes on the server instead of filtering an in-memory list.
  */
-import { useMemo, useState } from "react";
-import { useQuery } from "convex/react";
+import { useEffect, useState } from "react";
+import { usePaginatedQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { art } from "../../lib/art";
-import { Select } from "../ui/Dialogs";
 
-const PAGE = 200;
-
-type CatalogData = NonNullable<ReturnType<typeof useCatalogType>>;
-function useCatalogType() {
-  return useQuery(api.admin.catalog);
-}
+const PAGE = 100;
 
 export function CatalogPanel({
-  catalog,
   onToggle,
   onBackfill,
 }: {
-  catalog: CatalogData;
   onToggle: (trackId: string, hidden: boolean) => void;
   onBackfill: () => void;
 }) {
+  const [typed, setTyped] = useState("");
   const [search, setSearch] = useState("");
-  const [genre, setGenre] = useState("all");
   const [hiddenOnly, setHiddenOnly] = useState(false);
-  // drawing all ~2,600 rows at once froze the tab for a second; page through them
-  const [shown, setShown] = useState(PAGE);
 
-  const genres = useMemo(
-    () => ["all", ...new Set(catalog.map((t) => t.genre))],
-    [catalog],
-  );
-  const rows = useMemo(
-    () =>
-      catalog
-        .filter(
-          (t) =>
-            (genre === "all" || t.genre === genre) &&
-            (!hiddenOnly || t.hidden === true) &&
-            `${t.title} ${t.artist}`.toLowerCase().includes(search.toLowerCase()),
-        )
-        .sort((a, b) => b.plays - a.plays),
-    [catalog, search, genre, hiddenOnly],
+  // wait for a pause in typing before asking the server
+  useEffect(() => {
+    const t = window.setTimeout(() => setSearch(typed.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [typed]);
+
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.admin.catalog,
+    { search: search || undefined, hiddenOnly: hiddenOnly || undefined },
+    { initialNumItems: PAGE },
   );
 
   return (
     <>
       <h2 className="admin-h2">Catalog</h2>
       <p className="admin-dim">
-        {catalog.length} tracks. Hidden tracks disappear from everyone's feed
-        instantly. Sorted by total plays.
+        Newest first. Hidden tracks disappear from everyone's feed instantly.
+        {search ? ` Searching titles and artists for “${search}”.` : ""}
       </p>
       <div className="admin-toolbar">
         <input
           className="admin-search"
           placeholder="search title or artist…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
         />
         <button className="admin-perm" onClick={onBackfill} title="Give three windows to any track that has none">
           fix hookless tracks
         </button>
-        <Select
-          label="genre"
-          value={genre}
-          onChange={setGenre}
-          options={genres.map((g) => ({ value: g, label: g }))}
-        />
         <button
           className={`admin-perm ${hiddenOnly ? "on" : ""}`}
           onClick={() => setHiddenOnly(!hiddenOnly)}
@@ -84,7 +64,8 @@ export function CatalogPanel({
       </div>
       <section className="admin-panel">
         <div className="admin-catalog">
-          {rows.slice(0, shown).map((t) => {
+          {status === "LoadingFirstPage" && <p className="admin-dim">Loading…</p>}
+          {results.map((t) => {
             const rate = t.plays > 0 ? Math.round((t.saves / t.plays) * 100) : 0;
             return (
               <div className={`admin-row ${t.hidden ? "is-hidden" : ""}`} key={t._id}>
@@ -104,25 +85,23 @@ export function CatalogPanel({
                     {t.nevers} ✕
                   </span>
                 </div>
-                <button
-                  className="admin-toggle"
-                  onClick={() => onToggle(t.trackId, !t.hidden)}
-                >
+                <button className="admin-toggle" onClick={() => onToggle(t.trackId, !t.hidden)}>
                   {t.hidden ? "unhide" : "hide"}
                 </button>
               </div>
             );
           })}
-          {rows.length === 0 && <p className="admin-dim">No tracks match.</p>}
-          {rows.length > shown && (
-            <button className="admin-perm" onClick={() => setShown(shown + PAGE)}>
-              show {Math.min(PAGE, rows.length - shown)} more of {rows.length - shown}
+          {status !== "LoadingFirstPage" && results.length === 0 && (
+            <p className="admin-dim">No tracks match.</p>
+          )}
+          {status === "CanLoadMore" && (
+            <button className="admin-perm" onClick={() => loadMore(PAGE)}>
+              show {PAGE} more
             </button>
           )}
+          {status === "LoadingMore" && <p className="admin-dim">Loading…</p>}
         </div>
       </section>
     </>
   );
 }
-
-/* ---------------- feed ---------------- */

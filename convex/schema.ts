@@ -133,7 +133,9 @@ export default defineSchema({
     artwork: v.string(),
   })
     .index("by_userId", ["userId"])
-    .index("by_user_track", ["userId", "trackId"]),
+    .index("by_user_track", ["userId", "trackId"])
+    // the admin catalogue counts plays per track from this, a page at a time
+    .index("by_trackId", ["trackId"]),
 
   librarySongs: defineTable({
     userId: v.string(),
@@ -227,7 +229,10 @@ export default defineSchema({
     .index("by_owner", ["ownerUserId"])
     // lets the hourly heat job find the few tracks with heat > 0 instead of
     // reading the whole catalogue every hour (see hooks.computeHeat)
-    .index("by_heat", ["heat"]),
+    .index("by_heat", ["heat"])
+    // the admin catalogue's search box (title or artist)
+    .searchIndex("search_title", { searchField: "title" })
+    .searchIndex("search_artist", { searchField: "artist" }),
 
   // ------------------------------------------------------------------ ads
   //

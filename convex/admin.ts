@@ -1,4 +1,6 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
   mutation,
@@ -731,38 +733,81 @@ export const users = query({
   },
 });
 
+/**
+ * The admin catalogue, a page at a time.
+ *
+ * It used to return every track with its swipe counts in one go — reading the
+ * whole tracks table (sound profiles and all) plus every swipe, ~4 MB per
+ * open, sometimes stalling the dashboard for half a minute and spending the
+ * free plan's bandwidth. Now: 100 tracks per page, newest first, counts from
+ * swipes.by_trackId for just those tracks; a search runs the title and artist
+ * search indexes instead.
+ */
 export const catalog = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    paginationOpts: paginationOptsValidator,
+    search: v.optional(v.string()),
+    hiddenOnly: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { paginationOpts, search, hiddenOnly }) => {
+    const empty = { page: [] as CatalogRow[], isDone: true, continueCursor: "" };
     const viewer = await getViewer(ctx);
-    if (!hasPerm(viewer, "catalog.curate")) return null;
-    const [tracks, swipes] = await Promise.all([
-      ctx.db.query("tracks").collect(),
-      ctx.db.query("swipes").collect(),
-    ]);
-    // One pass over the swipes, and only the fields the panel draws. Returning
-    // whole track documents (sound profiles, audio moods, markets…) made this
-    // 2 MB, and filtering all swipes once per track was tracks × swipes.
-    const tally = new Map<string, { plays: number; saves: number; nevers: number }>();
-    for (const s of swipes) {
-      const t = tally.get(s.trackId) ?? { plays: 0, saves: 0, nevers: 0 };
-      t.plays++;
-      if (s.action === "save") t.saves++;
-      if (s.action === "never") t.nevers++;
-      tally.set(s.trackId, t);
+    if (!hasPerm(viewer, "catalog.curate")) return empty;
+
+    const term = (search ?? "").trim().slice(0, 80);
+    if (term) {
+      const [byTitle, byArtist] = await Promise.all([
+        ctx.db.query("tracks").withSearchIndex("search_title", (q) => q.search("title", term)).take(40),
+        ctx.db.query("tracks").withSearchIndex("search_artist", (q) => q.search("artist", term)).take(40),
+      ]);
+      const seen = new Set<string>();
+      const hits = [...byTitle, ...byArtist].filter((t) => {
+        if (seen.has(t.trackId) || (hiddenOnly && !t.hidden)) return false;
+        seen.add(t.trackId);
+        return true;
+      });
+      return { page: await Promise.all(hits.map((t) => catalogRow(ctx, t))), isDone: true, continueCursor: "" };
     }
-    return tracks.map((t) => ({
-      _id: t._id,
-      trackId: t.trackId,
-      title: t.title,
-      artist: t.artist,
-      genre: t.genre,
-      artwork: t.artwork,
-      hidden: t.hidden,
-      ...(tally.get(t.trackId) ?? { plays: 0, saves: 0, nevers: 0 }),
-    }));
+
+    const base = ctx.db.query("tracks").order("desc");
+    const result = await (hiddenOnly ? base.filter((q) => q.eq(q.field("hidden"), true)) : base).paginate(
+      paginationOpts,
+    );
+    return { ...result, page: await Promise.all(result.page.map((t) => catalogRow(ctx, t))) };
   },
 });
+
+type CatalogRow = {
+  _id: Id<"tracks">;
+  trackId: string;
+  title: string;
+  artist: string;
+  genre: string;
+  artwork: string;
+  hidden?: boolean;
+  plays: number;
+  saves: number;
+  nevers: number;
+};
+
+async function catalogRow(ctx: QueryCtx, t: Doc<"tracks">): Promise<CatalogRow> {
+  const swipes = await ctx.db
+    .query("swipes")
+    .withIndex("by_trackId", (q) => q.eq("trackId", t.trackId))
+    .collect();
+  return {
+    _id: t._id,
+    trackId: t.trackId,
+    title: t.title,
+    artist: t.artist,
+    genre: t.genre,
+    artwork: t.artwork,
+    hidden: t.hidden,
+    plays: swipes.length,
+    saves: swipes.filter((s) => s.action === "save").length,
+    nevers: swipes.filter((s) => s.action === "never").length,
+  };
+}
 
 /** Per-user drill-down for the dashboard (requires users.view). */
 export const userDetail = query({

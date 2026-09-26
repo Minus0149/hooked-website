@@ -96,7 +96,6 @@ export function AdminDashboard() {
   const analytics = useQuery(api.admin.analytics, can("stats.view") && open("analytics") ? {} : "skip");
   const moodSummary = useQuery(api.moods.adminSummary, can("stats.view") && open("moods") ? {} : "skip");
   const userData = useQuery(api.admin.users, can("users.view") && open("users") ? {} : "skip");
-  const catalog = useQuery(api.admin.catalog, can("catalog.curate") && open("catalog") ? {} : "skip");
   // small tables, and their pending counts badge the sidebar, so these stay live
   const requests = useQuery(api.access.list, can("users.view") ? {} : "skip");
   const creatorData = useQuery(api.creators.listCreators, can("users.view") ? {} : "skip");
@@ -254,10 +253,8 @@ export function AdminDashboard() {
             }
           />
         )}
-        {activeTab === "catalog" && catalog === undefined && waiting}
-        {activeTab === "catalog" && catalog && (
+        {activeTab === "catalog" && (
           <CatalogPanel
-            catalog={catalog}
             onToggle={(trackId, hidden) => void setHidden({ trackId, hidden })}
             onBackfill={() =>
               backfillHooks({})
