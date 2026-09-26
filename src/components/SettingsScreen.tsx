@@ -28,6 +28,7 @@ import {
 } from "../data/mood";
 import { IconBack, IconChart, IconDroplet, IconHeart, IconMic, IconMove, IconMusic, IconPlayLine, IconShield, IconUser } from "./icons";
 import { BUILD_TAG } from "../buildInfo";
+import { APPLE_CREDIT_NOTE } from "../lib/attribution";
 import { useDialogs } from "./ui/Dialogs";
 
 const BETA_URL = import.meta.env.VITE_BETA_URL ?? "https://hookedcue.com/beta";
@@ -709,6 +710,8 @@ export function SettingsScreen({
           </span>
         </button>
       )}
+      {/* Apple's terms for its previews and artwork (lib/attribution.ts) */}
+      <p className="settings-note">{APPLE_CREDIT_NOTE}</p>
     </PageShell>
   );
 

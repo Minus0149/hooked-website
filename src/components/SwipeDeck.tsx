@@ -12,6 +12,7 @@ import type { Verdict } from "../data/predict";
 import { MoodWheel, type WheelOrigin } from "./MoodWheel";
 import { gesture } from "../design/tokens";
 import { useDialog } from "../lib/dialog";
+import { appleMusicUrl, ITUNES_CREDIT, needsItunesCredit } from "../lib/attribution";
 import { DiscFX, type SaveFxData, type SaveRelease } from "./DiscFX";
 import {
   IconHeart,
@@ -190,13 +191,9 @@ function ScrubBar({
 function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }) {
   const dialog = useDialog({ onClose });
   const q = encodeURIComponent(`${track.title} ${track.artist}`);
-  // Only a pure-numeric id is an iTunes item — creator uploads ("own:⬦") and
-  // imports ("imp:⬦") would 404 as /song/{id}. Those get a storefront search.
-  const appleHref = /^\d+$/.test(track.id)
-    ? `https://music.apple.com/us/song/${track.id}`
-    : `https://music.apple.com/us/search?term=${q}`;
+  // the song itself on Apple Music when the preview is Apple's (lib/attribution)
   const services = [
-    { name: "Apple Music", href: appleHref },
+    { name: "Apple Music", href: appleMusicUrl(track) },
     { name: "Spotify", href: `https://open.spotify.com/search/${q}` },
     { name: "YouTube", href: `https://www.youtube.com/results?search_query=${q}` },
   ];
@@ -236,6 +233,7 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
             <span className="check" style={{ opacity: 1 }}>↗</span>
           </a>
         ))}
+        {needsItunesCredit(track) && <p className="sheet-credit">preview {ITUNES_CREDIT}</p>}
       </motion.div>
     </>
   );
@@ -437,6 +435,8 @@ function TopCard({
           </span>
           {track.artist}
         </p>
+        {/* Apple's condition for playing its previews (lib/attribution.ts) */}
+        {needsItunesCredit(track) && <p className="card-credit">{ITUNES_CREDIT}</p>}
       </div>
       <ScrubBar progress={progress} onSeek={onSeek} />
     </motion.div>
