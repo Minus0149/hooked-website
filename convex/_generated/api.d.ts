@@ -20,6 +20,7 @@ import type * as creators from "../creators.js";
 import type * as crons from "../crons.js";
 import type * as email from "../email.js";
 import type * as emailConfig from "../emailConfig.js";
+import type * as emailTemplate from "../emailTemplate.js";
 import type * as errors from "../errors.js";
 import type * as hooks from "../hooks.js";
 import type * as http from "../http.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   email: typeof email;
   emailConfig: typeof emailConfig;
+  emailTemplate: typeof emailTemplate;
   errors: typeof errors;
   hooks: typeof hooks;
   http: typeof http;
