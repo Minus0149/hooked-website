@@ -3829,3 +3829,10 @@ html[data-motion="reduced"] .drift { animation: none !important; }
 .song-report-reasons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .song-report-note { display: block; margin-top: 4px; font-size: 12.5px; color: var(--muted); font-style: italic; }
 .admin-row-noart { width: 50px; height: 50px; border-radius: 10px; background: var(--surface); flex: none; }
+
+/* a sheet taller than the screen (the report form on a short phone) scrolls
+   instead of pushing its title off the top */
+.sheet { max-height: calc(100% - 24px); overflow-y: auto; overscroll-behavior: contain; }
+/* the full-song sheet's options are links: without this they fell back to the
+   browser's blue underline */
+a.sheet-option { color: var(--text); text-decoration: none; }
