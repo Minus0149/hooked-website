@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "../lib/auth-client";
 import type { Tab } from "./admin/shared";
+import { inApp, navigate } from "../lib/navigate";
 import type { PERMISSIONS as ADMIN_PERMS } from "../../convex/schema";
 
 type Group = "today" | "people" | "catalogue" | "system";
@@ -114,7 +115,7 @@ export function AdminDashboard() {
   useEffect(() => {
     if (!loading && noAccess) {
       const t = window.setTimeout(() => {
-        window.location.assign("/");
+        navigate("/");
       }, 2500);
       return () => window.clearTimeout(t);
     }
@@ -172,7 +173,7 @@ export function AdminDashboard() {
         </nav>
         <div className="admin-side-foot">
           {session.data && <span className="admin-user">{session.data.user.email}</span>}
-          <a className="admin-back" href="/">← back to the app</a>
+          <a className="admin-back" href="/profile" onClick={inApp("/profile")}>← back to the app</a>
         </div>
       </aside>
 

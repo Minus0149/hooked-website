@@ -5,6 +5,7 @@ import { useStore } from "../state/store";
 import { IconBack, IconCheck, IconHeart } from "./icons";
 import { AccessGate } from "./AccessGate";
 import { AuthForm } from "./AuthForm";
+import { inApp } from "../lib/navigate";
 
 export function ProfileScreen({
   isAdmin,
@@ -101,7 +102,7 @@ export function ProfileScreen({
           )}
 
           {isAdmin && (
-            <a className="ob-primary profile-admin-link" href="/admin">
+            <a className="ob-primary profile-admin-link" href="/admin" onClick={inApp("/admin")}>
               Open admin dashboard
             </a>
           )}

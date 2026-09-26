@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { inApp } from "../lib/navigate";
 import { motion } from "motion/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -52,7 +53,7 @@ export function CreatorDashboard() {
           ) : (
             <>
               <p>Sign in first — the creator dashboard is tied to your account.</p>
-              <a className="admin-back" href="/">← back to the app</a>
+              <a className="admin-back" href="/profile" onClick={inApp("/profile")}>← back to the app</a>
             </>
           )}
         </div>
@@ -110,7 +111,7 @@ export function CreatorDashboard() {
               {busy ? "sending…" : "apply as a creator"}
             </button>
           </form>
-          <a className="admin-back" href="/">← back to the app</a>
+          <a className="admin-back" href="/profile" onClick={inApp("/profile")}>← back to the app</a>
         </div>
       </div>
     );
@@ -128,7 +129,7 @@ export function CreatorDashboard() {
               ? "Your creator application wasn't approved for this round."
               : "We'll get back to you. Once you're approved, this page becomes your dashboard."}
           </p>
-          <a className="admin-back" href="/">← back to the app</a>
+          <a className="admin-back" href="/profile" onClick={inApp("/profile")}>← back to the app</a>
         </div>
       </div>
     );

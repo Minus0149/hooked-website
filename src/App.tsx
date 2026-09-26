@@ -39,7 +39,9 @@ import { NewPlaylistSheet, type PlaylistRules } from "./components/NewPlaylistSh
 import { inkOn } from "./lib/contrast";
 import { IconSettings, IconUser } from "./components/icons";
 import { pathForView, pathFromLegacyHash, routeFor, type View } from "./lib/routes";
+import { browserStorage, readStaff, staffNow, writeStaff } from "./lib/staffCache";
 import { ResetPasswordScreen } from "./components/ResetPasswordScreen";
+import { inApp } from "./lib/navigate";
 import {
   DIR_TO_ACTION,
   type LibraryContainer,
@@ -409,6 +411,13 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
 
   const hydratedFor = useRef<string | null>(null);
   const sessionUid = session.data?.user?.id ?? null;
+  // staff status: live when getLibrary has answered, the last known answer for
+  // this account while it (re)loads — it is undefined on every mount, and the
+  // admin button used to vanish with it
+  const staff = staffNow(library, readStaff(browserStorage(), sessionUid));
+  useEffect(() => {
+    if (library && sessionUid) writeStaff(browserStorage(), sessionUid, staff);
+  }, [library, sessionUid, staff.isAdmin, staff.staff]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!sessionUid) {
       hydratedFor.current = null; // truly signed out
@@ -1046,7 +1055,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
           )}
           {view === "profile" && (
             <ProfileScreen
-              isAdmin={library?.isAdmin ?? false}
+              isAdmin={staff.isAdmin}
               onBack={() => setViewWithHistory("home")}
               joinEmail={joinEmail}
             />
@@ -1061,7 +1070,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
               onOpenPage={(p) =>
                 setViewWithHistory(p === "hub" ? "settings" : (`settings:${p}` as View))
               }
-              isAdmin={(library?.isAdmin || (library?.permissions?.length ?? 0) > 0) ?? false}
+              isAdmin={staff.staff}
               onBack={() => setViewWithHistory("home")}
               onOpenProfile={() => setViewWithHistory("profile")}
               onOpenSaveTarget={() => setSheetOpen(true)}
@@ -1258,7 +1267,7 @@ export default function App() {
         </span>
         <h1>404</h1>
         <p>That page doesn&apos;t exist. The songs are all still where you left them.</p>
-        <a className="notfound-home" href="/">back to the deck</a>
+        <a className="notfound-home" href="/" onClick={inApp("/")}>back to the deck</a>
       </div>
     );
   }

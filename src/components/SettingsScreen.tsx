@@ -1,4 +1,5 @@
 ﻿import { useState, type ReactNode } from "react";
+import { inApp } from "../lib/navigate";
 import { DELETE_ACCOUNT_ARGS } from "../lib/accountDeletion";
 import { AnimatePresence, motion } from "motion/react";
 import { useMutation } from "convex/react";
@@ -804,7 +805,7 @@ export function SettingsScreen({
             sub={state.prefs.adsOptOut ? "house ads off" : "house ads on"}
             onOpen={() => onOpenPage("support")}
           />
-          <a className="settings-row" href="/creator" style={{ textDecoration: "none" }}>
+          <a className="settings-row" href="/creator" onClick={inApp("/creator")} style={{ textDecoration: "none" }}>
             <span className="settings-row-icon" style={{ color: "var(--more)" }}>
               <IconMic />
             </span>
@@ -817,7 +818,7 @@ export function SettingsScreen({
             </span>
           </a>
           {isAdmin && (
-            <a className="settings-row" href="/admin" style={{ textDecoration: "none" }}>
+            <a className="settings-row" href="/admin" onClick={inApp("/admin")} style={{ textDecoration: "none" }}>
               <span className="settings-row-icon" style={{ color: "var(--accent)" }}>
                 <IconChart />
               </span>
