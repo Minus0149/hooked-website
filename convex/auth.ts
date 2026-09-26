@@ -7,6 +7,8 @@ import { query } from "./_generated/server";
 import authConfig from "./auth.config";
 import { smtpSettings } from "./emailConfig";
 import { resetEmail, verifyEmail } from "./emailTemplate";
+import { APIError } from "better-auth/api";
+import { NOT_APPROVED_MESSAGE, signupAllowed } from "./access";
 
 const siteUrl = process.env.SITE_URL ?? "https://app.hookedcue.com";
 // falls back to the deployment's own HTTP URL, which Convex provides to every function
@@ -37,6 +39,27 @@ async function sendEmail(
     return;
   }
   await ctx.scheduler.runAfter(0, internal.email.send, { to, subject, html });
+}
+
+/**
+ * The approval status of an email, from whichever context Better Auth hands
+ * the hook: sign-up arrives through an HTTP action (runQuery), but the adapter
+ * can also run inside a mutation (db).
+ */
+async function approvalStatus(ctx: GenericCtx<DataModel>, email: string): Promise<string | null> {
+  const c = ctx as unknown as {
+    runQuery?: (fn: typeof internal.access.approvalFor, args: { email: string }) => Promise<string | null>;
+    db?: { query: (t: "accessRequests") => { withIndex: (i: "by_email", f: (q: { eq: (k: "email", v: string) => unknown }) => unknown) => { unique: () => Promise<{ status: string } | null> } } };
+  };
+  if (c.runQuery) return c.runQuery(internal.access.approvalFor, { email });
+  if (c.db) {
+    const row = await c.db
+      .query("accessRequests")
+      .withIndex("by_email", (q) => q.eq("email", email.trim().toLowerCase()))
+      .unique();
+    return row?.status ?? null;
+  }
+  return null;
 }
 
 export const createAuth = (ctx: GenericCtx<DataModel>) => {
@@ -84,6 +107,21 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
       sendVerificationEmail: async ({ user, url }) => {
         const mail = verifyEmail(user.email, url);
         await sendEmail(ctx, user.email, mail.subject, mail.html, `verify ${user.email}: ${url}`);
+      },
+    },
+    // Accounts are invite-only: hookedcue is a beta you apply for, and only an
+    // approved email may create an account. Everyone else gets the message and
+    // the app points them at the application form.
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => {
+            const status = await approvalStatus(ctx, String(user.email ?? ""));
+            if (!signupAllowed(status)) {
+              throw new APIError("FORBIDDEN", { message: NOT_APPROVED_MESSAGE });
+            }
+          },
+        },
       },
     },
     plugins: [crossDomain({ siteUrl }), convex({ authConfig })],

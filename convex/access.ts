@@ -1,5 +1,8 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { inviteEmail } from "./emailTemplate";
 import {
   cleanText,
   enforceRateLimit,
@@ -247,6 +250,7 @@ export const decide = mutation({
       decidedAt: new Date().toISOString(),
       decidedBy: profile?.email ?? user.id,
     });
+    if (status === "approved") await sendInvite(ctx, id);
   },
 });
 
@@ -328,9 +332,10 @@ export const approve = internalMutation({
         .unique();
       if (existing) {
         await ctx.db.patch(existing._id, { status: "approved", decidedAt: now, decidedBy: "operator" });
+        await sendInvite(ctx, existing._id);
         done.push({ email, was: existing.status });
       } else {
-        await ctx.db.insert("accessRequests", {
+        const newId = await ctx.db.insert("accessRequests", {
           email,
           name: nameFor("", email),
           source: "landing",
@@ -341,9 +346,52 @@ export const approve = internalMutation({
           decidedBy: "operator",
           invited: false,
         });
+        await sendInvite(ctx, newId);
         done.push({ email, was: "new" });
       }
     }
     return { approved: done, invalid };
   },
 });
+
+/**
+ * Accounts are invite-only: an email may create an account only once its
+ * beta application is approved. The sign-up hook in auth.ts asks this, and the
+ * message below is what the app shows when the answer is no.
+ */
+export const NOT_APPROVED_MESSAGE =
+  "This email isn't approved yet — apply for the beta and we'll email you when you're in.";
+
+export function signupAllowed(status: string | null | undefined): boolean {
+  return status === "approved";
+}
+
+/** Where an invite sends someone: the app's create-account screen, email filled in. */
+export function joinUrl(site: string, email: string): string {
+  return `${site.replace(/\/+$/, "")}/join?email=${encodeURIComponent(email)}`;
+}
+
+export const approvalFor = internalQuery({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    const row = await ctx.db
+      .query("accessRequests")
+      .withIndex("by_email", (q) => q.eq("email", email.trim().toLowerCase()))
+      .unique();
+    return row?.status ?? null;
+  },
+});
+
+/**
+ * Email the "you're in" invite once, when a request is approved. Scheduled, so
+ * a slow mail server never holds up the admin's click. `invited` records it,
+ * so approving again (or un-rejecting) never sends a second copy.
+ */
+async function sendInvite(ctx: MutationCtx, id: Id<"accessRequests">) {
+  const row = await ctx.db.get(id);
+  if (!row || row.status !== "approved" || row.invited) return;
+  const site = process.env.SITE_URL ?? "https://app.hookedcue.com";
+  const mail = inviteEmail(row.name, joinUrl(site, row.email));
+  await ctx.scheduler.runAfter(0, internal.email.send, { to: row.email, subject: mail.subject, html: mail.html });
+  await ctx.db.patch(id, { invited: true });
+}
