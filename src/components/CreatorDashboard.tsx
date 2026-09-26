@@ -6,6 +6,7 @@ import { api } from "../../convex/_generated/api";
 import { authClient } from "../lib/auth-client";
 import type { Id } from "../../convex/_generated/dataModel";
 import { ImportPanel } from "./creator/ImportPanel";
+import { PromotePanel } from "./creator/PromotePanel";
 import { TrackCard } from "./creator/TrackCard";
 import type { Track } from "./creator/types";
 import { filterTracks, TRACK_FILTERS, type TrackFilter } from "./creator/filter";
@@ -200,6 +201,8 @@ function CreatorWorkspace({ tracks, curator }: { tracks: Track[]; curator: boole
           {saveRate}% save rate
         </p>
       </header>
+
+      <PromotePanel tracks={tracks} />
 
       <ImportPanel />
 

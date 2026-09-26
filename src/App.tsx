@@ -7,6 +7,7 @@ import { coerceTaste } from "./data/taste";
 import { coercePrefs } from "./data/prefs";
 import type { UserPrefs } from "./data/prefs";
 import { shouldAskForAd } from "./lib/ads-scheduler";
+import { PROMOTED_LISTEN_MS, promotedDue, promotedOutcome } from "./lib/promoted";
 import { enqueue, flush } from "./lib/outbox";
 import { SponsoredCard, type AdCardData } from "./components/SponsoredCard";
 import { authClient } from "./lib/auth-client";
@@ -142,6 +143,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     swipe,
     back,
     jumpTo,
+    injectNext,
     setSaveTarget,
     createPlaylist,
     deletePlaylist,
@@ -713,6 +715,37 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     [activeAd, recordAdEvent, signedIn, sessionUid],
   );
 
+  // ----- promoted songs: an artist paid for listeners (lib/promoted.ts) -----
+  // The deck asks every N swipes; the server (promotions.nextPromoted) owns the
+  // caps and picks the campaign. The song is a normal card, labelled Promoted.
+  const recordPromoted = useMutation(api.promotions.recordPromoted);
+  const promoSwipes = useRef(0);
+  const promoEvery = useRef(10);
+  const [promoDue, setPromoDue] = useState(false);
+  const promoPick = useQuery(
+    api.promotions.nextPromoted,
+    promoDue ? { anonKey: anonKeyRef.current ?? undefined } : "skip",
+  );
+  useEffect(() => {
+    if (!promoDue || promoPick === undefined) return;
+    setPromoDue(false);
+    promoSwipes.current = 0;
+    if (!promoPick) return;
+    promoEvery.current = promoPick.everyNCards;
+    injectNext({ ...toLocal(promoPick.track as ServerTrackWithHooks), promotedCampaignId: promoPick.campaignId });
+    void recordPromoted({
+      campaignId: promoPick.campaignId,
+      anonKey: anonKeyRef.current ?? undefined,
+      event: "shown",
+    }).catch(() => undefined);
+  }, [promoDue, promoPick, injectNext, recordPromoted]);
+  const handleSwipeForPromoted = useCallback(() => {
+    promoSwipes.current += 1;
+    if (promotedDue({ swipesSince: promoSwipes.current, everyNCards: promoEvery.current, optedOut: state.prefs.adsOptOut })) {
+      setPromoDue(true);
+    }
+  }, [state.prefs.adsOptOut]);
+
   const onDeck = state.queue[0] ?? null;
   const next = state.queue[1] ?? null;
   const previous = state.history.length
@@ -746,13 +779,37 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     },
   );
 
+  // a promoted card counts as heard after 3 s of actual playing (paused time
+  // doesn't count; the server dedupes per listener, so a repeat is harmless)
+  const promotedOnDeck = onDeck?.promotedCampaignId;
+  useEffect(() => {
+    if (!promotedOnDeck || !playing) return;
+    const t = window.setTimeout(() => {
+      void recordPromoted({
+        campaignId: promotedOnDeck as never,
+        anonKey: anonKeyRef.current ?? undefined,
+        event: "listen",
+        playedMs: PROMOTED_LISTEN_MS,
+      }).catch(() => undefined);
+    }, PROMOTED_LISTEN_MS);
+    return () => window.clearTimeout(t);
+  }, [promotedOnDeck, playing, recordPromoted]);
+
   const handleSwipe = useCallback(
     (dir: SwipeDir) => {
       const t = TOAST_FOR[dir];
       if (t) showToast(t.msg, t.icon);
       handleSwipeForAds();
+      handleSwipeForPromoted();
       const track = onDeck;
       const action = DIR_TO_ACTION[dir];
+      if (track?.promotedCampaignId) {
+        void recordPromoted({
+          campaignId: track.promotedCampaignId as never,
+          anonKey: anonKeyRef.current ?? undefined,
+          event: promotedOutcome(dir),
+        }).catch(() => undefined);
+      }
       swipe(action);
       if (signedIn && track) {
         const playingHookId = hookRef.current?.id;
@@ -770,7 +827,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
         );
       }
     },
-    [swipe, showToast, onDeck, signedIn, recordSwipe, syncWrite, handleSwipeForAds],
+    [swipe, showToast, onDeck, signedIn, recordSwipe, syncWrite, handleSwipeForAds, handleSwipeForPromoted, recordPromoted],
   );
 
   const hookRef = useRef(hook);

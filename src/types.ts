@@ -9,6 +9,8 @@ export interface HookWindow {
 
 export interface Track {
   id: string;
+  /** set when this card is a paid promotion: its campaign (lib/promoted.ts) */
+  promotedCampaignId?: string;
   title: string;
   artist: string;
   album: string;

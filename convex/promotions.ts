@@ -532,6 +532,42 @@ export const expireDue = internalMutation({
 
 // ------------------------------------------------------------------ dealing
 
+/**
+ * The promoted song in the same shape as the catalogue file, so a client with
+ * an older catalogue (or none) can still play it. Explicit fields only, like
+ * tracks.list: owner ids and storage ids never leave the server.
+ */
+async function publicTrack(ctx: QueryCtx, trackId: string) {
+  const t = await ctx.db
+    .query("tracks")
+    .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
+    .unique();
+  if (!t || t.hidden) return null;
+  const hooks = (await ctx.db
+    .query("hooks")
+    .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
+    .collect())
+    .filter((h) => h.active)
+    .sort((a, b) => (a.rank ?? a.order) - (b.rank ?? b.order) || a.order - b.order);
+  return {
+    trackId: t.trackId,
+    title: t.title,
+    artist: t.artist,
+    album: t.album,
+    artwork: t.artwork,
+    previewUrl: t.previewUrl,
+    durationMs: t.durationMs,
+    genre: t.genre,
+    accent: t.accent,
+    energy: t.energy,
+    sound: t.sound,
+    audioMood: t.audioMood,
+    vocal: t.vocal,
+    audioUrl: t.audioStorageId ? await ctx.storage.getUrl(t.audioStorageId) : null,
+    hooks: hooks.map((h) => ({ id: String(h._id), startMs: h.startMs, durationMs: h.durationMs, label: h.label })),
+  };
+}
+
 const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 async function viewerKey(ctx: QueryCtx, anonKey: string | undefined): Promise<string | null> {
@@ -575,7 +611,10 @@ export const nextPromoted = query({
         .query("promotionViews")
         .withIndex("by_campaign_viewer", (q) => q.eq("campaignId", c._id).eq("viewer", viewer))
         .first();
-      if (!seen) return { campaignId: c._id, trackId: c.trackId, everyNCards: config.everyNCards };
+      if (seen) continue;
+      const track = await publicTrack(ctx, c.trackId);
+      if (!track) continue; // hidden or removed since it was bought
+      return { campaignId: c._id, trackId: c.trackId, everyNCards: config.everyNCards, track };
     }
     return null;
   },
@@ -686,7 +725,24 @@ export const adminOverview = query({
     const rates = await ctx.db.query("promotionRates").take(200);
     const codes = await ctx.db.query("promotionCodes").order("desc").take(200);
     const paid = orders.filter((o) => o.status === "paid");
+    const artists = (
+      await ctx.db
+        .query("creators")
+        .withIndex("by_status", (q) => q.eq("status", "approved"))
+        .take(500)
+    ).map((c) => ({ userId: c.userId, artistName: c.artistName, email: c.email }));
+    const titles = new Map<string, string>();
+    for (const c of campaigns) {
+      if (titles.has(c.trackId)) continue;
+      const t = await ctx.db
+        .query("tracks")
+        .withIndex("by_trackId", (q) => q.eq("trackId", c.trackId))
+        .unique();
+      titles.set(c.trackId, t?.title ?? c.trackId);
+    }
     return {
+      artists,
+      titles: Object.fromEntries(titles),
       config,
       paymentsConfigured: paymentsConfigured(),
       webhookConfigured: Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),

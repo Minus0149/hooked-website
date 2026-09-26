@@ -15,6 +15,7 @@ import { CreatorsPanel } from "./admin/Creators";
 import { UsersPanel } from "./admin/Users";
 import { CatalogPanel } from "./admin/Catalog";
 import { AdsPanel } from "./admin/AdsPanel";
+import { PromotionsPanel } from "./admin/PromotionsPanel";
 import { ConfigPanel } from "./admin/ConfigPanel";
 import { ReportsPanel } from "./admin/ReportsPanel";
 import { FeedPanel } from "./admin/Feed";
@@ -86,6 +87,7 @@ export function AdminDashboard() {
     }
     if (allowed("stats.view")) t.push({ group: "catalogue", id: "moods", label: "Moods", icon: "◐" });
     if (allowed("ads.manage")) t.push({ group: "catalogue", id: "ads", label: "Ads", icon: "▣" });
+    if (allowed("ads.manage")) t.push({ group: "catalogue", id: "promotions", label: "Promotion", icon: "₹" });
     if (allowed("stats.view")) t.push({ group: "system", id: "analytics", label: "Analytics", icon: "▤" });
     if (allowed("config.manage")) t.push({ group: "system", id: "config", label: "Config", icon: "⚙" });
     t.push({ group: "system", id: "reports", label: "Reports", icon: "⚠" });
@@ -303,6 +305,7 @@ export function AdminDashboard() {
           />
         )}
         {activeTab === "ads" && <AdsPanel />}
+        {activeTab === "promotions" && <PromotionsPanel />}
         {activeTab === "config" && <ConfigPanel />}
       </motion.main>
     </div>

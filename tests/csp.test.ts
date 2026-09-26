@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 // @ts-expect-error - plain ESM shared with vite.config.ts
-import { connectSources, CONNECT_PLACEHOLDER } from "../scripts/lib/csp.mjs";
+import { CHECKOUT_FRAMES, CHECKOUT_SCRIPT, connectSources, CONNECT_PLACEHOLDER } from "../scripts/lib/csp.mjs";
 
 /**
  * A CSP that names the wrong backend doesn't fail loudly: the page renders and
@@ -20,6 +20,8 @@ describe("the backend the page may connect to", () => {
       "https://happy-otter-123.convex.site",
       "wss://happy-otter-123.convex.site",
       "https://audio-ssl.itunes.apple.com",
+      "https://api.razorpay.com",
+      "https://lumberjack.razorpay.com",
     ]);
   });
 
@@ -28,8 +30,18 @@ describe("the backend the page may connect to", () => {
     expect(src).toContain("ws://127.0.0.1:3210");
   });
 
-  it("allows only itself and the preview CDN when no backend is configured", () => {
-    expect(connectSources({})).toBe("'self' https://audio-ssl.itunes.apple.com");
+  it("allows only itself, the preview CDN and Razorpay when no backend is configured", () => {
+    expect(connectSources({})).toBe(
+      "'self' https://audio-ssl.itunes.apple.com https://api.razorpay.com https://lumberjack.razorpay.com",
+    );
+  });
+
+  it("lets Razorpay's checkout load, frame its payment page and call home, in both copies", () => {
+    for (const file of ["index.html", "public/_headers"]) {
+      const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+      expect(text).toMatch(new RegExp(`script-src [^;]*${CHECKOUT_SCRIPT.replace(/\./g, "\.")}`));
+      expect(text).toContain(`frame-src ${CHECKOUT_FRAMES};`);
+    }
   });
 
   it("lets the hook editor fetch a preview to draw its waveform", () => {

@@ -3841,3 +3841,62 @@ a.sheet-option { color: var(--text); text-decoration: none; }
    a focus() or scrollIntoView could still scroll it (parked, off-screen sheets
    and sleeves make it 910px tall inside 700), shifting everything; clip can't. */
 .phone { overflow: hidden; overflow: clip; }
+
+/* a paid, promoted song (lib/promoted.ts) — labelled on the card itself */
+.card-promoted {
+  align-self: flex-start;
+  margin: 0 0 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(8, 8, 12, 0.55);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: help;
+}
+
+/* ---------- creator: promote a song (components/creator/PromotePanel.tsx) ---------- */
+.promote {
+  border: 1px solid var(--line); border-radius: 18px; padding: 18px; margin-bottom: 18px;
+  background: linear-gradient(160deg, rgba(255,61,113,.08), rgba(19,19,27,.5) 55%);
+}
+.promote-head h3 { font-family: var(--font-display); font-size: 18px; margin: 0 0 6px; }
+.promote-head p { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 0 14px; max-width: 72ch; }
+.promote-head a, .promote-fine a { color: var(--accent); }
+.promote-form { display: flex; flex-direction: column; gap: 12px; }
+.promote-note { margin: 0; font-size: 12.5px; color: var(--muted); }
+.promote-note.on { color: var(--save); font-weight: 600; }
+.promote-field { display: flex; flex-direction: column; gap: 6px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.promote-packages { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.promote-pkg {
+  display: flex; flex-direction: column; gap: 3px; text-align: left; cursor: pointer;
+  padding: 12px; border-radius: 14px; border: 1px solid var(--line); background: rgba(8,8,12,.55); color: var(--text);
+  font: inherit;
+}
+.promote-pkg span { font-size: 12px; color: var(--muted); }
+.promote-pkg b { font-size: 16px; margin-top: 4px; }
+.promote-pkg s { color: var(--muted); font-weight: 400; font-size: 12px; }
+.promote-pkg em { font-style: normal; font-size: 11px; color: var(--muted); }
+.promote-pkg.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.promote-pkg:disabled { opacity: .45; cursor: not-allowed; }
+.promote-code { display: flex; gap: 8px; }
+.promote-code .auth-input { flex: 1; min-width: 0; }
+.promote-sum { margin: 0; border-top: 1px solid var(--line); padding-top: 10px; }
+.promote-sum div { display: flex; justify-content: space-between; font-size: 13.5px; color: var(--muted); padding: 2px 0; }
+.promote-sum dd { margin: 0; }
+.promote-sum .total { color: var(--text); font-weight: 700; font-size: 15px; padding-top: 6px; }
+.promote-pay { align-self: stretch; padding: 13px; font-weight: 700; }
+.promote-fine { margin: 0; font-size: 12px; color: var(--muted); }
+.promote-campaigns { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
+.promote-campaigns h4 { margin: 0; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.promote-campaign { border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 7px; }
+.promote-campaign header { display: flex; justify-content: space-between; gap: 8px; }
+.promote-campaign p { margin: 0; font-size: 12.5px; color: var(--muted); }
+.promote-status { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.promote-status.active { color: var(--save); }
+.promote-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+.promote-bar i { display: block; height: 100%; background: var(--accent); }
+.promo-pkgs input { width: 100%; min-width: 60px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text); padding: 6px 8px; font: inherit; }

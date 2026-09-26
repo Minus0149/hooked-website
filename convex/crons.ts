@@ -99,4 +99,16 @@ crons.daily(
   {},
 );
 
+/**
+ * Paid promotion: end campaigns whose delivery window is over and refund the
+ * listeners they didn't reach, pro rata (convex/promotions.ts). Daily is
+ * enough — the refund rule counts listeners, not hours.
+ */
+crons.daily(
+  "end overdue promotions and refund the rest",
+  { hourUTC: 6, minuteUTC: 41 },
+  internal.promotions.expireDue,
+  {},
+);
+
 export default crons;

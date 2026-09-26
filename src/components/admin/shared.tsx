@@ -22,6 +22,7 @@ export type Tab =
   | "catalog"
   | "moods"
   | "ads"
+  | "promotions"
   | "reports"
   | "songReports"
   | "config"

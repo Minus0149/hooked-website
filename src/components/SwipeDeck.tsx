@@ -16,6 +16,7 @@ import { MoodWheel, type WheelOrigin } from "./MoodWheel";
 import { gesture } from "../design/tokens";
 import { useDialog } from "../lib/dialog";
 import { appleMusicUrl, ITUNES_CREDIT, needsItunesCredit } from "../lib/attribution";
+import { PROMOTED_LABEL, PROMOTED_WHY } from "../lib/promoted";
 import { DiscFX, type SaveFxData, type SaveRelease } from "./DiscFX";
 import {
   IconHeart,
@@ -432,6 +433,12 @@ function TopCard({
       </motion.div>
 
       <div className="card-meta">
+        {track.promotedCampaignId && (
+          // paid content is marked on the card itself (ASCI); the title says why
+          <span className="card-promoted" title={PROMOTED_WHY}>
+            {PROMOTED_LABEL}
+          </span>
+        )}
         <span className="card-genre">
           {track.genre}
           {verdict?.worthShowing && verdict.chance >= 0.7 && (
