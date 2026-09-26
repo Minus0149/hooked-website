@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { htmlToText, smtpSettings } from "./emailConfig";
+import { EMAIL_LOGO_CID, EMAIL_LOGO_PNG_BASE64 } from "./emailLogo";
 
 /**
  * Send one transactional email through our mailcow server over SMTP.
@@ -36,7 +37,11 @@ export const send = internalAction({
       socketTimeout: 20_000,
     });
     try {
-      const info = await transport.sendMail({ from: s.from, to, subject, html, text: htmlToText(html) });
+      // the logo rides inside the message (cid:), so it shows before "load images"
+      const attachments = html.includes(`cid:${EMAIL_LOGO_CID}`)
+        ? [{ filename: "hookedcue.png", content: Buffer.from(EMAIL_LOGO_PNG_BASE64, "base64"), cid: EMAIL_LOGO_CID, contentType: "image/png" }]
+        : [];
+      const info = await transport.sendMail({ from: s.from, to, subject, html, text: htmlToText(html), attachments });
       console.log(`[email] sent "${subject}" (${info.messageId})`);
       return { sent: true as const };
     } catch (err) {

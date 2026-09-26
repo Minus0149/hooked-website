@@ -4,14 +4,18 @@
  * Email clients are not browsers: no stylesheets, no web fonts to rely on,
  * images blocked until the reader allows them, and Outlook still lays out with
  * tables. So this is a table with inline styles, the wordmark is live text
- * (it reads even with images off), and the only image is the 26 KB app icon.
+ * (it reads even with images off), and the only image is the app icon, sent
+ * inside the email as an inline attachment so no inbox blocks it.
  * Dark, like the app: #08080c page, #13131b card, pink #ff3d71 button.
  *
  * Everything a caller passes is escaped here, including the reader's own email
  * address — it is user input and it lands inside HTML.
  */
 
-export const EMAIL_ICON_URL = "https://hookedcue.com/apple-touch-icon.png";
+import { EMAIL_LOGO_CID } from "./emailLogo";
+
+/** The logo travels inside the email (convex/emailLogo.ts), so no inbox blocks it. */
+export const EMAIL_ICON_SRC = `cid:${EMAIL_LOGO_CID}`;
 const SITE = "https://hookedcue.com";
 
 export type EmailContent = {
@@ -54,22 +58,22 @@ export function renderEmail(c: EmailContent): string {
     .join("");
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"><title>${escapeHtml(c.heading)}</title></head>
-<body style="margin:0;padding:0;background:#08080c;">
+<body bgcolor="#08080c" style="margin:0;padding:0;background:#08080c;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#08080c;">${escapeHtml(c.preheader)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#08080c;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#08080c" style="background:#08080c;">
 <tr><td align="center" style="padding:32px 16px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
 <tr><td style="padding:0 4px 20px;">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td style="padding-right:12px;"><img src="${EMAIL_ICON_URL}" width="44" height="44" alt="" style="display:block;border:0;border-radius:11px;"></td>
+<td style="padding-right:12px;"><img src="${EMAIL_ICON_SRC}" width="44" height="44" alt="hookedcue" style="display:block;border:0;border-radius:11px;"></td>
 <td style="font:800 24px/1 ${FONT};letter-spacing:-0.5px;color:#f4f2ee;">hookedcue<span style="color:#ff3d71;">.</span></td>
 </tr></table>
 </td></tr>
-<tr><td style="background:#13131b;border:1px solid #23232e;border-radius:20px;padding:32px 28px;">
+<tr><td bgcolor="#13131b" style="background:#13131b;border:1px solid #23232e;border-radius:20px;padding:32px 28px;">
 <h1 style="margin:0 0 16px;font:700 24px/1.25 ${FONT};letter-spacing:-0.3px;color:#f4f2ee;">${escapeHtml(c.heading)}</h1>
 ${paras}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px;"><tr>
-<td style="border-radius:999px;background:#ff3d71;"><a href="${escapeHtml(url)}" style="display:inline-block;padding:14px 28px;font:700 16px/1 ${FONT};color:#0b0b10;text-decoration:none;border-radius:999px;">${escapeHtml(c.button.label)}</a></td>
+<td bgcolor="#ff3d71" style="border-radius:999px;background:#ff3d71;"><a href="${escapeHtml(url)}" style="display:inline-block;padding:14px 28px;font:700 16px/1 ${FONT};color:#0b0b10;text-decoration:none;border-radius:999px;">${escapeHtml(c.button.label)}</a></td>
 </tr></table>
 ${c.note ? `<p style="margin:0 0 12px;font:400 13px/1.5 ${FONT};color:#8e8c99;">${escapeHtml(c.note)}</p>` : ""}
 <p style="margin:0;font:400 12px/1.5 ${FONT};color:#6f6d7a;">Button not working? Paste this into your browser:<br><a href="${escapeHtml(url)}" style="color:#ff7aa0;word-break:break-all;">${escapeHtml(url)}</a></p>
@@ -111,6 +115,24 @@ export function resetEmail(email: string, url: string): { subject: string; html:
       paragraphs: [`Someone (hopefully you) asked to reset the password for **${email}**.`],
       button: { label: "Choose a new password", url },
       note: "The link works once and expires in an hour. If it wasn't you, ignore this and your password stays as it was.",
+    }),
+  };
+}
+
+/** Approved for the beta: the only way in is this link — accounts are invite-only. */
+export function inviteEmail(name: string, url: string): { subject: string; html: string } {
+  const first = name.trim().split(/\s+/)[0] || "there";
+  return {
+    subject: "you're in — welcome to the hookedcue beta",
+    html: renderEmail({
+      preheader: "Your spot in the beta is ready.",
+      heading: `You're in, ${first}.`,
+      paragraphs: [
+        "Your spot in the hookedcue beta is ready. Create your account with this email address and your library starts filling from the first swipe.",
+        "Every song starts at its hook — skip, save, or ask for more like it.",
+      ],
+      button: { label: "Create my account", url },
+      note: "This invite is for this email address only. If you weren't expecting it, you can ignore it.",
     }),
   };
 }

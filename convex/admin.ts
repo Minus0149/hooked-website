@@ -869,8 +869,10 @@ export const setPermission = mutation({
  * vouching, so it skips the invite queue) or promotes the one they have.
  */
 export const grantAdmin = internalMutation({
-  args: { email: v.string() },
-  handler: async (ctx, { email }) => {
+  // revoke: true takes admin away again — for a temporary test admin, and so
+  // removing someone's admin never needs a second admin to do it
+  args: { email: v.string(), revoke: v.optional(v.boolean()) },
+  handler: async (ctx, { email, revoke }) => {
     const target = email.trim().toLowerCase();
     const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "user",
@@ -882,6 +884,10 @@ export const grantAdmin = internalMutation({
       .query("profiles")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .unique();
+    if (revoke) {
+      if (profile) await ctx.db.patch(profile._id, { isAdmin: false });
+      return { email: target, revoked: Boolean(profile) };
+    }
     if (profile) {
       await ctx.db.patch(profile._id, { isAdmin: true, suspended: false });
       return { email: target, created: false };

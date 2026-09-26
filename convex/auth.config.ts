@@ -18,7 +18,8 @@ import type { AuthConfig } from "convex/server";
  * same CONVEX_SITE_URL, so it stays as the library set it. Only the fetch URL is
  * corrected, to the domain that actually answers.
  */
-const authSiteUrl = (process.env.BETTER_AUTH_URL ?? "https://cnx.hookedcue.com").replace(
+// falls back to the deployment's own HTTP URL, which Convex provides to every function
+const authSiteUrl = (process.env.BETTER_AUTH_URL ?? process.env.CONVEX_SITE_URL ?? "").replace(
   /\/+$/,
   "",
 );
