@@ -9,7 +9,7 @@
  * indexes on the server instead of filtering an in-memory list.
  */
 import { useEffect, useState } from "react";
-import { usePaginatedQuery } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { art } from "../../lib/art";
 
@@ -32,11 +32,15 @@ export function CatalogPanel({
     return () => window.clearTimeout(t);
   }, [typed]);
 
-  const { results, status, loadMore } = usePaginatedQuery(
+  const paged = usePaginatedQuery(
     api.admin.catalog,
-    { search: search || undefined, hiddenOnly: hiddenOnly || undefined },
+    search ? "skip" : { hiddenOnly: hiddenOnly || undefined },
     { initialNumItems: PAGE },
   );
+  const found = useQuery(api.admin.catalogSearch, search ? { search, hiddenOnly: hiddenOnly || undefined } : "skip");
+  const results = search ? (found ?? []) : paged.results;
+  const status = search ? (found === undefined ? "LoadingFirstPage" : "Exhausted") : paged.status;
+  const loadMore = paged.loadMore;
 
   return (
     <>

@@ -746,34 +746,45 @@ export const users = query({
 export const catalog = query({
   args: {
     paginationOpts: paginationOptsValidator,
-    search: v.optional(v.string()),
     hiddenOnly: v.optional(v.boolean()),
   },
-  handler: async (ctx, { paginationOpts, search, hiddenOnly }) => {
-    const empty = { page: [] as CatalogRow[], isDone: true, continueCursor: "" };
+  handler: async (ctx, { paginationOpts, hiddenOnly }) => {
     const viewer = await getViewer(ctx);
-    if (!hasPerm(viewer, "catalog.curate")) return empty;
-
-    const term = (search ?? "").trim().slice(0, 80);
-    if (term) {
-      const [byTitle, byArtist] = await Promise.all([
-        ctx.db.query("tracks").withSearchIndex("search_title", (q) => q.search("title", term)).take(40),
-        ctx.db.query("tracks").withSearchIndex("search_artist", (q) => q.search("artist", term)).take(40),
-      ]);
-      const seen = new Set<string>();
-      const hits = [...byTitle, ...byArtist].filter((t) => {
-        if (seen.has(t.trackId) || (hiddenOnly && !t.hidden)) return false;
-        seen.add(t.trackId);
-        return true;
-      });
-      return { page: await Promise.all(hits.map((t) => catalogRow(ctx, t))), isDone: true, continueCursor: "" };
+    // a real (empty) page, so usePaginatedQuery can read it
+    if (!hasPerm(viewer, "catalog.curate")) {
+      const none = await ctx.db
+        .query("tracks")
+        .filter((q) => q.eq(q.field("trackId"), ""))
+        .paginate({ ...paginationOpts, numItems: 1 });
+      return { ...none, page: [] as CatalogRow[] };
     }
-
     const base = ctx.db.query("tracks").order("desc");
     const result = await (hiddenOnly ? base.filter((q) => q.eq(q.field("hidden"), true)) : base).paginate(
       paginationOpts,
     );
     return { ...result, page: await Promise.all(result.page.map((t) => catalogRow(ctx, t))) };
+  },
+});
+
+/** The catalogue's search box: title and artist search indexes, up to 40 hits each. */
+export const catalogSearch = query({
+  args: { search: v.string(), hiddenOnly: v.optional(v.boolean()) },
+  handler: async (ctx, { search, hiddenOnly }): Promise<CatalogRow[] | null> => {
+    const viewer = await getViewer(ctx);
+    if (!hasPerm(viewer, "catalog.curate")) return null;
+    const term = search.trim().slice(0, 80);
+    if (!term) return [];
+    const [byTitle, byArtist] = await Promise.all([
+      ctx.db.query("tracks").withSearchIndex("search_title", (q) => q.search("title", term)).take(40),
+      ctx.db.query("tracks").withSearchIndex("search_artist", (q) => q.search("artist", term)).take(40),
+    ]);
+    const seen = new Set<string>();
+    const hits = [...byArtist, ...byTitle].filter((t) => {
+      if (seen.has(t.trackId) || (hiddenOnly && !t.hidden)) return false;
+      seen.add(t.trackId);
+      return true;
+    });
+    return Promise.all(hits.map((t) => catalogRow(ctx, t)));
   },
 });
 
