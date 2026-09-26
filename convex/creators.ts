@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { runtimeFor } from "./runtime";
 import { publishable } from "./moods";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { components } from "./_generated/api";
 import {
   cleanAccent,
   cleanText,
@@ -535,5 +536,53 @@ export const decideCreator = mutation({
       decidedAt: new Date().toISOString(),
       decidedBy: profile?.email ?? user.id,
     });
+  },
+});
+
+/**
+ * The name a creator is shown under when the operator grants the role: what
+ * was asked for, else the address's local part, never shorter than two letters.
+ */
+export function creatorNameFor(artistName: string | undefined, email: string): string {
+  const asked = cleanText(artistName ?? "", MAX.artistName);
+  if (asked.length >= 2) return asked;
+  const local = email.split("@")[0] ?? "";
+  return local.length >= 2 ? local : "creator";
+}
+
+/**
+ * Make an existing account an approved creator. Operator-only: internal, so no
+ * client can call it — only `npx convex run` by someone holding deploy access,
+ * the same trust as admin:grantAdmin. Used for the Google Play reviewer
+ * account, so the one set of sign-in details reaches every part of the app.
+ *
+ *   npx convex run --prod creators:grant '{"email":"hello@hookedcue.com","artistName":"hookedcue review"}'
+ */
+export const grant = internalMutation({
+  args: { email: v.string(), artistName: v.optional(v.string()) },
+  handler: async (ctx, { email, artistName }) => {
+    const target = email.trim().toLowerCase();
+    const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: target }],
+    })) as { _id: string; email: string } | null;
+    if (!user) throw new Error(`No account for ${target} — sign up first, then run this.`);
+    const userId = String(user._id);
+    const now = new Date().toISOString();
+    const existing = await getCreator(ctx, userId);
+    if (existing) {
+      await ctx.db.patch(existing._id, { status: "approved", decidedAt: now, decidedBy: "operator" });
+      return { email: target, created: false };
+    }
+    await ctx.db.insert("creators", {
+      userId,
+      email: user.email,
+      artistName: creatorNameFor(artistName, target),
+      status: "approved",
+      appliedAt: now,
+      decidedAt: now,
+      decidedBy: "operator",
+    });
+    return { email: target, created: true };
   },
 });
