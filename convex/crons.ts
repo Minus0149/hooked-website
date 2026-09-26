@@ -62,6 +62,14 @@ crons.daily(
   internal.ads.sweepOldEvents,
 );
 
+// The privacy policy's promise: crash reports go after 90 days, song reports
+// 90 days after someone acted on them (open ones wait for a person).
+crons.daily(
+  "delete reports past retention",
+  { hourUTC: 4, minuteUTC: 37 },
+  internal.retention.sweepReports,
+);
+
 /**
  * Rebuild "people who reacted to this reacted to that" from the swipe log.
  *

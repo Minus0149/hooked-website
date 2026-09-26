@@ -334,7 +334,9 @@ export default defineSchema({
   })
     .index("by_status", ["status", "createdAt"])
     .index("by_track_status", ["trackId", "status"])
-    .index("by_reporter_track", ["reporter", "trackId"]),
+    .index("by_reporter_track", ["reporter", "trackId"])
+    // deleted 90 days after they were resolved (retention.sweepReports)
+    .index("by_status_resolved", ["status", "resolvedAt"]),
 
   errorReports: defineTable({
     message: v.string(),
@@ -352,7 +354,9 @@ export default defineSchema({
     at: v.number(),
   })
     // account deletion removes a person's crash reports (library.deleteMyAccount)
-    .index("by_userId", ["userId"]),
+    .index("by_userId", ["userId"])
+    // the 90-day retention sweep (retention.sweepReports)
+    .index("by_at", ["at"]),
 
   // ---------------------------------------------------------- fingerprints
 

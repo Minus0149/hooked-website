@@ -31,6 +31,7 @@ import type * as library from "../library.js";
 import type * as matching from "../matching.js";
 import type * as moods from "../moods.js";
 import type * as recommend from "../recommend.js";
+import type * as retention from "../retention.js";
 import type * as runtime from "../runtime.js";
 import type * as security from "../security.js";
 import type * as tracks from "../tracks.js";
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   matching: typeof matching;
   moods: typeof moods;
   recommend: typeof recommend;
+  retention: typeof retention;
   runtime: typeof runtime;
   security: typeof security;
   tracks: typeof tracks;
