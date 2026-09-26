@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildQueue,
+  fitsMood,
+  moodQueue,
   NO_STEER,
   rankPool,
   spreadAlbums,
@@ -236,6 +238,58 @@ describe("the mood lens", () => {
     const on = meanPlace("quiet0", mixed, steer({ mood: "tender" }));
     const off = meanPlace("quiet0", mixed, steer({ mood: "tender", moodStrength: 0 }));
     expect(off).toBeGreaterThan(on);
+  });
+});
+
+/**
+ * Picking a face is a mode switch for the whole deck (Minus, 2026-09-26: "the
+ * mood is made to change the playlist entirely, not to rate the song"). As a
+ * 16-place nudge in a two-thousand-song catalogue it changed the next few
+ * cards and nothing after them; these pin down that it now changes all of it.
+ */
+describe("picking a mood switches the deck", () => {
+  const mixed = [
+    ...Array.from({ length: 30 }, (_, i) => track("party" + i, { genre: "house", artist: "a" + i })),
+    ...Array.from({ length: 30 }, (_, i) => track("quiet" + i, { genre: "Ghazals", artist: "b" + i })),
+  ];
+
+  it("deals every song that fits before any that doesn't, every time", () => {
+    for (let run = 0; run < 25; run++) {
+      const ids = rankPool(mixed, steer({ mood: "tender" })).map((t) => t.id);
+      const lastQuiet = Math.max(...ids.map((id, i) => (id.startsWith("quiet") ? i : -1)));
+      const firstParty = ids.findIndex((id) => id.startsWith("party"));
+      expect(lastQuiet).toBeLessThan(firstParty);
+    }
+  });
+
+  it("still has the rest of the deck once the mood's songs run out", () => {
+    expect(rankPool(mixed, steer({ mood: "tender" }))).toHaveLength(60);
+  });
+
+  it("replaces the card on screen when it doesn't fit the mood", () => {
+    const queue = [track("party0", { genre: "house" }), ...mixed.slice(1)];
+    const next = moodQueue(queue, steer({ mood: "tender" }));
+    expect(next[0].id.startsWith("quiet")).toBe(true);
+    // the ballad-for-a-party swap loses nothing: the old card is still in the deck
+    expect(next.some((t) => t.id === "party0")).toBe(true);
+    expect(next).toHaveLength(queue.length);
+  });
+
+  it("keeps the card on screen when it already fits", () => {
+    const queue = [track("quiet0", { genre: "Ghazals" }), ...mixed.filter((t) => t.id !== "quiet0")];
+    expect(moodQueue(queue, steer({ mood: "tender" }))[0].id).toBe("quiet0");
+  });
+
+  it("keeps the card when the mood is cleared, or switched off by the admin", () => {
+    const queue = [track("party0", { genre: "house" }), ...mixed.slice(1)];
+    expect(moodQueue(queue, steer({ mood: null }))[0].id).toBe("party0");
+    expect(moodQueue(queue, steer({ mood: "tender", moodStrength: 0 }))[0].id).toBe("party0");
+  });
+
+  it("knows which songs belong to a mood", () => {
+    expect(fitsMood(track("q", { genre: "Ghazals" }), steer({ mood: "tender" }))).toBe(true);
+    expect(fitsMood(track("p", { genre: "house" }), steer({ mood: "tender" }))).toBe(false);
+    expect(fitsMood(track("q", { genre: "Ghazals" }), steer({ mood: null }))).toBe(false);
   });
 });
 

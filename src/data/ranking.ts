@@ -109,10 +109,14 @@ export function shuffle<T>(arr: T[]): T[] {
  *    6  a right-swipe's genre steer: one gesture, a nudge.
  *
  * None of them can outrun the shuffle by more than a couple of dozen places,
- * which is what keeps a deck from turning into a playlist. That is also why a
- * mood is a bias and not a filter: pick "party" and the party songs come
- * first, but the deck is still a deck, and the next thing you have never heard
- * is still in it.
+ * which is what keeps a deck from turning into a playlist.
+ *
+ * A picked mood is the exception, and it is not a weight: it switches the deck.
+ * Every track that fits the mood (MOOD_MATCH) comes before every track that
+ * doesn't, each group still in the order above — so "party" means the party
+ * songs, all of them, in your taste order, and only once they run out does the
+ * rest of the deck follow. As a 16-place nudge in a catalogue of two thousand,
+ * picking a face changed the next few cards and nothing after them.
  */
 export function rankPool(pool: Track[], steer: Steer): Track[] {
   const useAffinity = steer.affinityStrength > 0;
@@ -136,7 +140,28 @@ export function rankPool(pool: Track[], steer: Steer): Track[] {
         : 0),
   }));
   scored.sort((a, b) => a.key - b.key);
-  return spreadArtists(scored.map((s) => s.t));
+  const ordered = scored.map((s) => s.t);
+  if (!useMood) return spreadArtists(ordered);
+  const fits: Track[] = [];
+  const rest: Track[] = [];
+  for (const t of ordered) {
+    (moodFitFor(t, steer.mood, steer.crowdMoods) >= MOOD_MATCH ? fits : rest).push(t);
+  }
+  // spread each side on its own, so variety never pulls an off-mood song forward
+  return [...spreadArtists(fits), ...spreadArtists(rest)];
+}
+
+/**
+ * How well a track must fit a mood to count as that mood when one is picked.
+ * The same line moodsOf uses to describe a song. On the live catalogue
+ * (2026-09-26, 2,149 tracks) it leaves every mood at least a hundred songs:
+ * tender 100, sleepy 116, party 489, hyped 510, chill 811, sunny 836.
+ */
+export const MOOD_MATCH = 0.5;
+
+/** Does this track belong to the picked mood? The visible card is kept when it does. */
+export function fitsMood(track: Track, steer: Pick<Steer, "mood" | "crowdMoods">): boolean {
+  return steer.mood !== null && moodFitFor(track, steer.mood, steer.crowdMoods) >= MOOD_MATCH;
 }
 
 /** No artist twice within this many cards. */
@@ -221,4 +246,23 @@ export function spreadAlbums(tracks: Track[]): Track[] {
 export function keepOnScreen<T extends { id: string }>(head: T | undefined, rebuilt: T[]): T[] {
   if (!head) return rebuilt;
   return [head, ...rebuilt.filter((t) => t.id !== head.id)];
+}
+
+/**
+ * The deck after a mood is picked or cleared.
+ *
+ * Picking switches the deck: everything re-ranks with the mood's songs first,
+ * and the card on screen stays only if it fits the mood too — hold a ballad,
+ * pick "party", and the next thing playing is a party song. The replaced card
+ * goes back into the deck, not away. Clearing the mood (or a mood the admin has
+ * turned off) keeps the card and re-ranks behind it, like a right-swipe.
+ */
+export function moodQueue(queue: Track[], steer: Steer): Track[] {
+  const [head, ...rest] = queue;
+  if (!head) return queue;
+  const switching = steer.mood !== null && steer.moodStrength > 0;
+  if (switching && !fitsMood(head, steer)) {
+    return spreadAlbums(uniqueById(rankPool([...rest, head], steer)));
+  }
+  return spreadAlbums(uniqueById([head, ...rankPool(rest, steer)]));
 }

@@ -81,7 +81,7 @@ export function MoodWheel({
   onCommit: (mood: MoodId) => void;
   onCancel: () => void;
   motionPref?: "full" | "reduced" | "off";
-  /** the line under everything; defaults to the card's "how does this one feel?" */
+  /** the line under everything; defaults to the card's "what are you in the mood for?" */
   hint?: string;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -368,7 +368,7 @@ export function MoodWheel({
             {verdict.reasons.length > 0 && ` · ${verdict.reasons.join(", ")}`}
           </span>
         ) : (
-          <span>{hint ?? "how does this one feel?"}</span>
+          <span>{hint ?? "what are you in the mood for?"}</span>
         )}
       </motion.div>
     </>,

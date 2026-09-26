@@ -30,7 +30,7 @@ export const TOUR_COPY = {
     headline: { lead: "how far", accent: "off the map?" },
   },
   hold: {
-    copy: "Hold the card, push toward a face, let go. It steers the deck that way and tells us what the song feels like — one gesture, both jobs.",
+    copy: "Hold the card, push toward a face, let go. The whole deck switches to that mood — every song that fits comes first — until you tap the mood to clear it.",
   },
   start: "Let's start",
   skip: "Skip the tour",

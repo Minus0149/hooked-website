@@ -14,6 +14,7 @@ import {
   buildQueue,
   MODEL_PLACES,
   MOOD_PLACES,
+  moodQueue,
   rankPool,
   shuffle,
   keepOnScreen,
@@ -161,7 +162,9 @@ type Action =
       scores: Record<string, number>;
       strength: number;
     }
-  // a face was pressed: on the deck (trackId set) it also labels that song
+  // a mood was picked or cleared. trackId (labelling that song) is no longer
+  // sent by the ring — picking is a mode switch, not a rating — but a stored
+  // pick still hydrates from APPLY_MOOD_PICKS
   | { type: "SET_MOOD"; mood: MoodId | null; trackId?: string }
   // the catalogue's published mood tags arrived
   | { type: "APPLY_CROWD_MOODS"; crowd: CrowdMoods }
@@ -775,16 +778,10 @@ function reducer(state: AppState, action: Action): AppState {
         moodSetAt: mood ? Date.now() : 0,
         moodPicks,
       };
-      // Re-rank behind the visible card, exactly like a right-swipe does. This
-      // one DOES rebuild — unlike affinity arriving from the server, a face was
-      // pressed on purpose a moment ago, and a deck that didn't visibly answer
-      // would make the gesture look decorative.
-      const [head, ...rest] = state.queue;
-      if (!head) return next;
-      return {
-        ...next,
-        queue: spreadAlbums(uniqueById([head, ...rankPool(rest, steerOf(next))])),
-      };
+      // Picking a mood switches the deck; clearing it re-ranks behind the
+      // card on screen. The rules live in moodQueue (data/ranking.ts).
+      if (!state.queue[0]) return next;
+      return { ...next, queue: moodQueue(state.queue, steerOf(next)) };
     }
 
     case "APPLY_CROWD_MOODS": {
