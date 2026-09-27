@@ -51,6 +51,16 @@ describe("hookedcue emails", () => {
     expect(html).toContain('href="https://app.hookedcue.com/profile?signup=1"');
   });
 
+  it("walks a tester through group, Play and account in order", () => {
+    const { html } = inviteEmail("Ada", "https://app.hookedcue.com/join?email=ada%40gmail.com");
+    const group = html.indexOf("https://groups.google.com/g/hookedcue-beta");
+    const play = html.indexOf("https://play.google.com/apps/testing/com.minus.hookedcue");
+    const join = html.indexOf("https://app.hookedcue.com/join");
+    expect(group).toBeGreaterThan(0);
+    expect(play).toBeGreaterThan(group);
+    expect(join).toBeGreaterThan(play);
+  });
+
   it("ships a real PNG as the inline logo", () => {
     const png = Buffer.from(EMAIL_LOGO_PNG_BASE64, "base64");
     expect(png.subarray(1, 4).toString()).toBe("PNG");

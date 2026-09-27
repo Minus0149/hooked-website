@@ -27,6 +27,8 @@ export type EmailContent = {
   button: { label: string; url: string };
   /** small print under the button, e.g. when the link expires */
   note?: string;
+  /** numbered steps shown before the button, each a link (the button is the last step) */
+  steps?: { label: string; detail?: string; url: string }[];
 };
 
 export function escapeHtml(s: string): string {
@@ -47,6 +49,19 @@ const bold = (s: string) =>
   escapeHtml(s).replace(/\*\*(.+?)\*\*/g, '<strong style="color:#f4f2ee;">$1</strong>');
 
 const FONT = "'Helvetica Neue', Helvetica, Arial, sans-serif";
+
+function stepsHtml(steps: EmailContent["steps"]): string {
+  if (!steps || steps.length === 0) return "";
+  const rows = steps
+    .map(
+      (st, i) => `<tr>
+<td valign="top" style="width:30px;padding:0 0 14px;font:800 15px/1.4 ${FONT};color:#ff3d71;">${i + 1}.</td>
+<td valign="top" style="padding:0 0 14px;font:400 15px/1.5 ${FONT};color:#b9b7c2;"><a href="${escapeHtml(safeUrl(st.url))}" style="color:#f4f2ee;font-weight:700;text-decoration:underline;">${escapeHtml(st.label)}</a>${st.detail ? `<br><span style="font-size:13px;color:#8e8c99;">${escapeHtml(st.detail)}</span>` : ""}</td>
+</tr>`,
+    )
+    .join("");
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 6px;">${rows}</table>`;
+}
 
 export function renderEmail(c: EmailContent): string {
   const url = safeUrl(c.button.url);
@@ -72,6 +87,7 @@ export function renderEmail(c: EmailContent): string {
 <tr><td bgcolor="#13131b" style="background:#13131b;border:1px solid #23232e;border-radius:20px;padding:32px 28px;">
 <h1 style="margin:0 0 16px;font:700 24px/1.25 ${FONT};letter-spacing:-0.3px;color:#f4f2ee;">${escapeHtml(c.heading)}</h1>
 ${paras}
+${stepsHtml(c.steps)}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px;"><tr>
 <td bgcolor="#ff3d71" style="border-radius:999px;background:#ff3d71;"><a href="${escapeHtml(url)}" style="display:inline-block;padding:14px 28px;font:700 16px/1 ${FONT};color:#0b0b10;text-decoration:none;border-radius:999px;">${escapeHtml(c.button.label)}</a></td>
 </tr></table>
@@ -119,19 +135,27 @@ export function resetEmail(email: string, url: string): { subject: string; html:
   };
 }
 
+/** The Android closed test: Google only lets members of this group opt in. */
+export const TESTER_GROUP_URL = "https://groups.google.com/g/hookedcue-beta";
+/** Play's opt-in page for the closed test ("Become a tester", then install). */
+export const PLAY_OPT_IN_URL = "https://play.google.com/apps/testing/com.minus.hookedcue";
+
 /** Approved for the beta: the only way in is this link — accounts are invite-only. */
 export function inviteEmail(name: string, url: string): { subject: string; html: string } {
   const first = name.trim().split(/\s+/)[0] || "there";
   return {
     subject: "you're in — welcome to the hookedcue beta",
     html: renderEmail({
-      preheader: "Your spot in the beta is ready.",
+      preheader: "Your spot in the beta is ready — three quick steps.",
       heading: `You're in, ${first}.`,
       paragraphs: [
-        "Your spot in the hookedcue beta is ready. Create your account with this email address and your library starts filling from the first swipe.",
-        "Every song starts at its hook — skip, save, or ask for more like it.",
+        "Your spot in the hookedcue beta is ready. Three quick steps on your Android phone, signed in to Google with the same Gmail you want to test with:",
       ],
-      button: { label: "Create my account", url },
+      steps: [
+        { label: "Join the testers group", detail: "One tap — Google needs this before it shows you the app.", url: TESTER_GROUP_URL },
+        { label: "Install hookedcue from Google Play", detail: "Tap “Become a tester”, then install.", url: PLAY_OPT_IN_URL },
+      ],
+      button: { label: "3. Create my account", url },
       note: "This invite is for this email address only. If you weren't expecting it, you can ignore it.",
     }),
   };
