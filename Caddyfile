@@ -1,0 +1,58 @@
+# Nixpacks' default SPA Caddyfile plus cache and security headers.
+# Nixpacks never reads this file on its own; nixpacks.toml starts Caddy with it.
+# The page's own CSP stays in its <meta> tag; the header adds only what a
+# <meta> CSP can't express (frame-ancestors).
+
+# global options
+{
+	admin off # theres no need for the admin api in railway's environment
+	persist_config off # storage isn't persistent anyway
+	auto_https off # railway handles https for us, this would cause issues if left enabled
+	# runtime logs
+	log {
+		format json # set runtime log format to json mode
+	}
+	# server options
+	servers {
+		trusted_proxies static private_ranges 100.0.0.0/8 # trust railway's proxy
+	}
+}
+
+# site block, listens on the $PORT environment variable, automatically assigned by railway
+:{$PORT:3000} {
+	# access logs
+	log {
+		format json # set access log format to json mode
+	}
+
+	# health check for railway
+	rewrite /health /*
+
+	# serve from the 'dist' folder (Vite builds into the 'dist' folder)
+	root * /app/{$NIXPACKS_SPA_OUTPUT_DIR:dist}
+
+	# enable gzipping responses
+	encode gzip
+
+	header {
+		Content-Security-Policy "frame-ancestors 'none'"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(self \"https://api.razorpay.com\")"
+	}
+
+	# hashed build output never changes under the same name
+	@hashed path /assets/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+	# index.html and every SPA route revalidate on each load
+	@shell not path /assets/*
+	header @shell Cache-Control "no-cache"
+
+	# serve files from 'dist'
+	file_server
+
+	# if path doesn't exist, redirect it to 'index.html' for client side routing
+	try_files {path} /index.html
+}

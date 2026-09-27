@@ -1,0 +1,3 @@
+# Nixpacks always runs its built-in /assets/Caddyfile; point Caddy at ours instead.
+[start]
+cmd = "exec caddy run --config /app/Caddyfile --adapter caddyfile 2>&1"
