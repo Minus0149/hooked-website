@@ -67,6 +67,13 @@ export const RUNTIME_DEFAULTS = {
    * the waitlist (convex/referrals.ts). Zero switches invite links off.
    */
   referralCap: 3,
+  /**
+   * Which hook start the players get (convex/hookRules.ts): 0 = the whole
+   * preview from 0, 1 = the no-model loudness heuristic, 2 = auto (the
+   * structure model when confident, otherwise the whole preview). Changing it
+   * takes effect on "Apply to all songs" in the Hook check tab.
+   */
+  hookPolicy: 2,
 } as const;
 
 export type RuntimeKey = keyof typeof RUNTIME_DEFAULTS;
@@ -87,6 +94,7 @@ const BOUNDS: Record<RuntimeKey, [number, number]> = {
   moodMinVotes: [1, 50],
   modelStrength: [0, 40],
   referralCap: [0, 50],
+  hookPolicy: [0, 2],
 };
 
 export type RuntimeConfig = Record<RuntimeKey, number>;
@@ -137,6 +145,7 @@ export const set = mutation({
     moodMinVotes: v.optional(v.number()),
     modelStrength: v.optional(v.number()),
     referralCap: v.optional(v.number()),
+    hookPolicy: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "config.manage");

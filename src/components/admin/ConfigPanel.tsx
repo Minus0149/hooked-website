@@ -26,6 +26,7 @@ type RuntimeConfig = {
   moodMinVotes: number;
   modelStrength: number;
   referralCap: number;
+  hookPolicy: number;
 };
 
 const GROUPS: {
@@ -46,6 +47,7 @@ const GROUPS: {
     lede: "How much evidence a hook needs before it outranks its creator's order.",
     fields: [
       { key: "hookRankMinPlays", label: "min plays to re-rank", hint: "save-rate ranking threshold", min: 1, max: 10000 },
+      { key: "hookPolicy", label: "hook start: 0 preview · 1 heuristic · 2 auto", hint: "auto = the structure model when confident, else the whole preview. Saving changes new analyses; \"apply to all songs\" in Hook check re-plans the rest", min: 0, max: 2 },
     ],
   },
   {

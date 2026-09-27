@@ -221,6 +221,8 @@ export default defineSchema({
      * for analysis" — the even-spaced provisional windows cover until then.
      */
     analyzedAt: v.optional(v.string()),
+    /** which hook pipeline produced this track's hooks (3 = structure analysis, see hookPlans.ts) */
+    hookVersion: v.optional(v.number()),
     /**
      * When the uploader confirmed they hold the rights to this recording.
      * Publishing is gated on it; the copyright policy explains what we do
@@ -233,6 +235,9 @@ export default defineSchema({
     // lets the hourly heat job find the few tracks with heat > 0 instead of
     // reading the whole catalogue every hour (see hooks.computeHeat)
     .index("by_heat", ["heat"])
+    // hook recognition v3's work queue: tracks not yet heard by the current
+    // pipeline (hookVersion missing or older) — see hookPlans.pending
+    .index("by_hookVersion", ["hookVersion"])
     // the admin catalogue's search box (title or artist)
     .searchIndex("search_title", { searchField: "title" })
     .searchIndex("search_artist", { searchField: "artist" }),
@@ -799,4 +804,40 @@ export default defineSchema({
   })
     .index("by_code", ["code"])
     .index("by_userId", ["userId"]),
+
+  /**
+   * Hook recognition v3: the structure analysis of one track's audio
+   * (scripts/analyze-hooks-v3.py → hookPlans.ingest). Stored so the hooks can
+   * be re-derived when the admin switches policy, and so the "Hook check"
+   * page can compare each method against a person's ear.
+   */
+  hookAnalyses: defineTable({
+    trackId: v.string(),
+    version: v.number(),
+    durationMs: v.number(),
+    tempo: v.optional(v.number()),
+    /** bar starts, ms (capped) — hooks start on a downbeat */
+    downbeatsMs: v.array(v.number()),
+    sections: v.array(
+      v.object({ startMs: v.number(), endMs: v.number(), label: v.number(), score: v.number() }),
+    ),
+    /** the structure model's pick, or absent when the audio had no structure */
+    modelStartMs: v.optional(v.number()),
+    confidence: v.number(),
+    /** the no-model pick: the biggest loudness lift, on a bar */
+    heuristicStartMs: v.number(),
+    at: v.number(),
+  }).index("by_trackId", ["trackId"]),
+
+  /** A person's ear on one track, from Admin → Hook check. */
+  hookLabels: defineTable({
+    trackId: v.string(),
+    /** where they hear the hook start; absent when they only rated */
+    markedStartMs: v.optional(v.number()),
+    /** their verdict on the hook the app played */
+    verdict: v.optional(v.union(v.literal("good"), v.literal("bad"))),
+    method: v.optional(v.string()),
+    by: v.string(),
+    at: v.number(),
+  }).index("by_trackId", ["trackId"]),
 });

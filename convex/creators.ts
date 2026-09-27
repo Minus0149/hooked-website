@@ -222,6 +222,8 @@ export const attachAudio = mutation({
       audioStorageId: storageId,
       audioDurationMs,
       rightsConfirmedAt: new Date().toISOString(),
+      // new audio: hook recognition hears the full upload on its next pass
+      hookVersion: undefined,
     });
     await touchCatalog(ctx);
   },

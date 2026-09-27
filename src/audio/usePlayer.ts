@@ -1,4 +1,5 @@
 import { storedVolume } from "../lib/volume";
+import { distinctHooks, hookTiming } from "../lib/hookPlayback";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HookWindow, Track } from "../types";
 
@@ -7,7 +8,9 @@ const FALLBACK_HOOK: HookWindow = { id: "whole", startMs: 0, durationMs: Number.
 /** A track always has at least one window, even if nobody marked one. */
 export function hooksOf(track: Track | null): HookWindow[] {
   if (!track) return [FALLBACK_HOOK];
-  return track.hooks && track.hooks.length > 0 ? track.hooks : [FALLBACK_HOOK];
+  // never replay seconds: a window overlapping an earlier one is dropped
+  const list = track.hooks && track.hooks.length > 0 ? distinctHooks(track.hooks) : [];
+  return list.length > 0 ? list : [FALLBACK_HOOK];
 }
 
 const sourceOf = (track: Track) => track.audioUrl || track.previewUrl;
@@ -15,7 +18,7 @@ const sourceOf = (track: Track) => track.audioUrl || track.previewUrl;
 /**
  * Single-element audio engine with next-track preloading.
  *
- * A song can carry several hooks — 15-30s windows into the same audio. The
+ * A song can carry several hooks — distinct 15-30s windows into the same audio. The
  * player walks them in order, auto-advancing at the end of each, and only calls
  * onEnded once the last one runs out. That way "skip" keeps meaning "skip the
  * song", not "skip this clip", and all four swipe gestures stay free.
@@ -107,16 +110,12 @@ export function usePlayer(
     const onTime = () => {
       const list = hooksRef.current;
       const hook = list[hookIndexRef.current] ?? list[0];
-      const startS = hook.startMs / 1000;
-      const lenS = Number.isFinite(hook.durationMs)
-        ? hook.durationMs / 1000
-        : Math.max(audio.duration - startS, 0.001);
-      const into = audio.currentTime - startS;
+      // cut at the end of the file, shared with the phone (lib/hookPlayback.ts)
+      const t = hookTiming(hook, audio.currentTime, audio.duration);
+      setProgress(t.progress);
+      setRemaining(t.remaining);
 
-      setProgress(Math.min(Math.max(into / lenS, 0), 1));
-      setRemaining(Math.max(lenS - into, 0));
-
-      if (into >= lenS) advanceRef.current(true);
+      if (t.done) advanceRef.current(true);
     };
     const onDone = () => advanceRef.current(true);
     /**
@@ -194,12 +193,9 @@ export function usePlayer(
     if (!audio || !(audio.duration > 0)) return;
     const list = hooksRef.current;
     const hook = list[hookIndexRef.current] ?? list[0];
-    const startS = hook.startMs / 1000;
-    const lenS = Number.isFinite(hook.durationMs)
-      ? hook.durationMs / 1000
-      : Math.max(audio.duration - startS, 0.001);
+    const { startS, lengthS } = hookTiming(hook, audio.currentTime, audio.duration);
     const clamped = Math.min(Math.max(fraction, 0), 0.999);
-    audio.currentTime = startS + clamped * lenS;
+    audio.currentTime = startS + clamped * lengthS;
     setProgress(clamped);
   }, []);
 

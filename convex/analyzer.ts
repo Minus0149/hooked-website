@@ -2,6 +2,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { cleanText } from "./security";
 import { touchCatalog } from "./catalog";
+import { HOOK_PIPELINE_VERSION } from "./hookRules";
 
 /**
  * Server side of the external hook analyzer.
@@ -196,6 +197,12 @@ export const ingestHooks = internalMutation({
         durationMs: Math.min(Math.max(Math.floor(w.durationMs), 5_000), 45_000),
       }))
       .filter((w) => w.startMs + w.durationMs <= (track.audioDurationMs ?? track.durationMs ?? 60_000) + 2_000);
+    // Hook recognition v3 (hookPlans.ts) owns this track's hooks now; the old
+    // analyser may still refresh energy above, but its 10 s windows are retired.
+    if ((track.hookVersion ?? 0) >= HOOK_PIPELINE_VERSION) {
+      return { ok: false as const, reason: "hooks v3" };
+    }
+
     if (safeWindows.length === 0) {
       // marked as looked-at: the analyser posts an empty list for a preview
       // that wouldn't decode precisely so it isn't downloaded again every run,

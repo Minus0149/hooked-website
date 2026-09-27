@@ -228,43 +228,51 @@ function spread(values) {
   return values.map((v) => (hi - lo > 1e-9 ? (v - lo) / (hi - lo) : 0.5));
 }
 
+/** Hook recognition v3 (docs/HOOKS.md, convex/hookRules.ts): the same rules. */
+export const MIN_HOOK_MS = 15000;
+export const PREVIEW_MAX_MS = 35000;
+export const LONG_HOOK_MS = 20000;
+
 /**
- * Pick up to `count` windows out of measured audio, catchiest first.
+ * Where the hooks are in measured audio — the no-model heuristic.
  *
- * Why this was rewritten: a preview is ~30 s and the windows are ~10 s, and the
- * first version insisted on `count` windows that never overlapped. Three
- * ten-second windows that can't overlap only fit in a thirty-second clip one
- * way — 0, 10, 20 — so "measured" hooks were even thirds with a second of
- * jitter, and one of the three was always the intro. Now:
+ * v1 could only answer "0, 10, 20"; v2 allowed ten-second windows to overlap
+ * by half, which on the live catalogue meant 76 % of songs replayed the same
+ * seconds and no hook ran longer than 10 s. v3 follows the song instead of a
+ * clock:
  *
- *  - windows may overlap by up to half, so two good starting points inside one
- *    long chorus are both allowed;
- *  - a window is only kept if it scores within reach of the best one — a quiet
- *    intro is no longer promoted to hook #3 just to fill the quota;
- *  - three measured signals, each spread onto 0..1 across this track's own
- *    candidates so that each one actually discriminates:
- *      loudness   mean level of the window (the chorus of a produced track is
- *                 its loudest part)
+ *  - a preview (<= 35 s) is ONE hook: from the catchiest start to the end of
+ *    the usable audio (before any fade), at least MIN_HOOK_MS long. A start too
+ *    late to leave that much is simply never a candidate;
+ *  - a full upload gets up to `count` DISTINCT sections of LONG_HOOK_MS, never
+ *    overlapping and at least 5 s apart, each kept only while it scores within
+ *    reach of the best;
+ *  - candidates are scored on three measured signals, each spread onto 0..1
+ *    across this track's own candidates so each one discriminates:
+ *      loudness   mean level of the window (a chorus is a produced track's
+ *                 loudest part)
  *      repetition does this passage come round again a phrase away
  *      entry      a rise in level into the window — where a chorus lands
- *  - and a window whose tail is fading out is marked down, because a hook
- *    that dies in the preview's fade is a bad first impression.
+ *    and a window whose tail fades out is marked down.
  */
 export function planHooks(profile, count = 3) {
-  const MIN_HOOK_MS = 6000;
-  const MAX_HOOK_MS = 15000;
   const STEP_MS = 500;
   const KEEP_RATIO = 0.6;
+  const GAP_MS = 5000;
 
   const raw = profile?.durationMs || profile?.fallbackMs || 30000;
   const trimmed = usableEnd(profile?.rms);
   // never trim more than a quarter away
   const total = trimmed && trimmed > raw * 0.75 ? trimmed : raw;
-  if (!total || total < MIN_HOOK_MS * 2) {
-    return [{ startMs: 0, durationMs: Math.max(total || 30000, MIN_HOOK_MS), score: 0 }];
+  if (!total || total <= MIN_HOOK_MS) {
+    return [{ startMs: 0, durationMs: total || raw, score: 0 }];
   }
-  const windowMs = Math.min(MAX_HOOK_MS, Math.floor(total / count));
-  if (windowMs < MIN_HOOK_MS) return [{ startMs: 0, durationMs: total, score: 0 }];
+  const long = raw > PREVIEW_MAX_MS;
+  const windowMs = long ? LONG_HOOK_MS : MIN_HOOK_MS;
+  // a preview's hook is judged on its first 8 s (the part that lands); the
+  // rest of it is simply the song carrying on to the end
+  const scoreMs = long ? LONG_HOOK_MS : 8000;
+  const latestStart = total - windowMs;
 
   const rms = profile?.rms ?? [];
   const sorted = [...rms].sort((a, b) => a - b);
@@ -275,13 +283,18 @@ export function planHooks(profile, count = 3) {
   };
 
   const starts = [];
-  for (let s = 0; s + windowMs <= total; s += STEP_MS) starts.push(s);
-  const loud = starts.map((s) => meanOf(s / 1000, (s + windowMs) / 1000));
-  const rep = starts.map((s) => (profile?.bands ? repetitionScore(profile, s / 1000, windowMs / 1000) : 0));
-  // entry: how much louder the first 3 s are than the 3 s before. Nothing
-  // precedes 0, so the opening window is scored neutral rather than punished.
+  for (let s = 0; s <= latestStart; s += STEP_MS) starts.push(s);
+  const loud = starts.map((s) => meanOf(s / 1000, (s + scoreMs) / 1000));
+  const rep = starts.map((s) => (profile?.bands ? repetitionScore(profile, s / 1000, scoreMs / 1000) : 0));
+  // entry: how much louder the first 3 s are than the 3 s before. The top of
+  // the audio is an entry from silence (a preview that opens on its chorus
+  // must be able to win); a start just after it has no "before" and is neutral.
   const entryRaw = starts.map((s) =>
-    s >= 2000 ? meanOf(s / 1000, s / 1000 + 3) - meanOf(s / 1000 - 3, s / 1000) : null,
+    s === 0
+      ? meanOf(0, 3)
+      : s >= 2000
+        ? meanOf(s / 1000, s / 1000 + 3) - meanOf(s / 1000 - 3, s / 1000)
+        : null,
   );
   const known = entryRaw.filter((v) => v !== null);
   const entryScaled = known.length ? spread(known) : [];
@@ -291,37 +304,40 @@ export function planHooks(profile, count = 3) {
   const repN = spread(rep);
 
   const candidates = starts.map((s, i) => {
-    const endS = (s + windowMs) / 1000;
+    const endS = (s + scoreMs) / 1000;
     const tail = meanOf(endS - 2, endS);
     const fading = median > 0 && tail < median * 0.5 ? 0.35 : 0;
-    return {
-      startMs: s,
-      durationMs: windowMs,
-      score: 0.4 * loudN[i] + 0.35 * repN[i] + 0.25 * entry[i] - fading,
-    };
+    return { startMs: s, score: 0.4 * loudN[i] + 0.35 * repN[i] + 0.25 * entry[i] - fading };
   });
   candidates.sort((a, b) => b.score - a.score);
 
-  // greedy pick: at least half a window apart, and only while still good
-  const minGap = Math.floor(windowMs / 2);
+  // put a start on a transient rather than an arbitrary tick of the clock, as
+  // long as the window it opens still fits
+  const snap = (startMs, latest) => {
+    if (!profile?.onsets) return startMs;
+    const snapped = snapToOnset(profile.onsets, startMs);
+    return snapped >= 0 && snapped <= latest ? snapped : startMs;
+  };
+
+  if (!long) {
+    const best = candidates[0] ?? { startMs: 0, score: 0 };
+    const startMs = snap(best.startMs, latestStart);
+    return [{ startMs, durationMs: total - startMs, score: best.score }];
+  }
+
   const bestScore = candidates[0]?.score ?? 0;
   const picked = [];
+  const apart = (s) =>
+    picked.every((p) => s >= p.startMs + windowMs + GAP_MS || s + windowMs + GAP_MS <= p.startMs);
   for (const c of candidates) {
     if (picked.length > 0 && c.score < bestScore * KEEP_RATIO) break;
-    if (picked.every((p) => Math.abs(p.startMs - c.startMs) >= minGap)) {
-      picked.push(c);
-      if (picked.length >= count) break;
-    }
+    if (!apart(c.startMs)) continue;
+    const snapped = snap(c.startMs, latestStart);
+    const startMs = apart(snapped) ? snapped : c.startMs;
+    picked.push({ startMs, durationMs: windowMs, score: c.score });
+    if (picked.length >= count) break;
   }
   if (picked.length === 0) picked.push({ startMs: 0, durationMs: windowMs, score: 0 });
-
-  // put each start on a transient rather than an arbitrary tick of the clock
-  if (profile?.onsets) {
-    for (const w of picked) {
-      const snapped = snapToOnset(profile.onsets, w.startMs);
-      if (snapped >= 0 && snapped + w.durationMs <= raw) w.startMs = snapped;
-    }
-  }
 
   // catchiest first — tracks.list re-sorts by save rate once there's data
   return picked.sort((a, b) => b.score - a.score);

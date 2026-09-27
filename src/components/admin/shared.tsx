@@ -27,6 +27,7 @@ export type Tab =
   | "reports"
   | "songReports"
   | "config"
+  | "hookCheck"
   | "feed";
 
 export const pct = (n: number) => `${Math.round(n * 100)}%`;

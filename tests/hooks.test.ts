@@ -92,8 +92,52 @@ describe("planHooks", () => {
       { from: 27, to: 30, level: 0.04 },
     ]);
     const [top] = planHooks(chorusFirst) as Hook[];
-    const inChorus = top.startMs <= 1500 || (top.startMs >= 19000 && top.startMs <= 21000);
-    expect(inChorus).toBe(true);
+    // v3: the chorus at 20 s leaves under 15 s of audio, so it can't open a
+    // hook of its own — the answer is the chorus at the top, running on
+    // through the second chorus to the end
+    expect(top.startMs).toBeLessThanOrEqual(1500);
+    expect(top.durationMs).toBeGreaterThanOrEqual(15000);
+  });
+
+  it("gives a preview exactly one hook, at least 15 s, running to the end of the usable audio", () => {
+    const hooks = planHooks(introThenChorus) as Hook[];
+    expect(hooks).toHaveLength(1);
+    const [h] = hooks;
+    expect(h.durationMs).toBeGreaterThanOrEqual(15000);
+    // the fade starts at 27 s; the hook runs up to it, not a fixed slice short of it
+    expect(h.startMs + h.durationMs).toBeGreaterThanOrEqual(26000);
+  });
+
+  it("pulls a late chorus back so the hook still lasts 15 s", () => {
+    const lateChorus = song([
+      { from: 0, to: 22, level: 0.3 },
+      { from: 22, to: 30, level: 1, repeats: true },
+    ]);
+    const [h] = planHooks(lateChorus) as Hook[];
+    expect(h.durationMs).toBeGreaterThanOrEqual(15000);
+    expect(h.startMs + h.durationMs).toBeLessThanOrEqual(30000);
+  });
+
+  it("gives a full song up to three distinct, non-overlapping sections of at least 15 s", () => {
+    const full = song(
+      [
+        { from: 0, to: 20, level: 0.3 },
+        { from: 20, to: 45, level: 1, repeats: true },
+        { from: 45, to: 80, level: 0.5 },
+        { from: 80, to: 110, level: 1, repeats: true },
+        { from: 110, to: 150, level: 0.55 },
+        { from: 150, to: 180, level: 1, repeats: true },
+      ],
+      180,
+    );
+    const hooks = planHooks(full) as Hook[];
+    expect(hooks.length).toBeGreaterThanOrEqual(2);
+    expect(hooks.length).toBeLessThanOrEqual(3);
+    const sorted = [...hooks].sort((a, b) => a.startMs - b.startMs);
+    for (const [i, h] of sorted.entries()) {
+      expect(h.durationMs).toBeGreaterThanOrEqual(15000);
+      if (i > 0) expect(h.startMs).toBeGreaterThanOrEqual(sorted[i - 1].startMs + sorted[i - 1].durationMs);
+    }
   });
 
   it("still answers for a track with no structure at all", () => {

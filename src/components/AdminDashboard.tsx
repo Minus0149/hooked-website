@@ -22,6 +22,7 @@ import { ReportsPanel } from "./admin/ReportsPanel";
 import { FeedPanel } from "./admin/Feed";
 import { MoodsPanel } from "./admin/MoodsPanel";
 import { SongReportsPanel } from "./admin/SongReports";
+import { HookCheckPanel } from "./admin/HookCheckPanel";
 import { useDialogs } from "./ui/Dialogs";
 
 /**
@@ -85,6 +86,7 @@ export function AdminDashboard() {
     if (allowed("catalog.curate")) {
       t.push({ group: "catalogue", id: "catalog", label: "Catalog", icon: "♪" });
       t.push({ group: "catalogue", id: "songReports", label: "Song reports", icon: "⚑" });
+      t.push({ group: "catalogue", id: "hookCheck", label: "Hook check", icon: "◎" });
     }
     if (allowed("stats.view")) t.push({ group: "catalogue", id: "moods", label: "Moods", icon: "◐" });
     if (allowed("ads.manage")) t.push({ group: "catalogue", id: "ads", label: "Ads", icon: "▣" });
@@ -310,6 +312,7 @@ export function AdminDashboard() {
         {activeTab === "promotions" && <PromotionsPanel />}
         {activeTab === "features" && <FeaturesPanel />}
         {activeTab === "config" && <ConfigPanel />}
+        {activeTab === "hookCheck" && <HookCheckPanel />}
       </motion.main>
     </div>
   );

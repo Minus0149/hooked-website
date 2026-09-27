@@ -3,6 +3,7 @@ import { internalMutation, mutation } from "./_generated/server";
 import { enforceRateLimit, requirePermission } from "./security";
 import { runtimeFor } from "./runtime";
 import { touchCatalog } from "./catalog";
+import { provisionalWindows } from "./hookRules";
 
 /**
  * Hooks for songs nobody has marked by hand.
@@ -21,27 +22,15 @@ import { touchCatalog } from "./catalog";
 
 /** What an iTunes/Deezer preview gives you, whatever the song's length. */
 const PREVIEW_MS = 30_000;
-const HOOK_COUNT = 3;
-const MIN_HOOK_MS = 6_000;
-const MAX_HOOK_MS = 15_000;
 
 /**
- * Evenly spaced, non-overlapping windows across the playable audio. Distinct
- * parts, so tapping through never replays the same seconds.
+ * Hooks for a track nobody has analysed yet. Since hook recognition v3 this is
+ * the whole preview (one window) or, for a full upload, up to three 20 s
+ * sections that never overlap — v2's 10 s thirds are gone. See hookRules.ts;
+ * scripts/analyze-hooks-v3.py replaces these with measured hooks.
  */
-export function planWindows(totalMs: number, count = HOOK_COUNT) {
-  const total = Math.max(0, Math.floor(totalMs));
-  if (total < MIN_HOOK_MS * 2) {
-    return [{ startMs: 0, durationMs: Math.max(total, MIN_HOOK_MS) }];
-  }
-  const windowMs = Math.min(MAX_HOOK_MS, Math.floor(total / count));
-  if (windowMs < MIN_HOOK_MS) return [{ startMs: 0, durationMs: total }];
-
-  const stride = Math.floor((total - windowMs) / (count - 1));
-  return Array.from({ length: count }, (_, i) => ({
-    startMs: i * stride,
-    durationMs: windowMs,
-  }));
+export function planWindows(totalMs: number) {
+  return provisionalWindows(totalMs);
 }
 
 /** How much of a track is actually playable — an upload's length, or a preview. */
@@ -55,7 +44,7 @@ export function playableMs(track: {
 }
 
 /**
- * Give every hookless track three windows. Safe to re-run — a track that
+ * Give every hookless track its provisional hooks (see planWindows). Safe to re-run — a track that
  * already has an active hook is left exactly as its creator arranged it.
  */
 export const backfill = mutation({

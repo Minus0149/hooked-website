@@ -299,6 +299,92 @@ http.route({
 });
 
 /**
+ * Hook recognition v3 (scripts/analyze-hooks-v3.py, convex/hookPlans.ts).
+ * Same key as the other analysers. GET hands out tracks the current pipeline
+ * hasn't heard; POST takes back each track's structure ANALYSIS (sections,
+ * downbeats, confidence) — the server derives the windows from it, so the
+ * admin's hook policy can be changed later without re-listening.
+ */
+http.route({
+  path: "/analyzer/v3/pending",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const secret = process.env.HOOK_ANALYZE_KEY;
+    const provided = request.headers.get("x-analyzer-key") ?? "";
+    if (!secret || !safeEqual(provided, secret)) return new Response("forbidden", { status: 403 });
+    const limit = Number(new URL(request.url).searchParams.get("limit") ?? 50);
+    const tracks = await ctx.runQuery(internal.hookPlans.pending, { limit: Number.isFinite(limit) ? limit : 50 });
+    return Response.json({ ok: true, tracks }, { status: 200 });
+  }),
+});
+
+const num = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : undefined);
+const nums = (x: unknown) => (Array.isArray(x) ? x.filter((n): n is number => typeof n === "number" && Number.isFinite(n)) : []);
+
+http.route({
+  path: "/analyzer/v3/ingest",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const secret = process.env.HOOK_ANALYZE_KEY;
+    const provided = request.headers.get("x-analyzer-key") ?? "";
+    if (!secret || !safeEqual(provided, secret)) return new Response("forbidden", { status: 403 });
+    const raw = await request.text();
+    if (raw.length > ANALYZER_MAX_BODY_BYTES) return new Response("too large", { status: 413 });
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return new Response("bad request", { status: 400 });
+    }
+    const items: unknown[] = Array.isArray(body.batch) ? body.batch : [];
+    // the runner sends touch:false mid-run and touch:true to publish
+    const touch = body.touch === true;
+    const results: { trackId: string; ok: boolean; method?: string; written?: number; reason?: string }[] = [];
+    for (const item of items.slice(0, 100)) {
+      const rec = item as Record<string, unknown>;
+      const trackId = str(rec.trackId);
+      if (!trackId) continue;
+      try {
+        if (rec.failed === true) {
+          const r = await ctx.runMutation(internal.hookPlans.ingestFailed, { trackId, touch: false });
+          results.push({ trackId, ...r });
+          continue;
+        }
+        const a = (rec.analysis ?? {}) as Record<string, unknown>;
+        const durationMs = num(a.durationMs);
+        if (durationMs === undefined) {
+          results.push({ trackId, ok: false, reason: "no duration" });
+          continue;
+        }
+        const sections = (Array.isArray(a.sections) ? a.sections : [])
+          .map((x) => x as Record<string, unknown>)
+          .map((x) => ({ startMs: num(x.startMs), endMs: num(x.endMs), label: num(x.label), score: num(x.score) }))
+          .filter((x): x is { startMs: number; endMs: number; label: number; score: number } =>
+            x.startMs !== undefined && x.endMs !== undefined && x.label !== undefined && x.score !== undefined);
+        const r = await ctx.runMutation(internal.hookPlans.ingest, {
+          trackId,
+          analysis: {
+            durationMs,
+            tempo: num(a.tempo),
+            downbeatsMs: nums(a.downbeatsMs),
+            sections,
+            modelStartMs: num(a.modelStartMs),
+            confidence: num(a.confidence) ?? 0,
+            heuristicStartMs: num(a.heuristicStartMs) ?? 0,
+          },
+          touch: false,
+        });
+        results.push({ trackId, ...r });
+      } catch {
+        results.push({ trackId, ok: false, reason: "write failed" });
+      }
+    }
+    if (touch) await ctx.runMutation(internal.hookPlans.touch, {});
+    return Response.json({ ok: true, results }, { status: 200 });
+  }),
+});
+
+/**
  * The sound analyser (scripts/analyze-sound.mjs): same key as the hook
  * analyser, its own pair of routes so the two can run independently.
  */
