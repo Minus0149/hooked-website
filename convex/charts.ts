@@ -62,10 +62,10 @@ export function feedIds(feed: Pick<Feed, "v2">, json: unknown): string[] | null 
     if (!Array.isArray(results)) return null;
     return results.map((r) => String(r?.id ?? "")).filter((id) => /^\d+$/.test(id));
   }
-  const raw = j?.feed?.entry;
-  // a one-song chart comes back as an object, not a list
-  const entries = Array.isArray(raw) ? raw : raw ? [raw] : null;
-  if (!entries) return null;
+  if (!j?.feed || typeof j.feed !== "object") return null;
+  const raw = j.feed.entry;
+  // a one-song chart comes back as an object, not a list; an empty one has no entry
+  const entries = Array.isArray(raw) ? raw : raw ? [raw] : [];
   return entries.map((e) => e?.id?.attributes?.["im:id"] ?? "").filter((id) => /^\d+$/.test(id));
 }
 
@@ -143,9 +143,11 @@ export const refresh = internalAction({
     let answered = 0;
     const failed: string[] = [];
     for (const feed of slice) {
-      const res = await get(feed.url);
       let ids: string[] | null = null;
-      if (res && res.ok) {
+      // Apple's chart hosts time out or 504 now and then; one retry, then move on
+      for (let attempt = 0; attempt < 2 && !ids; attempt++) {
+        const res = await get(feed.url, 25_000);
+        if (!res || !res.ok) continue;
         try {
           ids = feedIds(feed, await res.json());
         } catch {

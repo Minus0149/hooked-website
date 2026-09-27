@@ -87,7 +87,7 @@ A Hindi + Punjabi listener's first 50 cards had one Hindi or Punjabi song.
   Telugu, Regional Indian, Malayalam, Kannada, Marathi, Bengali, Indian Folk,
   Sufi & Ghazals, Hip-Hop); US/UK most-played and top songs plus a few big US
   genres; one small US country feed for listeners who opt in; UAE, Saudi,
-  Korea and Brazil top songs. Devotional is left out. Apple has no public
+  Brazil top songs and Korea most-played. Devotional is left out. Apple has no public
   new-releases song feed (`/new-releases` 404s on the v2 API, 400 on the legacy
   one), so freshness is the charts themselves plus the stale rule below.
 - **Language** (`langOf`, stored as `tracks.lang`, sent at codec index 17):

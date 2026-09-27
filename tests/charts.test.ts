@@ -24,7 +24,7 @@ describe("chart feeds", () => {
   it("asks Apple for a song chart, in one of its two formats", () => {
     for (const f of allFeeds()) {
       if (f.v2) {
-        expect(f.url).toMatch(/^https:\/\/rss\.applemarketingtools\.com\/api\/v2\/[a-z]{2}\/music\/most-played\/\d+\/songs\.json$/);
+        expect(f.url).toMatch(/^https:\/\/rss\.marketingtools\.apple\.com\/api\/v2\/[a-z]{2}\/music\/most-played\/\d+\/songs\.json$/);
       } else {
         expect(f.url).toMatch(/^https:\/\/itunes\.apple\.com\/[a-z]{2}\/rss\/topsongs\/limit=\d+\//);
       }
@@ -49,6 +49,11 @@ describe("reading a feed", () => {
   it("treats a malformed answer as a failed feed, not an empty chart", () => {
     expect(feedIds({ v2: true }, { feed: {} })).toBeNull();
     expect(feedIds({}, null)).toBeNull();
+    expect(feedIds({}, { error: "x" })).toBeNull();
+  });
+
+  it("reads a storefront with nothing on its chart as empty", () => {
+    expect(feedIds({}, { feed: { title: { label: "Top Songs" } } })).toEqual([]);
   });
 
   it("drops ids that aren't Apple track ids", () => {

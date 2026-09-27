@@ -33,8 +33,10 @@ export type Feed = {
 
 const legacy = (country: string, genre: number | null, limit = 100) =>
   `https://itunes.apple.com/${country}/rss/topsongs/limit=${limit}/${genre ? `genre=${genre}/` : ""}json`;
+// rss.applemarketingtools.com 301s here; asking the canonical host saves a hop
+// on a host that already takes up to ~16 s to answer India's chart
 const mostPlayed = (country: string) =>
-  `https://rss.applemarketingtools.com/api/v2/${country}/music/most-played/100/songs.json`;
+  `https://rss.marketingtools.apple.com/api/v2/${country}/music/most-played/100/songs.json`;
 
 /**
  * India first. Each India feed was checked on 2026-09-27 to return its own
@@ -76,7 +78,8 @@ export const FEEDS: Feed[] = [
   { id: "ae:most-played", url: mostPlayed("ae"), country: "ae", headline: true, v2: true },
   { id: "ae:all", url: legacy("ae", null), country: "ae", headline: true },
   { id: "sa:all", url: legacy("sa", null), country: "sa", headline: true },
-  { id: "kr:all", url: legacy("kr", null), country: "kr", headline: true },
+  // Korea has no iTunes song store, so its legacy chart is empty; Apple Music's isn't
+  { id: "kr:most-played", url: mostPlayed("kr"), country: "kr", headline: true, v2: true },
   { id: "br:all", url: legacy("br", null), country: "br", headline: true },
 ];
 
