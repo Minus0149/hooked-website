@@ -637,6 +637,7 @@ export const ACCOUNT_DELETION = {
     "promotionCampaigns",
     "promotionRates",
     "promotionViews",
+    "promotionRequests",
     // and in the auth component: the user (email, name, password), sessions and linked accounts
   ],
   kept: {
@@ -693,7 +694,11 @@ export const deleteMyAccount = mutation({
       .query("promotionViews")
       .withIndex("by_viewer_day", (q) => q.eq("viewer", `u:${userId}`))
       .collect();
-    for (const d of [...campaigns, ...views, ...(rate ? [rate] : [])]) await ctx.db.delete(d._id);
+    const requests = await ctx.db
+      .query("promotionRequests")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const d of [...campaigns, ...views, ...requests, ...(rate ? [rate] : [])]) await ctx.db.delete(d._id);
 
     // a creator's uploads leave with them: tracks, their hooks and
     // fingerprints, and the audio files themselves

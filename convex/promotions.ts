@@ -13,8 +13,14 @@ import {
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  APPROVAL_DAYS,
+  approvalPayable,
   checkCode,
   coercePromotionConfig,
+  customPackage,
+  nextRequestStatus,
+  REJECT_REASON_MAX,
+  REQUEST_NOTE_MAX,
   countsAsListen,
   mayDeal,
   normaliseCode,
@@ -38,6 +44,7 @@ import {
   requirePermission,
   requireUser,
 } from "./security";
+import { promotionApprovedEmail, promotionRejectedEmail } from "./emailTemplate";
 
 /**
  * Paid promotion: an approved artist pays to have their own song dealt, at its
@@ -192,49 +199,343 @@ export const previewPrice = query({
   },
 });
 
-// ------------------------------------------------------------------ buying
+// ------------------------------------------------------------------ requests
 
-/** Step 1: price the order on the server and write it down. */
-export const beginOrder = mutation({
-  args: { trackId: v.string(), packageId: v.string(), code: v.optional(v.string()) },
-  handler: async (ctx, { trackId, packageId, code }) => {
+/**
+ * Promotion is a request first (promotionRules: nextRequestStatus). The artist
+ * asks; an admin approves — which is when the price is fixed — or rejects with
+ * a reason. Only an approved request, inside its APPROVAL_DAYS window, can be
+ * paid, and the order is charged exactly the approved quote.
+ */
+
+const cleanList = (xs: string[] | undefined, max: number) =>
+  [...new Set((xs ?? []).map((x) => cleanText(x, 30).toLowerCase()).filter(Boolean))].slice(0, max);
+
+const APP_URL = () => (process.env.SITE_URL ?? "https://app.hookedcue.com").replace(/\/+$/, "");
+
+async function artistContact(ctx: QueryCtx, userId: string) {
+  const creator = await ctx.db
+    .query("creators")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+  const profile = await getProfile(ctx, userId);
+  return { name: creator?.artistName ?? profile?.name ?? "artist", email: creator?.email || profile?.email || "" };
+}
+
+async function trackTitle(ctx: QueryCtx, trackId: string) {
+  const t = await ctx.db
+    .query("tracks")
+    .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
+    .unique();
+  return t?.title ?? trackId;
+}
+
+/** Ask to promote one of your own published songs. Nothing is charged. */
+export const requestPromotion = mutation({
+  args: {
+    trackId: v.string(),
+    packageId: v.optional(v.string()),
+    customQuote: v.boolean(),
+    genres: v.optional(v.array(v.string())),
+    moods: v.optional(v.array(v.string())),
+    note: v.optional(v.string()),
+    code: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
     const user = await requireSeller(ctx);
-    await enforceRateLimit(ctx, `promo:order:${user.id}`, 10, 60 * 60_000);
+    await enforceRateLimit(ctx, `promo:request:${user.id}`, 10, 60 * 60_000);
     const config = await readConfig(ctx);
     if (!config.enabled) throw new Error("Promotion is paused right now.");
     const profile = await getProfile(ctx, user.id);
-    const track = await promotableTrack(ctx, trackId, user.id, hasPermission(profile, "catalog.curate"));
-    const pkg = packagesFor(config, await rateFor(ctx, user.id)).find((p) => p.id === packageId);
-    if (!pkg) throw new Error("That package isn't available.");
-    if (pkg.listeners > remainingCapacity(config, await owedListeners(ctx))) {
-      throw new Error("That package is full for now — try a smaller one.");
+    const track = await promotableTrack(ctx, args.trackId, user.id, hasPermission(profile, "catalog.curate"));
+    if (!args.customQuote) {
+      const pkg = packagesFor(config, await rateFor(ctx, user.id)).find((p) => p.id === args.packageId);
+      if (!pkg) throw new Error("Pick a package, or ask for a custom quote.");
     }
-    const row = await codeRow(ctx, code);
-    if (code) {
+    const note = args.note ? cleanText(args.note, REQUEST_NOTE_MAX) : undefined;
+    let code: string | undefined;
+    if (args.code?.trim()) {
+      const row = await codeRow(ctx, args.code);
       const verdict = checkCode(asDiscount(row), Date.now(), user.id);
       if (!verdict.ok) throw new Error(verdict.reason);
+      code = row!.code;
+    }
+    // one open request per song, so an admin never approves the same thing twice
+    const open = await ctx.db
+      .query("promotionRequests")
+      .withIndex("by_user", (q) => q.eq("userId", user.id))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("trackId"), track.trackId),
+          q.or(q.eq(q.field("status"), "requested"), q.eq(q.field("status"), "approved")),
+        ),
+      )
+      .first();
+    if (open) throw new Error("There's already an open request for this song.");
+    const id = await ctx.db.insert("promotionRequests", {
+      userId: user.id,
+      trackId: track.trackId,
+      packageId: args.customQuote ? undefined : args.packageId,
+      customQuote: args.customQuote,
+      target: { genres: cleanList(args.genres, 5), moods: cleanList(args.moods, 6) },
+      note: note || undefined,
+      code,
+      status: "requested",
+      createdAt: Date.now(),
+    });
+    return { requestId: id };
+  },
+});
+
+/** Take back a request that hasn't been paid. */
+export const withdrawRequest = mutation({
+  args: { requestId: v.id("promotionRequests") },
+  handler: async (ctx, { requestId }) => {
+    const user = await requireUser(ctx);
+    const r = await ctx.db.get(requestId);
+    if (!r || r.userId !== user.id) throw new Error("No such request.");
+    const next = nextRequestStatus(r.status, "withdraw");
+    if (!next) throw new Error("This request can't be withdrawn now.");
+    await ctx.db.patch(requestId, { status: next });
+  },
+});
+
+/** An artist's own requests, newest first, with what was approved or why not. */
+export const myRequests = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const rows = await ctx.db
+      .query("promotionRequests")
+      .withIndex("by_user", (q) => q.eq("userId", user.id))
+      .order("desc")
+      .take(50);
+    const now = Date.now();
+    const out = [];
+    for (const r of rows) {
+      out.push({
+        id: r._id,
+        trackId: r.trackId,
+        title: await trackTitle(ctx, r.trackId),
+        // an approval past its window reads as expired even before the cron runs
+        status: r.status === "approved" && !approvalPayable(r, now) ? ("expired" as const) : r.status,
+        packageId: r.packageId ?? null,
+        customQuote: r.customQuote,
+        approved: r.approved ?? null,
+        expiresAt: r.expiresAt ?? null,
+        rejectReason: r.rejectReason ?? null,
+        createdAt: r.createdAt,
+      });
+    }
+    return out;
+  },
+});
+
+/** The admin queue: open requests first, with what's needed to judge them. */
+export const adminRequests = query({
+  args: {},
+  handler: async (ctx) => {
+    await requirePermission(ctx, "ads.manage");
+    const config = await readConfig(ctx);
+    const open = await ctx.db
+      .query("promotionRequests")
+      .withIndex("by_status", (q) => q.eq("status", "requested"))
+      .order("desc")
+      .take(100);
+    const recent = (await ctx.db.query("promotionRequests").order("desc").take(60)).filter(
+      (r) => r.status !== "requested",
+    );
+    const out = [];
+    for (const r of [...open, ...recent]) {
+      const t = await ctx.db
+        .query("tracks")
+        .withIndex("by_trackId", (q) => q.eq("trackId", r.trackId))
+        .unique();
+      const hook = t
+        ? (await ctx.db.query("hooks").withIndex("by_trackId", (q) => q.eq("trackId", t.trackId)).collect())
+            .filter((h) => h.active)
+            .sort((a, b) => (a.rank ?? a.order) - (b.rank ?? b.order))[0]
+        : undefined;
+      const artist = await artistContact(ctx, r.userId);
+      const rate = await rateFor(ctx, r.userId);
+      out.push({
+        id: r._id,
+        status: r.status,
+        createdAt: r.createdAt,
+        artist,
+        hasPersonalRate: rate !== null,
+        track: t
+          ? {
+              trackId: t.trackId,
+              title: t.title,
+              artist: t.artist,
+              artwork: t.artwork,
+              genre: t.genre,
+              audio: t.audioStorageId ? await ctx.storage.getUrl(t.audioStorageId) : t.previewUrl,
+              hookStartMs: hook?.startMs ?? 0,
+              hookDurationMs: hook?.durationMs ?? 15_000,
+              uploaded: Boolean(t.ownerUserId),
+              rightsConfirmedAt: t.rightsConfirmedAt ?? null,
+              hidden: t.hidden === true,
+            }
+          : null,
+        packageId: r.packageId ?? null,
+        customQuote: r.customQuote,
+        target: r.target,
+        note: r.note ?? null,
+        code: r.code ?? null,
+        approved: r.approved ?? null,
+        expiresAt: r.expiresAt ?? null,
+        rejectReason: r.rejectReason ?? null,
+        // the price the artist would see for each package, launch offer included
+        packages: packagesFor(config, rate).map((p) => ({ id: p.id, name: p.name, listeners: p.listeners, pricePaise: p.pricePaise })),
+      });
+    }
+    return out;
+  },
+});
+
+/**
+ * Approve: fixes the quote (package or a custom one, the artist's personal
+ * rate, the launch offer on a first campaign, a code) and opens the pay window.
+ */
+export const approveRequest = mutation({
+  args: {
+    requestId: v.id("promotionRequests"),
+    packageId: v.optional(v.string()),
+    custom: v.optional(v.object({ listeners: v.number(), pricePaise: v.number() })),
+    /** a code to apply; "" clears the artist's; absent keeps it */
+    code: v.optional(v.string()),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requirePermission(ctx, "ads.manage");
+    const admin = await requireUser(ctx);
+    const r = await ctx.db.get(args.requestId);
+    if (!r) throw new Error("No such request.");
+    const next = nextRequestStatus(r.status, "approve");
+    if (!next) throw new Error(`This request is ${r.status}; it can't be approved.`);
+    const config = await readConfig(ctx);
+    const pkg = args.custom
+      ? customPackage(args.custom.listeners, args.custom.pricePaise)
+      : packagesFor(config, await rateFor(ctx, r.userId)).find((p) => p.id === (args.packageId ?? r.packageId));
+    if (!pkg) throw new Error(args.custom ? "That custom price is out of range (min ₹49)." : "Pick a package or set a custom price.");
+    if (pkg.listeners > remainingCapacity(config, await owedListeners(ctx))) {
+      throw new Error("Not enough capacity left for that many listeners.");
+    }
+    const codeText = args.code === undefined ? r.code : args.code.trim() || undefined;
+    const row = await codeRow(ctx, codeText);
+    if (codeText) {
+      const verdict = checkCode(asDiscount(row), Date.now(), r.userId);
+      if (!verdict.ok) throw new Error(`Code: ${verdict.reason}`);
     }
     const q = quote({
       pkg,
       launchOffer: config.launchOffer,
-      firstCampaign: await isFirstCampaign(ctx, user.id),
-      code: code ? asDiscount(row) : null,
+      firstCampaign: await isFirstCampaign(ctx, r.userId),
+      code: codeText ? asDiscount(row) : null,
     });
+    const note = args.note ? cleanText(args.note, REQUEST_NOTE_MAX) || undefined : undefined;
+    const expiresAt = Date.now() + APPROVAL_DAYS * DAY;
+    await ctx.db.patch(r._id, {
+      status: next,
+      approved: {
+        packageId: pkg.id,
+        listeners: q.listeners,
+        basePaise: q.basePaise,
+        launchOffPaise: q.launchOffPaise,
+        codeOffPaise: q.codeOffPaise,
+        totalPaise: q.totalPaise,
+        code: codeText ? row!.code : undefined,
+        note,
+      },
+      decidedAt: Date.now(),
+      decidedBy: admin.id,
+      expiresAt,
+    });
+    const artist = await artistContact(ctx, r.userId);
+    if (artist.email) {
+      const mail = promotionApprovedEmail({
+        song: await trackTitle(ctx, r.trackId),
+        listeners: q.listeners,
+        totalPaise: q.totalPaise,
+        expiresAt,
+        url: `${APP_URL()}/creator`,
+        note,
+      });
+      await ctx.scheduler.runAfter(0, internal.email.send, { to: artist.email, subject: mail.subject, html: mail.html });
+    }
+    return { quote: q, expiresAt, emailed: Boolean(artist.email) };
+  },
+});
+
+export const rejectRequest = mutation({
+  args: { requestId: v.id("promotionRequests"), reason: v.string() },
+  handler: async (ctx, { requestId, reason }) => {
+    await requirePermission(ctx, "ads.manage");
+    const admin = await requireUser(ctx);
+    const r = await ctx.db.get(requestId);
+    if (!r) throw new Error("No such request.");
+    const next = nextRequestStatus(r.status, "reject");
+    if (!next) throw new Error(`This request is ${r.status}; it can't be rejected.`);
+    const why = cleanText(reason, REJECT_REASON_MAX);
+    if (why.length < 3) throw new Error("Give the artist a reason.");
+    await ctx.db.patch(requestId, { status: next, rejectReason: why, decidedAt: Date.now(), decidedBy: admin.id });
+    const artist = await artistContact(ctx, r.userId);
+    if (artist.email) {
+      const mail = promotionRejectedEmail({ song: await trackTitle(ctx, r.trackId), reason: why, url: `${APP_URL()}/creator` });
+      await ctx.scheduler.runAfter(0, internal.email.send, { to: artist.email, subject: mail.subject, html: mail.html });
+    }
+    return { emailed: Boolean(artist.email) };
+  },
+});
+
+// ------------------------------------------------------------------ buying
+
+/**
+ * Step 1: an order for an approved request, at exactly the approved quote.
+ * Refused for anything not approved, past its window, or someone else's.
+ */
+export const beginOrder = mutation({
+  args: { requestId: v.id("promotionRequests") },
+  handler: async (ctx, { requestId }) => {
+    const user = await requireSeller(ctx);
+    await enforceRateLimit(ctx, `promo:order:${user.id}`, 10, 60 * 60_000);
+    const config = await readConfig(ctx);
+    if (!config.enabled) throw new Error("Promotion is paused right now.");
+    const r = await ctx.db.get(requestId);
+    if (!r || r.userId !== user.id) throw new Error("No such request.");
+    if (!approvalPayable(r, Date.now()) || !r.approved) {
+      throw new Error(
+        r.status === "approved" ? "This approval has lapsed — ask again." : "This request isn't approved for payment.",
+      );
+    }
+    // an unpaid order for this approval is reused, so a retried checkout can't double-charge
+    if (r.orderId) {
+      const existing = await ctx.db.get(r.orderId);
+      if (existing && existing.status === "created") return { orderId: existing._id, totalPaise: existing.totalPaise };
+    }
+    if (r.approved.listeners > remainingCapacity(config, await owedListeners(ctx))) {
+      throw new Error("We're full for now — this approval stays valid until it lapses; try again soon.");
+    }
+    const a = r.approved;
     const orderId = await ctx.db.insert("promotionOrders", {
       userId: user.id,
-      trackId: track.trackId,
-      packageId: pkg.id,
-      listeners: pkg.listeners,
-      basePaise: q.basePaise,
-      launchOffPaise: q.launchOffPaise,
-      codeOffPaise: q.codeOffPaise,
-      totalPaise: q.totalPaise,
+      requestId,
+      trackId: r.trackId,
+      packageId: a.packageId,
+      listeners: a.listeners,
+      basePaise: a.basePaise,
+      launchOffPaise: a.launchOffPaise,
+      codeOffPaise: a.codeOffPaise,
+      totalPaise: a.totalPaise,
       currency: "INR",
-      code: row ? row.code : undefined,
+      code: a.code,
       status: "created",
       createdAt: Date.now(),
     });
-    return { orderId, quote: q };
+    await ctx.db.patch(requestId, { orderId });
+    return { orderId, totalPaise: a.totalPaise };
   },
 });
 
@@ -329,6 +630,12 @@ export const markPaid = internalMutation({
     }
     const now = Date.now();
     await ctx.db.patch(order._id, { status: "paid", razorpayPaymentId, paidAt: now });
+    if (order.requestId) {
+      const req = await ctx.db.get(order.requestId);
+      const next = req ? nextRequestStatus(req.status, "pay") : null;
+      // paid after the window lapsed (checkout left open): the money is real, honour it
+      if (req && (next || req.status === "expired")) await ctx.db.patch(req._id, { status: "paid" });
+    }
     if (order.code) {
       const code = await codeRow(ctx, order.code);
       if (code) await ctx.db.patch(code._id, { uses: code.uses + 1 });
@@ -526,7 +833,19 @@ export const expireDue = internalMutation({
         ended++;
       }
     }
-    return { ended };
+    // approvals not paid inside their window lapse; the artist can ask again
+    const approved = await ctx.db
+      .query("promotionRequests")
+      .withIndex("by_status", (q) => q.eq("status", "approved"))
+      .take(500);
+    let lapsed = 0;
+    for (const r of approved) {
+      if (!approvalPayable(r, now)) {
+        await ctx.db.patch(r._id, { status: "expired" });
+        lapsed++;
+      }
+    }
+    return { ended, lapsed };
   },
 });
 

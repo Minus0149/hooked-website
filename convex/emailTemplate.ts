@@ -136,3 +136,54 @@ export function inviteEmail(name: string, url: string): { subject: string; html:
     }),
   };
 }
+
+const rupeesText = (paise: number) =>
+  `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+
+const dateText = (ms: number) =>
+  new Date(ms).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
+
+/** A promotion request was approved: pay the approved quote within the window. */
+export function promotionApprovedEmail(opts: {
+  song: string;
+  listeners: number;
+  totalPaise: number;
+  expiresAt: number;
+  url: string;
+  note?: string;
+}): { subject: string; html: string } {
+  const price = rupeesText(opts.totalPaise);
+  const paragraphs = [
+    `Your request to promote **${opts.song}** is approved: ${opts.listeners.toLocaleString("en-IN")} listeners for ${price}.`,
+    `Pay from your creator dashboard by **${dateText(opts.expiresAt)}** and your song goes into the deck straight away. After that the approval lapses and you can ask again.`,
+  ];
+  if (opts.note) paragraphs.push(`A note from us: ${opts.note}`);
+  return {
+    subject: `Your promotion is approved — pay ${price} to start`,
+    html: renderEmail({
+      preheader: `${opts.song}: approved for ${opts.listeners.toLocaleString("en-IN")} listeners.`,
+      heading: "Your promotion is approved",
+      paragraphs,
+      button: { label: `Pay ${price} and start`, url: opts.url },
+      note: "Promoted songs are labelled Promoted. Listeners we don't reach in 30 days are refunded.",
+    }),
+  };
+}
+
+/** A promotion request was turned down, with the reason. */
+export function promotionRejectedEmail(opts: { song: string; reason: string; url: string }): { subject: string; html: string } {
+  return {
+    subject: `About your promotion request for ${opts.song}`,
+    html: renderEmail({
+      preheader: "We couldn't approve this one.",
+      heading: "We couldn't approve this request",
+      paragraphs: [
+        `Thanks for asking to promote **${opts.song}**. We can't approve it as it stands.`,
+        `The reason: ${opts.reason}`,
+        "Nothing was charged. You're welcome to change what's needed and ask again.",
+      ],
+      button: { label: "Open your creator dashboard", url: opts.url },
+      note: "Questions? Reply to hello@hookedcue.com.",
+    }),
+  };
+}

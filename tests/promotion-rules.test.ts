@@ -1,7 +1,11 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  APPROVAL_DAYS,
+  approvalPayable,
   checkCode,
+  customPackage,
+  nextRequestStatus,
   coercePromotionConfig,
   countsAsListen,
   DEFAULT_PROMOTION_CONFIG,
@@ -143,5 +147,40 @@ describe("delivery and refunds", () => {
   it("reports the save rate as a percentage", () => {
     expect(saveRate({ listens: 200, saves: 17, skips: 150, more: 20, never: 3 })).toBe(8.5);
     expect(saveRate({ listens: 0, saves: 0, skips: 0, more: 0, never: 0 })).toBe(0);
+  });
+});
+
+describe("promotion requests", () => {
+  it("move requested → approved → paid, or requested → rejected", () => {
+    expect(nextRequestStatus("requested", "approve")).toBe("approved");
+    expect(nextRequestStatus("approved", "pay")).toBe("paid");
+    expect(nextRequestStatus("requested", "reject")).toBe("rejected");
+    expect(nextRequestStatus("approved", "lapse")).toBe("expired");
+    expect(nextRequestStatus("requested", "withdraw")).toBe("withdrawn");
+  });
+
+  it("can't be paid before approval, twice, or after rejection or expiry", () => {
+    expect(nextRequestStatus("requested", "pay")).toBeNull();
+    expect(nextRequestStatus("paid", "pay")).toBeNull();
+    expect(nextRequestStatus("rejected", "pay")).toBeNull();
+    expect(nextRequestStatus("expired", "pay")).toBeNull();
+    expect(nextRequestStatus("rejected", "approve")).toBeNull();
+    expect(nextRequestStatus("paid", "withdraw")).toBeNull();
+  });
+
+  it("are payable only inside the approval window", () => {
+    const at = 1_000_000;
+    const expiresAt = at + APPROVAL_DAYS * 86_400_000;
+    expect(approvalPayable({ status: "approved", expiresAt }, at)).toBe(true);
+    expect(approvalPayable({ status: "approved", expiresAt }, expiresAt + 1)).toBe(false);
+    expect(approvalPayable({ status: "requested", expiresAt }, at)).toBe(false);
+    expect(approvalPayable({ status: "approved" }, at)).toBe(false);
+  });
+
+  it("accept a custom price only within the same limits as list prices", () => {
+    expect(customPackage(3_000, 99_900)).toEqual({ id: "custom", name: "Custom", listeners: 3_000, pricePaise: 99_900 });
+    expect(customPackage(3_000, 100)).toBeNull();
+    expect(customPackage(5, 99_900)).toBeNull();
+    expect(customPackage(Number.NaN, 99_900)).toBeNull();
   });
 });

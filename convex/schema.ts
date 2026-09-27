@@ -558,6 +558,8 @@ export default defineSchema({
    */
   promotionOrders: defineTable({
     userId: v.string(),
+    /** the approved request this pays for; every new order has one */
+    requestId: v.optional(v.id("promotionRequests")),
     trackId: v.string(),
     packageId: v.string(),
     listeners: v.number(),
@@ -648,6 +650,50 @@ export default defineSchema({
     eventId: v.string(),
     at: v.number(),
   }).index("by_eventId", ["eventId"]),
+
+  /**
+   * An artist asks to promote a song; an admin approves (fixing the quote) or
+   * rejects. Nothing is paid or dealt before approval (promotionRules:
+   * nextRequestStatus). The approved quote is what the order is charged.
+   */
+  promotionRequests: defineTable({
+    userId: v.string(),
+    trackId: v.string(),
+    /** a list package, or absent when the artist asked for a custom quote */
+    packageId: v.optional(v.string()),
+    customQuote: v.boolean(),
+    target: v.object({ genres: v.array(v.string()), moods: v.array(v.string()) }),
+    note: v.optional(v.string()),
+    code: v.optional(v.string()),
+    status: v.union(
+      v.literal("requested"),
+      v.literal("approved"),
+      v.literal("rejected"),
+      v.literal("paid"),
+      v.literal("expired"),
+      v.literal("withdrawn"),
+    ),
+    createdAt: v.number(),
+    approved: v.optional(
+      v.object({
+        packageId: v.string(),
+        listeners: v.number(),
+        basePaise: v.number(),
+        launchOffPaise: v.number(),
+        codeOffPaise: v.number(),
+        totalPaise: v.number(),
+        code: v.optional(v.string()),
+        note: v.optional(v.string()),
+      }),
+    ),
+    decidedAt: v.optional(v.number()),
+    decidedBy: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    rejectReason: v.optional(v.string()),
+    orderId: v.optional(v.id("promotionOrders")),
+  })
+    .index("by_user", ["userId", "createdAt"])
+    .index("by_status", ["status", "createdAt"]),
 
   /**
    * The catalogue file's bookkeeping (convex/catalog.ts): one row. `version`

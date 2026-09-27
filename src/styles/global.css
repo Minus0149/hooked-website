@@ -3902,3 +3902,26 @@ a.sheet-option { color: var(--text); text-decoration: none; }
 .promote-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
 .promote-bar i { display: block; height: 100%; background: var(--accent); }
 .promo-pkgs input { width: 100%; min-width: 60px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text); padding: 6px 8px; font: inherit; }
+.promote-moods { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.promote-chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(8,8,12,.55); color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.promote-chip.on { color: var(--text); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.promote-note-input { resize: vertical; min-height: 72px; font: inherit; text-transform: none; letter-spacing: 0; }
+.promote-count { align-self: flex-end; font-size: 11px; color: var(--muted); letter-spacing: 0; text-transform: none; }
+.promote-status.requested { color: var(--more); }
+.promote-status.approved { color: var(--save); }
+.promote-status.rejected, .promote-status.expired { color: var(--never); }
+
+.promo-req { border-top: 1px solid var(--line); padding: 16px 0; }
+.promo-req:first-of-type { border-top: none; padding-top: 0; }
+.promo-req-head { display: flex; gap: 12px; align-items: flex-start; }
+.promo-req-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.promo-req-who span { color: var(--muted); font-size: 12.5px; }
+.promo-req-meta { font-size: 12px; }
+.promo-req-body { margin: 10px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.promo-req-body p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.55; }
+.promo-req-body strong { color: var(--text); }
+.promo-play { align-self: flex-start; }
+.promo-req-actions { margin-top: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); }
+.promo-req-actions .admin-card-foot { margin-top: 12px; }
+.promo-req-reason { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.promo-req-reason textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; color: var(--text); padding: 8px 10px; font: inherit; resize: vertical; }

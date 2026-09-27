@@ -262,3 +262,50 @@ export type CampaignStats = { listens: number; saves: number; skips: number; mor
 export function saveRate(s: CampaignStats): number {
   return s.listens > 0 ? Math.round((s.saves / s.listens) * 1000) / 10 : 0;
 }
+
+// ------------------------------------------------------------------ requests
+
+/**
+ * A promotion starts as a request an admin approves before anything is paid
+ * or dealt. The approval fixes the quote; the artist pays that quote within
+ * APPROVAL_DAYS or the approval lapses and they ask again.
+ *
+ *   requested ──approve──▶ approved ──pay──▶ paid (a campaign exists)
+ *       │                     │
+ *       └──reject──▶ rejected └──lapse──▶ expired
+ *   requested/approved ──withdraw──▶ withdrawn
+ */
+export type RequestStatus = "requested" | "approved" | "rejected" | "paid" | "expired" | "withdrawn";
+export type RequestEvent = "approve" | "reject" | "pay" | "lapse" | "withdraw";
+
+export const APPROVAL_DAYS = 7;
+export const REQUEST_NOTE_MAX = 500;
+export const REJECT_REASON_MAX = 500;
+
+const TRANSITIONS: Record<RequestStatus, Partial<Record<RequestEvent, RequestStatus>>> = {
+  requested: { approve: "approved", reject: "rejected", withdraw: "withdrawn" },
+  approved: { pay: "paid", lapse: "expired", withdraw: "withdrawn" },
+  rejected: {},
+  paid: {},
+  expired: {},
+  withdrawn: {},
+};
+
+/** The next status, or null when the event isn't allowed from here. */
+export function nextRequestStatus(current: RequestStatus, event: RequestEvent): RequestStatus | null {
+  return TRANSITIONS[current][event] ?? null;
+}
+
+/** An approval can be paid only while it's approved and inside its window. */
+export function approvalPayable(r: { status: RequestStatus; expiresAt?: number }, now: number): boolean {
+  return r.status === "approved" && r.expiresAt !== undefined && now <= r.expiresAt;
+}
+
+/** A custom package set by the admin at approval: sane numbers or nothing. */
+export function customPackage(listeners: number, pricePaise: number): PromotionPackage | null {
+  if (!Number.isFinite(listeners) || !Number.isFinite(pricePaise)) return null;
+  const l = Math.round(listeners);
+  const p = Math.round(pricePaise);
+  if (l < 10 || l > 1_000_000 || p < MIN_ORDER_PAISE || p > MAX_ORDER_PAISE) return null;
+  return { id: "custom", name: "Custom", listeners: l, pricePaise: p };
+}

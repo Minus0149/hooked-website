@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Select, useDialogs } from "../ui/Dialogs";
+import { PromotionRequests } from "./PromotionRequests";
 
 /**
  * Paid promotion, run from here (convex/promotions.ts, docs/PROMOTIONS.md):
@@ -30,6 +31,7 @@ export function PromotionsPanel() {
   return (
     <>
       <Summary data={data} />
+      <PromotionRequests />
       <ConfigCard key={JSON.stringify(data.config)} config={data.config as Config} />
       <RatesCard artists={data.artists} rates={data.rates} />
       <CodesCard artists={data.artists} codes={data.codes} />

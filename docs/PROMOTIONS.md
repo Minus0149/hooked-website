@@ -7,7 +7,33 @@ price, tested in `tests/promotion-rules.test.ts`) and `convex/promotions.ts`
 (storage, Razorpay, dealing). Public pages: hookedcue.com/artists,
 /refunds, /contact.
 
-## What counts as a listen
+## Request, review, then pay
+
+Promotion is never bought directly. The flow (`promotionRules.nextRequestStatus`):
+
+1. **Request** (creator dashboard): one of the artist's own published songs,
+   a package or "ask for a custom quote", an optional target (moods, genres),
+   a note (≤ 500 characters) and an optional code. Nothing is charged; one
+   open request per song.
+2. **Review** (Admin → Promotion → Requests): play the hook, check the rights
+   line, read the note. **Approve** — optionally with another package, a
+   custom listeners/price, a different code and a note — which fixes the
+   quote (personal rate, launch offer on a first campaign, code, ₹49 floor) and
+   opens a **7-day** pay window; or **reject** with a reason (required). Both
+   send the artist a branded email (`promotionApprovedEmail`,
+   `promotionRejectedEmail`).
+3. **Pay** (creator dashboard): `beginOrder({ requestId })` refuses anything
+   not approved, past its window or someone else's, and charges exactly the
+   approved quote; an unpaid order for the same approval is reused so a retry
+   can't double-charge. A signed payment moves the request to `paid` and
+   starts the campaign.
+4. The daily cron lapses unpaid approvals (`expired`); the artist can ask again.
+   A request can be withdrawn until it's paid.
+
+Targeting is recorded on the request and shown to the admin; the deck does not
+yet match promoted songs to listeners by it.
+
+
 
 A promoted card is dealt as a normal, playable card labelled **Promoted**.
 A listen counts when the card has played for **3 seconds or more**, once per
