@@ -99,10 +99,14 @@ describe("langOf", () => {
   it("reads India's film songs and its own 'Hip-Hop' filing as Indian", () => {
     expect(langOf(t({ title: 'Soul Of Dia (From "Dia")', genre: "soundtrack", markets: ["in"] }))).toBe("in");
     expect(langOf(t({ title: "Still Rollin", genre: "hip-hop", markets: ["in"] }))).toBe("in");
+    expect(langOf(t({ title: "Lagan", genre: "asia", markets: ["in"] }))).toBe("in");
+    expect(langOf(t({ title: "Tum Hi Pasand Reh Gaye", genre: "asia", markets: ["in"] }))).toBe("hi");
   });
 
   it("reads Brazil's charts as Portuguese whatever genre they're filed under", () => {
     expect(langOf(t({ title: "Tropa do Capitão", genre: "funk", markets: ["br"] }))).toBe("pt");
+    // but English pop on Brazil's chart is still English
+    expect(langOf(t({ title: "Someone Like You", artist: "Adele", genre: "pop", markets: ["br"] }))).toBe("en");
   });
 
   it("calls a Western genre chart's song English even when only India charted it", () => {

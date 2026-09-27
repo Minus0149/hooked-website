@@ -126,7 +126,7 @@ type LangInput = { title: string; artist: string; genre: string; markets?: strin
 // Romanised Hindi and Punjabi words distinctive enough to name the language on
 // their own. Titles like "Hum Tere Pyar Mein" arrive filed as "rock" from a
 // storefront's genre chart, and nothing else about them says Hindi.
-const HINDI_WORDS = /\b(?:pyaa?r|ishq|dil|dilbar|naina|mera|meri|tera|teri|tere|tujhe|mujhe|zindagi|sajna|sajni|jaana|yaara?|kya|nahi|hai|mein|raat|saath|hisaab|dhadkan|mohabbat|chand|chaand|khwab|aankhein|jaanam|humsafar)\b/i;
+const HINDI_WORDS = /\b(?:pyaa?r|ishq|dil|dilbar|naina|mera|meri|tera|teri|tere|tujhe|mujhe|zindagi|sajna|sajni|jaana|yaara?|kya|nahi|hai|mein|raat|saath|hisaab|dhadkan|mohabbat|chand|chaand|khwab|aankhein|jaanam|humsafar|tum|tumhe|tumse|pasand|sanam|saiyaan|piya|mahiya|kahani)\b/i;
 const PUNJABI_WORDS = /\b(?:kudi|munde?|jatt|gabru|pind|soniye|sohneya|yaaran|jattiye|bapu|velly|putt)\b/i;
 
 /** Where Apple files hip-hop that isn't the US's; "hip-hop/rap" is the US one. */
@@ -184,13 +184,13 @@ export function langOf(t: LangInput, byArtist?: Map<string, string>): string {
   if (!western && markets.includes("in")) {
     // Apple files much of India's own output as "Worldwide", its film songs as
     // "Soundtrack" with a (From "Film") title, and its rap as "Hip-Hop"
-    if (/world|^hip-hop$/.test(genre) || /\(from ["“]/i.test(t.title)) return "in";
+    if (/world|^hip-hop$|^asia/.test(genre) || /\(from ["“]/i.test(t.title)) return "in";
   }
   if (/world/.test(genre) && (markets.includes("ae") || markets.includes("sa")) && !western) return "ar";
   if (western) return "en";
   if (markets.includes("kr")) return "ko";
-  // Brazil's charts file baile funk and sertanejo under Western genre names
-  if (markets.includes("br")) return "pt";
+  // Brazil's charts file baile funk as plain "Funk"; its English pop is still English
+  if (markets.includes("br") && /^funk/.test(genre)) return "pt";
   // a Western genre chart in a non-Western storefront is still Western music
   if (WESTERN_GENRE.test(genre)) return "en";
   return "";
