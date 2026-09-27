@@ -108,7 +108,7 @@ export const setHidden = mutation({
           ? { hidden, hiddenBy: "admin", hiddenReason: undefined, keep: undefined }
           : { hidden, hiddenBy: undefined, hiddenReason: undefined, keep: true },
       );
-      await touchCatalog(ctx);
+      await touchCatalog(ctx, { urgent: true });
     }
   },
 });

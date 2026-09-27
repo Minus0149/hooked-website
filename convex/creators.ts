@@ -225,7 +225,7 @@ export const attachAudio = mutation({
       // new audio: hook recognition hears the full upload on its next pass
       hookVersion: undefined,
     });
-    await touchCatalog(ctx);
+    await touchCatalog(ctx, { urgent: true });
   },
 });
 
@@ -418,7 +418,7 @@ export const setTrackHidden = mutation({
       }
     }
     await ctx.db.patch(track._id, { hidden });
-    await touchCatalog(ctx);
+    await touchCatalog(ctx, { urgent: true });
   },
 });
 
@@ -468,7 +468,7 @@ export const upsertHook = mutation({
         order: args.order ?? hook.order,
         active: args.active ?? hook.active,
       });
-      await touchCatalog(ctx);
+      await touchCatalog(ctx, { urgent: true });
       return { hookId: args.hookId };
     }
 
@@ -490,7 +490,7 @@ export const upsertHook = mutation({
       createdBy: user.id,
       source: curator ? "curated" : "artist",
     });
-    await touchCatalog(ctx);
+    await touchCatalog(ctx, { urgent: true });
     return { hookId };
   },
 });
@@ -503,7 +503,7 @@ export const deleteHook = mutation({
     if (!hook) return;
     await requireOwnedTrack(ctx, hook.trackId, curator, user.id);
     await ctx.db.delete(hookId);
-    await touchCatalog(ctx);
+    await touchCatalog(ctx, { urgent: true });
   },
 });
 

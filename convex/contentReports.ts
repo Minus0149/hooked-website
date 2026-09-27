@@ -171,7 +171,7 @@ export const resolve = mutation({
         .unique();
       if (t && !t.hidden) {
         await ctx.db.patch(t._id, { hidden: true });
-        await touchCatalog(ctx);
+        await touchCatalog(ctx, { urgent: true });
       }
     }
     const open = await ctx.db

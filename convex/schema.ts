@@ -812,6 +812,8 @@ export default defineSchema({
     bytes: v.optional(v.number()),
     tracks: v.optional(v.number()),
     builtAt: v.optional(v.number()),
+    /** when the pending rebuild will run, so an urgent change can bring it forward */
+    scheduledFor: v.optional(v.number()),
   }).index("by_key", ["key"]),
 
   /**

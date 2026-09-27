@@ -12,6 +12,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { encodeCatalog, type CatalogTrack, type CatalogVersion } from "../src/lib/catalogCodec";
 import { hooksByTrack } from "./tracks";
+import { runtimeFor } from "./runtime";
 
 /**
  * The catalogue as a versioned file instead of a reactive query.
@@ -35,8 +36,20 @@ import { hooksByTrack } from "./tracks";
  */
 
 const KEY = "catalog";
-/** Long enough to fold a burst of writes (an analyser run, a chart pull) into one build. */
+/** How soon an urgent change (an admin hide, a creator publishing) is rebuilt. */
 export const REBUILD_DELAY_MS = 20_000;
+
+/**
+ * When the next rebuild should run. Background changes (analyser, chart pull,
+ * curation, hourly heat) wait until `minIntervalMs` after the last build, so a
+ * day of them costs one or two builds instead of thousands; urgent ones go in
+ * REBUILD_DELAY_MS.
+ */
+export function rebuildDelayMs(o: { now: number; builtAt?: number; minIntervalMs: number; urgent?: boolean }): number {
+  if (o.urgent || o.builtAt === undefined) return REBUILD_DELAY_MS;
+  const due = o.builtAt + o.minIntervalMs;
+  return Math.max(REBUILD_DELAY_MS, due - o.now);
+}
 
 async function metaRow(ctx: { db: QueryCtx["db"] }) {
   return await ctx.db
@@ -50,7 +63,8 @@ async function metaRow(ctx: { db: QueryCtx["db"] }) {
  * hidden or re-described (title, artwork, energy, sound…), or a hook added,
  * moved, re-ranked or removed.
  */
-export async function touchCatalog(ctx: MutationCtx): Promise<void> {
+export async function touchCatalog(ctx: MutationCtx, opts: { urgent?: boolean } = {}): Promise<void> {
+  const now = Date.now();
   const meta = await metaRow(ctx);
   if (!meta) {
     await ctx.db.insert("catalogMeta", {
@@ -59,14 +73,28 @@ export async function touchCatalog(ctx: MutationCtx): Promise<void> {
       dirtySeq: 1,
       builtSeq: 0,
       scheduled: true,
+      scheduledFor: now + REBUILD_DELAY_MS,
     });
     await ctx.scheduler.runAfter(REBUILD_DELAY_MS, internal.catalog.rebuild, {});
     return;
   }
-  await ctx.db.patch(meta._id, { dirtySeq: meta.dirtySeq + 1, scheduled: true });
-  if (!meta.scheduled) {
-    await ctx.scheduler.runAfter(REBUILD_DELAY_MS, internal.catalog.rebuild, {});
-  }
+  const runtime = await runtimeFor(ctx);
+  const delay = rebuildDelayMs({
+    now,
+    builtAt: meta.builtAt,
+    minIntervalMs: runtime.catalogRebuildHours * 3_600_000,
+    urgent: opts.urgent,
+  });
+  const when = now + delay;
+  // a rebuild is already pending: only an earlier one (an urgent change) is worth scheduling
+  const pendingAt = meta.scheduled ? meta.scheduledFor ?? now : Infinity;
+  const schedule = !meta.scheduled || when < pendingAt - 1_000;
+  await ctx.db.patch(meta._id, {
+    dirtySeq: meta.dirtySeq + 1,
+    scheduled: true,
+    ...(schedule ? { scheduledFor: when } : {}),
+  });
+  if (schedule) await ctx.scheduler.runAfter(delay, internal.catalog.rebuild, {});
 }
 
 /** The tiny thing every client watches. v = 0: no file built yet. */
@@ -102,7 +130,7 @@ export const snapshotStart = internalQuery({
   args: {},
   handler: async (ctx) => {
     const meta = await metaRow(ctx);
-    return { seq: meta?.dirtySeq ?? 0, version: meta?.version ?? 0 };
+    return { seq: meta?.dirtySeq ?? 0, version: meta?.version ?? 0, builtSeq: meta?.builtSeq ?? 0 };
   },
 });
 
@@ -158,6 +186,9 @@ export const rebuild = internalAction({
   args: {},
   handler: async (ctx): Promise<{ version: number; parts: number; bytes: number } | null> => {
     const snap = await ctx.runQuery(internal.catalog.snapshotStart, {});
+    // several rebuilds can be pending (an urgent one brought forward); the
+    // later ones find nothing new and cost nothing
+    if (snap.version > 0 && snap.seq <= snap.builtSeq) return null;
     const tracks: CatalogTrack[] = [];
     let cursor: string | null = null;
     for (;;) {
@@ -225,8 +256,14 @@ export const publish = internalMutation({
     if (meta) await ctx.db.replace(meta._id, row);
     else await ctx.db.insert("catalogMeta", row);
     for (const id of stale) await ctx.storage.delete(id);
-    // something changed while this build was reading — build again
-    if (dirtySince) await ctx.scheduler.runAfter(REBUILD_DELAY_MS, internal.catalog.rebuild, {});
+    // something changed while this build was reading — build again, at the
+    // background cadence (an urgent change will bring it forward itself)
+    if (dirtySince) {
+      const runtime = await runtimeFor(ctx);
+      const delay = rebuildDelayMs({ now: Date.now(), builtAt: Date.now(), minIntervalMs: runtime.catalogRebuildHours * 3_600_000 });
+      await ctx.db.patch((await metaRow(ctx))!._id, { scheduledFor: Date.now() + delay });
+      await ctx.scheduler.runAfter(delay, internal.catalog.rebuild, {});
+    }
     return true;
   },
 });

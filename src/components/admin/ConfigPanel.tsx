@@ -22,6 +22,7 @@ type RuntimeConfig = {
   recsMinRaters: number;
   recsMinSupport: number;
   chartFeedsPerRun: number;
+  catalogRebuildHours: number;
   indiaSharePct: number;
   pickedLangPct: number;
   artistCap: number;
@@ -88,6 +89,7 @@ const GROUPS: {
     lede: "What the deck is made of. Each night pulls the next few of 32 Apple chart feeds (India's own genre charts first, then the Western headline charts), and a daily curation pass hides filler, covers, sped-up versions, one artist flooding the deck, and songs that have left every chart. Curation only hides — an admin un-hide sticks, and saved songs stay in libraries. New songs arrive with provisional hooks until their audio is analysed.",
     fields: [
       { key: "chartFeedsPerRun", label: "chart feeds per night", hint: "of 32; 0 stops the job entirely", min: 0, max: 100 },
+      { key: "catalogRebuildHours", label: "catalogue rebuild every (hours)", hint: "background changes wait this long; admin hides publish within a minute", min: 0.25, max: 48 },
       { key: "indiaSharePct", label: "Indian share of the deck (%)", hint: "for listeners who picked no language; 0 leaves it to the shuffle", min: 0, max: 100 },
       { key: "pickedLangPct", label: "picked-language share (%)", hint: "for listeners who picked languages; the rest is discovery. 0 turns it off", min: 0, max: 100 },
       { key: "artistCap", label: "songs per artist", hint: "curation keeps each artist's strongest few", min: 1, max: 50 },

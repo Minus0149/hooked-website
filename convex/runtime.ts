@@ -64,6 +64,14 @@ export const RUNTIME_DEFAULTS = {
    */
   chartFeedsPerRun: 16,
   /**
+   * Hours between background rebuilds of the catalogue file. Every rebuild
+   * re-reads the whole tracks table and every open app downloads the new
+   * file, so rebuilding 20 s after each analyser/chart write blew through the
+   * free plan (3.17 GB of file writes in a few days, 2026-09-27). Admin actions
+   * — hiding a song, a creator publishing — still rebuild within a minute.
+   */
+  catalogRebuildHours: 12,
+  /**
    * Percent of the deck that is Indian music for a listener who picked no
    * language (guests, "just the hits"). 0 turns the mix off and leaves it to
    * the shuffle. Read by the clients' rankPool (src/data/ranking.ts).
@@ -114,6 +122,7 @@ const BOUNDS: Record<RuntimeKey, [number, number]> = {
   recsMinRaters: [2, 50],
   recsMinSupport: [1, 50],
   chartFeedsPerRun: [0, 100],
+  catalogRebuildHours: [0.25, 48],
   indiaSharePct: [0, 100],
   pickedLangPct: [0, 100],
   artistCap: [1, 50],
@@ -171,6 +180,7 @@ export const set = mutation({
     recsMinRaters: v.optional(v.number()),
     recsMinSupport: v.optional(v.number()),
     chartFeedsPerRun: v.optional(v.number()),
+    catalogRebuildHours: v.optional(v.number()),
     indiaSharePct: v.optional(v.number()),
     pickedLangPct: v.optional(v.number()),
     artistCap: v.optional(v.number()),
