@@ -257,3 +257,25 @@ export const status = query({
 
 /** The same numbers for the CLI: npx convex run hookPlans:measureNow --prod */
 export const measureNow = internalQuery({ args: {}, handler: async (ctx) => measure(ctx) });
+
+/**
+ * Put tracks back in the analyser's queue (e.g. ones a flaky network marked
+ * unheard): npx convex run --prod hookPlans:forget '{"trackIds":["..."]}'
+ */
+export const forget = internalMutation({
+  args: { trackIds: v.array(v.string()) },
+  handler: async (ctx, { trackIds }) => {
+    let reset = 0;
+    for (const trackId of trackIds.slice(0, 500)) {
+      const track = await ctx.db
+        .query("tracks")
+        .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
+        .unique();
+      if (track && track.hookVersion !== undefined) {
+        await ctx.db.patch(track._id, { hookVersion: undefined });
+        reset++;
+      }
+    }
+    return { reset };
+  },
+});

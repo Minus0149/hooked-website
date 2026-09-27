@@ -58,7 +58,12 @@ def payload(a: hs.Analysis) -> dict:
 
 
 def listen(track: dict, delay: float) -> dict:
-    """One track → an ingest item (an analysis, or failed)."""
+    """One track → an ingest item (an analysis, or failed), or a retry later.
+
+    Only a permanent problem (no URL, a 4xx, audio that won't decode) is posted
+    as failed. A timeout, a dropped connection or a 5xx/429 is skipped, so the
+    track stays in the queue and the next run hears it.
+    """
     tid = track["trackId"]
     url = track.get("url")
     if not url:
@@ -66,6 +71,8 @@ def listen(track: dict, delay: float) -> dict:
     try:
         time.sleep(delay)
         r = requests.get(url, timeout=30, headers={"User-Agent": UA})
+        if r.status_code == 429 or r.status_code >= 500:
+            return {"trackId": tid, "retry": True, "why": f"HTTP {r.status_code}"}
         r.raise_for_status()
         y = hs.decode(r.content)
         if y.size < hs.SR * 2:
@@ -74,6 +81,8 @@ def listen(track: dict, delay: float) -> dict:
         item = {"trackId": tid, "analysis": {k: v for k, v in payload(a).items() if v is not None}}
         item["_plan"] = hs.plan(a)
         return item
+    except (requests.ConnectionError, requests.Timeout) as e:
+        return {"trackId": tid, "retry": True, "why": f"{type(e).__name__}: {str(e)[:120]}"}
     except Exception as e:  # noqa: BLE001 — one bad file never stops the run
         return {"trackId": tid, "failed": True, "why": f"{type(e).__name__}: {str(e)[:120]}"}
 
@@ -122,6 +131,10 @@ def main() -> int:
             for t in tracks:
                 seen.add(t["trackId"])
             items = list(pool.map(lambda t: listen(t, args.delay), tracks))
+            retry = [it for it in items if it.get("retry")]
+            for it in retry:
+                print(f"  later {it['trackId']}: {it.get('why')}", flush=True)
+            items = [it for it in items if not it.get("retry")]
             for it in items:
                 if it.get("failed"):
                     failed += 1
@@ -149,7 +162,7 @@ def main() -> int:
                     bad = [x for x in pr.json().get("results", []) if not x.get("ok")]
                     for x in bad:
                         print(f"  rejected {x.get('trackId')}: {x.get('reason')}", flush=True)
-            done += len(items)
+            done += len(items) + len(retry)
             pages += 1
             if pages % 10 == 0:
                 publish()
