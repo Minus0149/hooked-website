@@ -158,8 +158,10 @@ How a run works:
 - **Pending.** `/analyzer/v3/pending` lists the tracks whose `hookVersion` is
   below the current version. It is indexed, so it's cheap.
 - **Resuming.** A stopped run resumes where it stopped.
-- **Failures.** Audio that won't download or decode is posted as failed. The
-  track gets the provisional hook and the queue moves on.
+- **Failures.** A missing URL, a 4xx or audio that won't decode is posted as
+  failed: the track gets the provisional hook and the queue moves on. A timeout
+  or dropped connection is skipped and retried on the next run.
+  `hookPlans:forget` puts tracks back in the queue.
 - **Ingest.** `/analyzer/v3/ingest` stores the analysis (the `hookAnalyses`
   table) and writes the hooks under the current policy. It publishes the client
   catalogue every 10 pages and at the end, not on every write.
