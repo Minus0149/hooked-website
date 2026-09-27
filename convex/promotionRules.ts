@@ -309,3 +309,60 @@ export function customPackage(listeners: number, pricePaise: number): PromotionP
   if (l < 10 || l > 1_000_000 || p < MIN_ORDER_PAISE || p > MAX_ORDER_PAISE) return null;
   return { id: "custom", name: "Custom", listeners: l, pricePaise: p };
 }
+
+// ------------------------------------------------------------------ targeting
+
+export type Target = { genres: string[]; moods: string[] };
+export type ListenerContext = {
+  /** the mood lens on their deck right now, if any */
+  mood: string | null;
+  /** what they told us they like, plus genres they steered toward */
+  genres: string[];
+};
+
+const flat = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** Two genre names mean the same thing if either contains the other ("hiphop" ~ "hip-hop/rap"). */
+export function genresOverlap(a: string[], b: string[]): boolean {
+  const A = a.map(flat).filter(Boolean);
+  const B = b.map(flat).filter(Boolean);
+  return A.some((x) => B.some((y) => x.includes(y) || y.includes(x)));
+}
+
+/**
+ * Does this listener fit the campaign? A listener with a mood lens on only
+ * gets songs that fit that mood (`trackFitsLens`, from moodFit) — a promoted
+ * ballad must not break a party deck. Beyond that, a campaign aimed at moods
+ * wants a listener in one of them, and one aimed at genres wants a listener
+ * who likes one. An untargeted campaign fits everyone.
+ */
+export function targetMatches(target: Target | undefined, listener: ListenerContext, trackFitsLens: boolean): boolean {
+  if (listener.mood && !trackFitsLens) return false;
+  if (!target) return true;
+  const moodOk = target.moods.length === 0 || (listener.mood !== null && target.moods.includes(listener.mood));
+  const genreOk = target.genres.length === 0 || genresOverlap(target.genres, listener.genres);
+  return moodOk && genreOk;
+}
+
+/** How far behind its schedule a campaign may fall before it is dealt to anyone. */
+export const TARGETING_SLACK = 0.1;
+
+/** fitsLens: false when the listener has a mood lens on that the song doesn't fit. */
+export type Candidate<T> = { item: T; behind: number; matches: boolean; fitsLens?: boolean };
+
+/**
+ * The campaign to deal to this listener, or null. Matching campaigns come
+ * first, furthest behind schedule first. A campaign that doesn't match is
+ * only dealt when its matching audience can't keep up — it has fallen more
+ * than TARGETING_SLACK of its window behind a straight-line schedule — so
+ * targeting narrows delivery without letting a paid campaign starve. Even
+ * then, a listener with a mood lens on never gets a song that doesn't fit it.
+ */
+export function pickCampaign<T>(cands: Candidate<T>[]): T | null {
+  const matching = cands.filter((c) => c.matches).sort((a, b) => b.behind - a.behind);
+  if (matching.length > 0) return matching[0].item;
+  const starving = cands
+    .filter((c) => c.behind > TARGETING_SLACK && c.fitsLens !== false)
+    .sort((a, b) => b.behind - a.behind);
+  return starving[0]?.item ?? null;
+}

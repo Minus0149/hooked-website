@@ -31,7 +31,11 @@ import {
   remainingCapacity,
   saveRate,
   webhookSignatureValid,
+  pickCampaign,
+  targetMatches,
+  type Candidate,
   type CreatorRate,
+  type ListenerContext,
   type DiscountCode,
   type PromotionConfig,
 } from "./promotionRules";
@@ -45,6 +49,9 @@ import {
   requireUser,
 } from "./security";
 import { promotionApprovedEmail, promotionRejectedEmail } from "./emailTemplate";
+import { isMood } from "./moods";
+import { moodFitFor, type MoodId } from "../src/data/mood";
+import { MOOD_MATCH } from "../src/data/ranking";
 
 /**
  * Paid promotion: an approved artist pays to have their own song dealt, at its
@@ -641,7 +648,9 @@ export const markPaid = internalMutation({
       if (code) await ctx.db.patch(code._id, { uses: code.uses + 1 });
     }
     const config = await readConfig(ctx);
+    const request = order.requestId ? await ctx.db.get(order.requestId) : null;
     const campaignId = await ctx.db.insert("promotionCampaigns", {
+      target: request && (request.target.genres.length > 0 || request.target.moods.length > 0) ? request.target : undefined,
       userId: order.userId,
       trackId: order.trackId,
       orderId: order._id,
@@ -856,7 +865,7 @@ export const expireDue = internalMutation({
  * an older catalogue (or none) can still play it. Explicit fields only, like
  * tracks.list: owner ids and storage ids never leave the server.
  */
-async function publicTrack(ctx: QueryCtx, trackId: string) {
+export async function publicTrack(ctx: QueryCtx, trackId: string) {
   const t = await ctx.db
     .query("tracks")
     .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
@@ -902,8 +911,13 @@ async function viewerKey(ctx: QueryCtx, anonKey: string | undefined): Promise<st
  * campaign twice", and picks the campaign most behind its schedule.
  */
 export const nextPromoted = query({
-  args: { anonKey: v.optional(v.string()) },
-  handler: async (ctx, { anonKey }) => {
+  args: {
+    anonKey: v.optional(v.string()),
+    /** the listener's mood lens and genres, for targeted campaigns (absent on old builds) */
+    mood: v.optional(v.union(v.string(), v.null())),
+    genres: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, { anonKey, mood, genres }) => {
     const config = await readConfig(ctx);
     if (!config.enabled) return null;
     const viewer = await viewerKey(ctx, anonKey);
@@ -920,22 +934,41 @@ export const nextPromoted = query({
       .query("promotionCampaigns")
       .withIndex("by_status", (q) => q.eq("status", "active"))
       .take(200);
-    const ranked = active
-      .filter((c) => c.endsAt > now && c.delivered < c.listeners && `u:${c.userId}` !== viewer)
-      // furthest behind a straight line from start to end goes first
-      .map((c) => ({ c, behind: (now - c.startedAt) / (c.endsAt - c.startedAt) - c.delivered / c.listeners }))
-      .sort((a, b) => b.behind - a.behind);
-    for (const { c } of ranked) {
+    const listener: ListenerContext = {
+      mood: mood && isMood(mood) ? mood : null,
+      genres: (genres ?? []).map((g) => cleanText(g, 40)).filter(Boolean).slice(0, 12),
+    };
+    const candidates: Candidate<Doc<"promotionCampaigns">>[] = [];
+    for (const c of active) {
+      if (c.endsAt <= now || c.delivered >= c.listeners || `u:${c.userId}` === viewer) continue;
       const seen = await ctx.db
         .query("promotionViews")
         .withIndex("by_campaign_viewer", (q) => q.eq("campaignId", c._id).eq("viewer", viewer))
         .first();
       if (seen) continue;
-      const track = await publicTrack(ctx, c.trackId);
-      if (!track) continue; // hidden or removed since it was bought
-      return { campaignId: c._id, trackId: c.trackId, everyNCards: config.everyNCards, track };
+      const t = await ctx.db
+        .query("tracks")
+        .withIndex("by_trackId", (q) => q.eq("trackId", c.trackId))
+        .unique();
+      if (!t || t.hidden) continue; // hidden or removed since it was bought
+      // the same test the deck uses for a mood lens (data/ranking.ts: fitsMood)
+      const fitsLens =
+        listener.mood === null ||
+        moodFitFor({ id: t.trackId, genre: t.genre, energy: t.energy, audioMood: t.audioMood }, listener.mood as MoodId) >=
+          MOOD_MATCH;
+      candidates.push({
+        item: c,
+        // how far behind a straight line from start to end it has fallen
+        behind: (now - c.startedAt) / (c.endsAt - c.startedAt) - c.delivered / c.listeners,
+        matches: targetMatches(c.target, listener, fitsLens),
+        fitsLens,
+      });
     }
-    return null;
+    const chosen = pickCampaign(candidates);
+    if (!chosen) return null;
+    const track = await publicTrack(ctx, chosen.trackId);
+    if (!track) return null;
+    return { campaignId: chosen._id, trackId: chosen.trackId, everyNCards: config.everyNCards, track };
   },
 });
 

@@ -7,7 +7,21 @@ import { IconHeart, IconFolder, IconPlay } from "./icons";
 import { useT } from "../lib/lang";
 import { Face } from "./faces";
 import { RecapCard } from "./RecapCard";
-import { DAYPART_COPY, DAYPART_MOOD, daypartAt, moodsForHour } from "../data/mood";
+import { DAYPART_COPY, DAYPART_MOOD, daypartAt, moodById, moodsForHour, type MoodId } from "../data/mood";
+import { FEATURED_LABEL, SPONSORED_TAG, deckLabel } from "../lib/features";
+
+/** This week's indie hook, as Home shows it (convex/featured.ts: current). */
+export type FeaturedPick = { blurb: string; track: Track };
+/** A sponsored deck live now (convex/sponsoredDecks.ts: live). */
+export type LiveDeck = {
+  id: string;
+  brand: string;
+  logoUrl: string | null;
+  title: string;
+  mood: string | null;
+  genre: string | null;
+  trackIds: string[];
+};
 
 const stagger = {
   hidden: {},
@@ -68,6 +82,10 @@ export function HomeScreen({
   onNewPlaylist,
   hookOfDay,
   onPlayHookOfDay,
+  featured = null,
+  onPlayFeatured,
+  decks = [],
+  onOpenDeck,
 }: {
   onDiscover: (trackId?: string) => void;
   onOpenLibrary: (container: string) => void;
@@ -75,6 +93,10 @@ export function HomeScreen({
   /** today's pick, or null when hidden in Settings / nothing to pick */
   hookOfDay?: Track | null;
   onPlayHookOfDay?: (t: Track) => void;
+  featured?: FeaturedPick | null;
+  onPlayFeatured?: (track: Track) => void;
+  decks?: LiveDeck[];
+  onOpenDeck?: (deck: LiveDeck) => void;
 }) {
   const tt = useT();
   const t = useT();
@@ -172,6 +194,27 @@ export function HomeScreen({
         {t("what's your next")} <em>{t("obsession?")}</em>
       </motion.h1>
 
+      {featured && (
+        // unpaid and chosen by us, so it's labelled as a pick, never "promoted"
+        <motion.button
+          type="button"
+          className="featured-card"
+          variants={rise}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => onPlayFeatured?.(featured.track)}
+          aria-label={`${FEATURED_LABEL}: ${featured.track.title} by ${featured.track.artist}. Play it.`}
+        >
+          <img className="featured-art" src={art(featured.track.artwork, 300)} alt="" />
+          <span className="featured-text">
+            <span className="featured-kicker">{FEATURED_LABEL}</span>
+            <span className="featured-title">{featured.track.title}</span>
+            <span className="featured-artist">{featured.track.artist}</span>
+            <span className="featured-blurb">{featured.blurb}</span>
+          </span>
+          <span className="featured-play" aria-hidden="true">▶</span>
+        </motion.button>
+      )}
+
       <motion.button className="cta" variants={rise} whileTap={{ scale: 0.97 }} onClick={() => onDiscover()}>
         <div>
           <div className="cta-label">{t("Start discovering")}</div>
@@ -235,6 +278,28 @@ export function HomeScreen({
         {state.prefs.moodByTime !== "off" && (
           <span className="mood-nudge">{tt(DAYPART_COPY[hour.part].nudge)}</span>
         )}
+        {decks.map((d) => {
+          const mood = d.mood ? moodById(d.mood as MoodId) : null;
+          return (
+            // a brand paid for this deck: it says so, on the card itself (ASCI)
+            <button
+              key={d.id}
+              type="button"
+              className="deck-card"
+              style={{ ["--face" as string]: mood?.accent ?? "var(--accent)" }}
+              onClick={() => onOpenDeck?.(d)}
+              aria-label={`${deckLabel(d)}. ${SPONSORED_TAG}.`}
+            >
+              {d.logoUrl ? <img className="deck-logo" src={d.logoUrl} alt="" /> : mood ? (
+                <span className="mood-disc"><Face mood={mood.id} size={26} /></span>
+              ) : null}
+              <span className="deck-text">
+                <span className="deck-title">{deckLabel(d)}</span>
+                <span className="deck-tag">{SPONSORED_TAG}</span>
+              </span>
+            </button>
+          );
+        })}
       </motion.section>
 
       <RecapCard />

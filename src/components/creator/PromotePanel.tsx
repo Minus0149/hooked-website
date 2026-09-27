@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { PROMOTE_EVENT } from "./HookInsights";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -80,6 +81,17 @@ export function PromotePanel({ tracks }: { tracks: Track[] }) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const panel = useRef<HTMLElement | null>(null);
+
+  // "promote this song" on a song's insights brings the artist here, song chosen
+  useEffect(() => {
+    const onPromote = (e: Event) => {
+      setTrackId(String((e as CustomEvent<string>).detail));
+      panel.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    window.addEventListener(PROMOTE_EVENT, onPromote);
+    return () => window.removeEventListener(PROMOTE_EVENT, onPromote);
+  }, []);
 
   if (offer === undefined) return null;
   const chosenTrack = trackId || live[0]?.trackId || "";
@@ -181,7 +193,7 @@ export function PromotePanel({ tracks }: { tracks: Track[] }) {
   };
 
   return (
-    <section className="promote" aria-labelledby="promote-title">
+    <section className="promote" aria-labelledby="promote-title" ref={panel}>
       <header className="promote-head">
         <h3 id="promote-title">Promote a song</h3>
         <p>

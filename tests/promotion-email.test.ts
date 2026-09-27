@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { promotionApprovedEmail, promotionRejectedEmail } from "../convex/emailTemplate";
+import { featuredEmail, promotionApprovedEmail, promotionRejectedEmail } from "../convex/emailTemplate";
 import { htmlToText } from "../convex/emailConfig";
 
 /**
@@ -49,5 +49,19 @@ describe("promotion emails", () => {
     const text = htmlToText(html);
     expect(text).toContain("The reason: The audio clips at the hook.");
     expect(text).toContain("Nothing was charged.");
+  });
+
+  it("tell an artist their song is the indie hook of the week, with a share link", () => {
+    const { subject, html } = featuredEmail({
+      song: "Self Aware",
+      week: "2026-09-28",
+      blurb: "A <b>bright</b> hook.",
+      shareUrl: "https://hookedcue.com/indie-hook",
+    });
+    expect(subject).toBe("Self Aware is this week's indie hook on hookedcue");
+    expect(htmlToText(html)).toContain("From 28 September");
+    expect(html).toContain("&lt;b&gt;bright&lt;/b&gt;");
+    expect(html).toContain('href="https://hookedcue.com/indie-hook"');
+    expect(htmlToText(html)).toContain("not a paid promotion");
   });
 });

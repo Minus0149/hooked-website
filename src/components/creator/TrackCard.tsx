@@ -12,6 +12,7 @@ import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { Track } from "./types";
+import { HookInsights } from "./HookInsights";
 import { MS, clock, secs } from "./types";
 import { HookEditor } from "./HookEditor";
 import { computeFingerprint } from "../../lib/audio-fp";
@@ -345,6 +346,8 @@ export function TrackCard({ track }: { track: Track }) {
           <audio controls preload="none" src={track.audioUrl} className="creator-audio" />
         )}
       </div>
+
+      {track.trackId.startsWith("own:") && <HookInsights trackId={track.trackId} />}
 
       {error && <p className="access-error">{error}</p>}
     </motion.div>

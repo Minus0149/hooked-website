@@ -3,6 +3,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import { components } from "./_generated/api";
 import { authComponent } from "./auth";
 import { isMood } from "./moods";
+import { recordInsight } from "./insights";
 import { saveTarget, swipeAction, trackFields } from "./schema";
 import {
   cleanAccent,
@@ -267,8 +268,12 @@ export const recordSwipe = mutation({
     action: swipeAction,
     /** which hook was playing — the whole point of the per-hook counters */
     hookId: v.optional(v.id("hooks")),
+    /** how far into the hook the swipe came, for an artist's drop-off curve */
+    atMs: v.optional(v.number()),
+    /** the mood lens that was on, if any (convex/insights.ts) */
+    mood: v.optional(v.string()),
   },
-  handler: async (ctx, { track, action, hookId }) => {
+  handler: async (ctx, { track, action, hookId, atMs, mood }) => {
     const user = await requireUser(ctx);
     const profile = await getProfile(ctx, user.id);
     ensureActiveProfile(profile);
@@ -286,6 +291,8 @@ export const recordSwipe = mutation({
     if (action === "save") {
       await saveToTarget(ctx, user.id, profile?.saveTarget ?? "liked", safeTrack);
     }
+    // free insights for the artist, if this is someone's upload
+    await recordInsight(ctx, { trackId: safeTrack.trackId, userId: user.id, action, atMs, mood });
 
     // credit the hook that was actually on screen. A "more" counts as interest
     // without a save; "never" is about the artist, not the hook, so it only
@@ -639,6 +646,7 @@ export const ACCOUNT_DELETION = {
     "promotionViews",
     "promotionRequests",
     "referralCodes",
+    "insightListeners",
     // and in the auth component: the user (email, name, password), sessions and linked accounts
   ],
   kept: {
@@ -646,6 +654,8 @@ export const ACCOUNT_DELETION = {
     hookStats: "anonymous counts",
     // payment records: Indian tax law requires keeping them for 8 years
     promotionOrders: "payment records, 8 years",
+    // anonymous per-song counts for the artist; the listener marker rows go
+    trackInsights: "anonymous counts",
   } as Record<string, string>,
 } as const;
 
@@ -699,7 +709,12 @@ export const deleteMyAccount = mutation({
       .query("promotionRequests")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
-    for (const d of [...campaigns, ...views, ...requests, ...(rate ? [rate] : [])]) await ctx.db.delete(d._id);
+    // the "counted once" markers behind artists' insights; the counts themselves stay, anonymous
+    const heard = await ctx.db
+      .query("insightListeners")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const d of [...campaigns, ...views, ...requests, ...heard, ...(rate ? [rate] : [])]) await ctx.db.delete(d._id);
 
     // a creator's uploads leave with them: tracks, their hooks and
     // fingerprints, and the audio files themselves

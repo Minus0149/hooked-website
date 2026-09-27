@@ -211,3 +211,25 @@ export function promotionRejectedEmail(opts: { song: string; reason: string; url
     }),
   };
 }
+
+/** An artist's song is this week's indie hook — unpaid, chosen by us. */
+export function featuredEmail(opts: { song: string; week: string; blurb: string; shareUrl: string }): {
+  subject: string;
+  html: string;
+} {
+  const from = new Date(`${opts.week}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "long", timeZone: "UTC" });
+  return {
+    subject: `${opts.song} is this week's indie hook on hookedcue`,
+    html: renderEmail({
+      preheader: "Your song is at the top of everyone's Home this week.",
+      heading: "You're this week's indie hook",
+      paragraphs: [
+        `We picked **${opts.song}** as the indie hook of the week. From ${from}, it's at the top of Home for everyone on hookedcue, starting at its hook.`,
+        `What we wrote about it: ${opts.blurb}`,
+        "Share it — the link below opens a page made for Instagram stories.",
+      ],
+      button: { label: "See it and share it", url: opts.shareUrl },
+      note: "This is a free feature, not a paid promotion — no action needed.",
+    }),
+  };
+}

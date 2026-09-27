@@ -606,6 +606,8 @@ export default defineSchema({
     refundPaise: v.optional(v.number()),
     refundId: v.optional(v.string()),
     refundStatus: v.optional(v.union(v.literal("pending"), v.literal("done"), v.literal("failed"))),
+    /** copied from the approved request: who the artist wants to reach */
+    target: v.optional(v.object({ genres: v.array(v.string()), moods: v.array(v.string()) })),
   })
     .index("by_status", ["status", "startedAt"])
     .index("by_user", ["userId"])
@@ -701,6 +703,72 @@ export default defineSchema({
   })
     .index("by_user", ["userId", "createdAt"])
     .index("by_status", ["status", "createdAt"]),
+
+  // ------------------------------------------------ artist features
+
+  /**
+   * Free hook insights for a creator's own uploads (convex/insights.ts):
+   * counters updated as swipes arrive, never recomputed from the swipe log.
+   * `skipAt` is a histogram of skips by second into the hook; the maps hold
+   * counts only — no listener is ever identifiable from this row.
+   */
+  trackInsights: defineTable({
+    trackId: v.string(),
+    listeners: v.number(),
+    plays: v.number(),
+    saves: v.number(),
+    skips: v.number(),
+    more: v.number(),
+    never: v.number(),
+    skipAt: v.array(v.number()),
+    moods: v.record(v.string(), v.number()),
+    genres: v.record(v.string(), v.number()),
+    updatedAt: v.number(),
+  }).index("by_trackId", ["trackId"]),
+
+  /** One row per (song, listener) so a listener counts once; never read in bulk. */
+  insightListeners: defineTable({
+    trackId: v.string(),
+    userId: v.string(),
+  })
+    .index("by_track_user", ["trackId", "userId"])
+    .index("by_user", ["userId"]),
+
+  /** Indie hook of the week (convex/featured.ts): one unpaid pick per week. */
+  featuredHooks: defineTable({
+    trackId: v.string(),
+    /** the Monday that starts the week, YYYY-MM-DD (IST) */
+    week: v.string(),
+    blurb: v.string(),
+    createdAt: v.number(),
+    createdBy: v.string(),
+    emailedAt: v.optional(v.number()),
+  }).index("by_week", ["week"]),
+
+  /**
+   * Sponsored mood decks (convex/sponsoredDecks.ts): a brand presents a deck
+   * for a date range. Counted in aggregate only — no listener ids, ever.
+   */
+  sponsoredDecks: defineTable({
+    brand: v.string(),
+    logoUrl: v.optional(v.string()),
+    title: v.string(),
+    mood: v.optional(v.string()),
+    genre: v.optional(v.string()),
+    trackIds: v.array(v.string()),
+    startsAt: v.number(),
+    endsAt: v.number(),
+    active: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_active", ["active", "startsAt"]),
+
+  sponsoredDeckStats: defineTable({
+    deckId: v.id("sponsoredDecks"),
+    day: v.string(),
+    impressions: v.number(),
+    opens: v.number(),
+    plays: v.number(),
+  }).index("by_deck_day", ["deckId", "day"]),
 
   /**
    * The catalogue file's bookkeeping (convex/catalog.ts): one row. `version`

@@ -30,8 +30,15 @@ Promotion is never bought directly. The flow (`promotionRules.nextRequestStatus`
 4. The daily cron lapses unpaid approvals (`expired`); the artist can ask again.
    A request can be withdrawn until it's paid.
 
-Targeting is recorded on the request and shown to the admin; the deck does not
-yet match promoted songs to listeners by it.
+Targeting is recorded on the request, shown to the admin and copied to the
+campaign when it's paid. The deck deals by it (`nextPromoted`, rules in
+`convex/promotionRules.ts`): a campaign aimed at moods only reaches a listener
+whose mood lens is one of them, and one aimed at genres only reaches listeners
+whose taste overlaps. Whatever the target, a listener with a mood lens on only
+gets promoted songs that fit that mood. Matching campaigns come first, the one
+furthest behind its schedule first. A campaign is shown to non-matching
+listeners (broad delivery) only when it has fallen more than 10% behind its
+straight-line pace, so a narrow target still finishes its plays.
 
 
 

@@ -8,6 +8,8 @@ import { coercePrefs } from "./data/prefs";
 import type { UserPrefs } from "./data/prefs";
 import { shouldAskForAd } from "./lib/ads-scheduler";
 import { PROMOTED_LISTEN_MS, promotedDue, promotedFollowUp, promotedOutcome } from "./lib/promoted";
+import { insightContext } from "./lib/insightContext";
+import { DECK_PLAYS_PER_SESSION, deckTracks } from "./lib/features";
 import { enqueue, flush } from "./lib/outbox";
 import { SponsoredCard, type AdCardData } from "./components/SponsoredCard";
 import { authClient } from "./lib/auth-client";
@@ -25,7 +27,7 @@ import { sessionPosition } from "./lib/playSession";
 import { readHookOfDayShown, useHookOfDay } from "./lib/useHookOfDay";
 import { useT } from "./lib/lang";
 import { BottomNav } from "./components/BottomNav";
-import { HomeScreen } from "./components/HomeScreen";
+import { HomeScreen, type LiveDeck } from "./components/HomeScreen";
 import { Onboarding } from "./components/Onboarding";
 import { SaveTargetSheet } from "./components/SaveTargetSheet";
 import { VolumeRail } from "./components/VolumeControl";
@@ -734,7 +736,14 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
   const pendingPromo = useRef<Track | null>(null);
   const promoPick = useQuery(
     api.promotions.nextPromoted,
-    promoDue ? { anonKey: anonKeyRef.current ?? undefined } : "skip",
+    promoDue
+      ? {
+          anonKey: anonKeyRef.current ?? undefined,
+          // targeted campaigns go to listeners who fit (convex/promotionRules: targetMatches)
+          mood: state.mood,
+          genres: [...state.taste.genres, ...state.boostGenres],
+        }
+      : "skip",
   );
   useEffect(() => {
     if (!promoDue || promoPick === undefined) return;
@@ -820,6 +829,14 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
       if (t) showToast(t.msg, t.icon);
       handleSwipeForAds();
       handleSwipeForPromoted();
+      // a play inside a sponsored deck, while its mood is still on (counts only)
+      const ds = deckSession.current;
+      if (ds && (ds.mood === null || ds.mood === moodRef.current) && ds.plays < DECK_PLAYS_PER_SESSION) {
+        ds.plays += 1;
+        deckEvent(ds.id, "play");
+      } else if (ds) {
+        deckSession.current = null;
+      }
       const track = onDeck;
       const action = DIR_TO_ACTION[dir];
       if (track?.promotedCampaignId) {
@@ -841,7 +858,13 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
             : undefined;
         syncWrite(
           "recordSwipe",
-          { track: toServer(track), action, hookId: validHookId },
+          {
+            track: toServer(track),
+            action,
+            hookId: validHookId,
+            // for the artist's free insights: where in the hook, and in what mood
+            ...insightContext(hookRef.current?.durationMs, progressRef.current, moodRef.current),
+          },
           recordSwipe,
         );
       }
@@ -851,6 +874,10 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
 
   const hookRef = useRef(hook);
   hookRef.current = hook;
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+  const moodRef = useRef(state.mood);
+  moodRef.current = state.mood;
 
   const handleBack = useCallback(() => {
     if (!previous) return;
@@ -1063,6 +1090,50 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     }
   }, [state.catalog, goDiscover]);
 
+  // ----- Home: indie hook of the week, sponsored decks (lib/features.ts) -----
+  const featured = useQuery(api.featured.current);
+  const liveDecks = useQuery(api.sponsoredDecks.live);
+  const recordDeck = useMutation(api.sponsoredDecks.record);
+  const deckSession = useRef<{ id: string; mood: string | null; plays: number } | null>(null);
+  const deckSeen = useRef(new Set<string>());
+  const deckEvent = useCallback(
+    (deckId: string, event: "impression" | "open" | "play") =>
+      void recordDeck({ deckId: deckId as never, event, anonKey: anonKeyRef.current ?? undefined }).catch(
+        () => undefined,
+      ),
+    [recordDeck],
+  );
+  // an impression once per deck per visit to Home
+  useEffect(() => {
+    if (view !== "home" || !liveDecks) return;
+    for (const d of liveDecks) {
+      if (deckSeen.current.has(d.id)) continue;
+      deckSeen.current.add(d.id);
+      deckEvent(d.id, "impression");
+    }
+  }, [view, liveDecks, deckEvent]);
+  const playFeatured = useCallback(
+    (track: Track) => {
+      if (state.catalog.some((t) => t.id === track.id) || state.queue.some((t) => t.id === track.id)) jumpTo(track.id);
+      else injectNext(track);
+      setViewWithHistory("discover");
+    },
+    [state.catalog, state.queue, jumpTo, injectNext],
+  );
+  const openDeck = useCallback(
+    (deck: LiveDeck) => {
+      deckEvent(deck.id, "open");
+      deckSession.current = { id: deck.id, mood: deck.mood, plays: 0 };
+      if (deck.mood) setMood(deck.mood as MoodId);
+      const first = deckTracks(state.catalog, deck);
+      // hand-picked songs play first, in order: inject them last-to-first, then bring the first on deck
+      for (const t of [...first].reverse().slice(0, -1)) injectNext(t);
+      if (first[0]) jumpTo(first[0].id);
+      setViewWithHistory("discover");
+    },
+    [deckEvent, setMood, state.catalog, injectNext, jumpTo],
+  );
+
   // tint the whole room with the on-deck track's accent — or a fixed colour
   // if they chose one in Settings → Appearance
   const trackAccent = inDiscover && onDeck ? onDeck.accent : "#FF3D71";
@@ -1110,6 +1181,10 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
                 </button>
               </header>
               <HomeScreen
+                featured={featured ? { blurb: featured.blurb, track: toLocal(featured.track as ServerTrackWithHooks) } : null}
+                onPlayFeatured={playFeatured}
+                decks={liveDecks ?? []}
+                onOpenDeck={openDeck}
                 onDiscover={goDiscover}
                 onOpenLibrary={(c) => setViewWithHistory(`library:${c}`)}
                 onNewPlaylist={() => setNewPlaylistOpen(true)}

@@ -25,9 +25,13 @@ import type * as emailConfig from "../emailConfig.js";
 import type * as emailLogo from "../emailLogo.js";
 import type * as emailTemplate from "../emailTemplate.js";
 import type * as errors from "../errors.js";
+import type * as featureRules from "../featureRules.js";
+import type * as featured from "../featured.js";
 import type * as hooks from "../hooks.js";
 import type * as http from "../http.js";
 import type * as imports from "../imports.js";
+import type * as insights from "../insights.js";
+import type * as insightsRules from "../insightsRules.js";
 import type * as library from "../library.js";
 import type * as matching from "../matching.js";
 import type * as moods from "../moods.js";
@@ -43,6 +47,7 @@ import type * as runtime from "../runtime.js";
 import type * as security from "../security.js";
 import type * as share from "../share.js";
 import type * as shareRules from "../shareRules.js";
+import type * as sponsoredDecks from "../sponsoredDecks.js";
 import type * as tracks from "../tracks.js";
 
 import type {
@@ -69,9 +74,13 @@ declare const fullApi: ApiFromModules<{
   emailLogo: typeof emailLogo;
   emailTemplate: typeof emailTemplate;
   errors: typeof errors;
+  featureRules: typeof featureRules;
+  featured: typeof featured;
   hooks: typeof hooks;
   http: typeof http;
   imports: typeof imports;
+  insights: typeof insights;
+  insightsRules: typeof insightsRules;
   library: typeof library;
   matching: typeof matching;
   moods: typeof moods;
@@ -87,6 +96,7 @@ declare const fullApi: ApiFromModules<{
   security: typeof security;
   share: typeof share;
   shareRules: typeof shareRules;
+  sponsoredDecks: typeof sponsoredDecks;
   tracks: typeof tracks;
 }>;
 
