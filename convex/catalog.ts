@@ -13,6 +13,7 @@ import type { Id } from "./_generated/dataModel";
 import { encodeCatalog, type CatalogTrack, type CatalogVersion } from "../src/lib/catalogCodec";
 import { hooksByTrack } from "./tracks";
 import { runtimeFor } from "./runtime";
+import { cdnConfig, pruneVersions, uploadVersion } from "./catalogCdn";
 
 /**
  * The catalogue as a versioned file instead of a reactive query.
@@ -31,6 +32,9 @@ import { runtimeFor } from "./runtime";
  *    in parallel over plain HTTP by version (GET /catalog?v=N&part=i in
  *    http.ts), caching them — a warm start downloads nothing. The HTTP layer
  *    gzips responses on its own (the action runtime has no CompressionStream).
+ *  - each version is also uploaded to Cloudflare R2 (catalogCdn.ts); when that
+ *    copy serves the app, version carries its address as `cdn` and clients
+ *    read it there first, Convex's copy being the fallback.
  *
  * See docs/CATALOG.md for the numbers.
  */
@@ -103,7 +107,8 @@ export const version = query({
   handler: async (ctx): Promise<CatalogVersion> => {
     const meta = await metaRow(ctx);
     const parts = meta?.partIds?.length ?? 0;
-    return parts > 0 && meta ? { v: meta.version, parts } : { v: 0, parts: 0 };
+    if (!(parts > 0 && meta)) return { v: 0, parts: 0 };
+    return meta.cdn ? { v: meta.version, parts, cdn: meta.cdn } : { v: meta.version, parts };
   },
 });
 
@@ -184,7 +189,7 @@ export const snapshotPage = internalQuery({
 /** Build the file for the next version. Scheduled by touchCatalog; safe to run by hand. */
 export const rebuild = internalAction({
   args: {},
-  handler: async (ctx): Promise<{ version: number; parts: number; bytes: number } | null> => {
+  handler: async (ctx): Promise<{ version: number; parts: number; bytes: number; cdn: boolean } | null> => {
     const snap = await ctx.runQuery(internal.catalog.snapshotStart, {});
     // several rebuilds can be pending (an urgent one brought forward); the
     // later ones find nothing new and cost nothing
@@ -202,25 +207,31 @@ export const rebuild = internalAction({
     }
     const next = snap.version + 1;
     const docs = encodeCatalog(tracks, next);
+    const bodies = docs.map((doc) => JSON.stringify(doc));
     const partIds: Id<"_storage">[] = [];
     let bytes = 0;
-    for (const doc of docs) {
-      const blob = new Blob([JSON.stringify(doc)], { type: "application/json" });
+    for (const body of bodies) {
+      const blob = new Blob([body], { type: "application/json" });
       bytes += blob.size;
       partIds.push(await ctx.storage.store(blob));
     }
+    const cfg = cdnConfig(process.env);
+    const cdn = cfg ? await uploadVersion(cfg, next, bodies) : null;
     const published = await ctx.runMutation(internal.catalog.publish, {
       version: next,
       seq: snap.seq,
       partIds,
       bytes,
       tracks: tracks.length,
+      ...(cdn ? { cdn } : {}),
     });
     if (!published) {
       for (const id of partIds) await ctx.storage.delete(id);
       return null;
     }
-    return { version: next, parts: partIds.length, bytes };
+    // the previous version stays for a client mid-download, like the Convex copy
+    if (cfg) await pruneVersions(cfg, next - 1);
+    return { version: next, parts: partIds.length, bytes, cdn: cdn !== null };
   },
 });
 
@@ -231,6 +242,7 @@ export const publish = internalMutation({
     partIds: v.array(v.id("_storage")),
     bytes: v.number(),
     tracks: v.number(),
+    cdn: v.optional(v.string()),
   },
   handler: async (ctx, a): Promise<boolean> => {
     const meta = await metaRow(ctx);
@@ -251,6 +263,7 @@ export const publish = internalMutation({
       bytes: a.bytes,
       tracks: a.tracks,
       builtAt: Date.now(),
+      ...(a.cdn ? { cdn: a.cdn } : {}),
     };
     // replace, not patch: the row carries nothing else worth keeping
     if (meta) await ctx.db.replace(meta._id, row);
@@ -283,6 +296,7 @@ export const info = internalQuery({
       dirtySeq: meta.dirtySeq,
       builtSeq: meta.builtSeq,
       scheduled: meta.scheduled,
+      cdn: meta.cdn ?? null,
     };
   },
 });

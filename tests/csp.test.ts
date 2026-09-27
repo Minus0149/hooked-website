@@ -20,6 +20,7 @@ describe("the backend the page may connect to", () => {
       "https://happy-otter-123.convex.site",
       "wss://happy-otter-123.convex.site",
       "https://audio-ssl.itunes.apple.com",
+      "https://cdn.hookedcue.com",
       "https://api.razorpay.com",
       "https://lumberjack.razorpay.com",
     ]);
@@ -30,9 +31,9 @@ describe("the backend the page may connect to", () => {
     expect(src).toContain("ws://127.0.0.1:3210");
   });
 
-  it("allows only itself, the preview CDN and Razorpay when no backend is configured", () => {
+  it("allows only itself, the preview CDN, the catalogue CDN and Razorpay when no backend is configured", () => {
     expect(connectSources({})).toBe(
-      "'self' https://audio-ssl.itunes.apple.com https://api.razorpay.com https://lumberjack.razorpay.com",
+      "'self' https://audio-ssl.itunes.apple.com https://cdn.hookedcue.com https://api.razorpay.com https://lumberjack.razorpay.com",
     );
   });
 

@@ -15,10 +15,12 @@
  * Third parties the page fetches directly: the preview CDN (the hook editor
  * decodes a preview to draw its waveform; <audio> playback alone is covered by
  * media-src — a fetch is not), and Razorpay's checkout API and its telemetry,
- * which checkout.js calls from the creator dashboard (docs/PROMOTIONS.md).
+ * which checkout.js calls from the creator dashboard (docs/PROMOTIONS.md),
+ * and the catalogue's copy on R2 (convex/catalogCdn.ts).
  */
 export const FETCHED_HOSTS = [
   "https://audio-ssl.itunes.apple.com",
+  "https://cdn.hookedcue.com",
   "https://api.razorpay.com",
   "https://lumberjack.razorpay.com",
 ];

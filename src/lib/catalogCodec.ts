@@ -219,8 +219,20 @@ export function catalogUrl(siteUrl: string, version: number, part: number): stri
   return `${siteUrl.replace(/\/+$/, "")}/catalog?v=${encodeURIComponent(String(version))}&part=${part}`;
 }
 
-/** What catalog:version returns: the version clients should hold, and its part count. */
-export type CatalogVersion = { v: number; parts: number };
+/**
+ * What catalog:version returns: the version clients should hold, its part
+ * count, and — when the R2 copy serves the app — that version's public folder.
+ */
+export type CatalogVersion = { v: number; parts: number; cdn?: string };
+
+/**
+ * Where to try for one part, in order: the CDN copy first (free to serve),
+ * then Convex's, which every retry uses so a CDN outage costs one attempt.
+ */
+export function partUrls(siteUrl: string, ver: CatalogVersion, part: number): string[] {
+  const convex = catalogUrl(siteUrl, ver.v, part);
+  return ver.cdn ? [`${ver.cdn.replace(/\/+$/, "")}/${part}.json`, convex] : [convex];
+}
 
 /** Per-attempt timeouts. Short first, so a stalled request is abandoned fast;
  * longer later, so a genuinely slow phone connection still gets there. */
@@ -234,16 +246,21 @@ type FetchLike = (url: string, init?: { signal?: AbortSignal }) => Promise<{
 
 async function fetchPart(
   fetchImpl: FetchLike,
-  url: string,
+  urls: string[],
   timeouts: number[],
 ): Promise<unknown> {
   let lastError: unknown = null;
   for (let attempt = 0; attempt < timeouts.length; attempt++) {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeouts[attempt]);
+    // the first attempt goes to the first URL (the CDN when there is one), every later one to the last
+    const url = urls[Math.min(attempt, urls.length - 1)];
     try {
       // a retry gets its own URL so no cache or proxy can hand back the stalled one
-      const res = await fetchImpl(attempt === 0 ? url : `${url}&retry=${attempt}`, { signal: ctl.signal });
+      const res = await fetchImpl(
+        attempt === 0 ? url : `${url}${url.includes("?") ? "&" : "?"}retry=${attempt}`,
+        { signal: ctl.signal },
+      );
       if (!res.ok) throw new Error(`catalog part ${res.status}`);
       return await res.json();
     } catch (err) {
@@ -268,7 +285,7 @@ export async function fetchCatalog(
   timeouts: number[] = PART_TIMEOUTS_MS,
 ): Promise<{ version: number; tracks: CatalogTrack[]; docs: unknown[] }> {
   const docs = await Promise.all(
-    Array.from({ length: ver.parts }, (_, i) => fetchPart(fetchImpl, catalogUrl(siteUrl, ver.v, i), timeouts)),
+    Array.from({ length: ver.parts }, (_, i) => fetchPart(fetchImpl, partUrls(siteUrl, ver, i), timeouts)),
   );
   const joined = joinParts(docs);
   if (!joined) throw new Error("catalog parts didn't match (a new version landed mid-download)");

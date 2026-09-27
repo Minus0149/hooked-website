@@ -814,6 +814,8 @@ export default defineSchema({
     builtAt: v.optional(v.number()),
     /** when the pending rebuild will run, so an urgent change can bring it forward */
     scheduledFor: v.optional(v.number()),
+    /** public folder of this version on R2 (convex/catalogCdn.ts), when it serves the app */
+    cdn: v.optional(v.string()),
   }).index("by_key", ["key"]),
 
   /**
