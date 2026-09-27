@@ -72,6 +72,32 @@ function client(cfg: CdnConfig) {
 const objectUrl = (cfg: CdnConfig, key: string) => `${cfg.endpoint}/${cfg.bucket}/${key}`;
 
 /**
+ * PUT with a known length. aws4fetch's own fetch hands the runtime a Request,
+ * whose body Convex sends chunked, and R2 refuses that with 411 Length
+ * Required; so sign with aws4fetch and send the bytes ourselves.
+ */
+export async function putObject(
+  aws: Pick<AwsClient, "sign">,
+  url: string,
+  body: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response> {
+  const bytes = new TextEncoder().encode(body);
+  const signed = await aws.sign(url, {
+    method: "PUT",
+    body: bytes,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      // a version's parts never change: a new catalogue is a new version
+      "cache-control": "public, max-age=31536000, immutable",
+    },
+  });
+  const headers = new Headers(signed.headers);
+  headers.set("content-length", String(bytes.byteLength));
+  return await fetchImpl(signed.url, { method: "PUT", headers, body: bytes });
+}
+
+/**
  * Upload one version's parts and check the public copy answers. Returns the
  * version's public base when clients can use it, null otherwise (never throws:
  * a CDN problem must not stop the catalogue being published).
@@ -80,15 +106,7 @@ export async function uploadVersion(cfg: CdnConfig, version: number, bodies: str
   try {
     const aws = client(cfg);
     for (const [i, body] of bodies.entries()) {
-      const res = await aws.fetch(objectUrl(cfg, cdnKey(version, i)), {
-        method: "PUT",
-        body,
-        headers: {
-          "content-type": "application/json; charset=utf-8",
-          // a version's parts never change: a new catalogue is a new version
-          "cache-control": "public, max-age=31536000, immutable",
-        },
-      });
+      const res = await putObject(aws, objectUrl(cfg, cdnKey(version, i)), body);
       if (!res.ok) {
         console.warn(`catalog cdn: upload of part ${i} failed (${res.status})`);
         return null;

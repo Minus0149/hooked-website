@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { APP_ORIGIN, cdnBase, cdnConfig, cdnKey, servesApp, staleKeys } from "../convex/catalogCdn";
+import { AwsClient } from "aws4fetch";
+import { APP_ORIGIN, cdnBase, cdnConfig, cdnKey, putObject, servesApp, staleKeys } from "../convex/catalogCdn";
 import { encodeCatalog, fetchCatalog, partUrls, ROWS_PER_PART, type CatalogTrack } from "../src/lib/catalogCodec";
 
 /**
@@ -113,5 +114,27 @@ describe("clients reading the copy", () => {
     expect(got.version).toBe(21);
     expect(seen.filter((u) => u.includes("convex.site"))).toHaveLength(2);
     expect(seen.filter((u) => u.includes("convex.site")).every((u) => u.includes("&retry=1"))).toBe(true);
+  });
+});
+
+describe("uploading a part", () => {
+  // Convex sends a Request's body chunked and R2 answers 411 Length Required,
+  // which is how the first live rebuild failed. The upload must carry its length.
+  it("sends plain bytes with a content length and a valid signature", async () => {
+    const aws = new AwsClient({ accessKeyId: "id", secretAccessKey: "secret", service: "s3", region: "auto" });
+    let sent: { url: string; init: RequestInit } | null = null;
+    const fake = (async (url: string, init: RequestInit) => {
+      sent = { url, init };
+      return new Response(null, { status: 200 });
+    }) as unknown as typeof fetch;
+    const body = JSON.stringify({ v: 21, rows: ["é"] });
+    await putObject(aws, "https://abc.r2.cloudflarestorage.com/b/catalog/v21/0.json", body, fake);
+    expect(sent).not.toBeNull();
+    const { init } = sent!;
+    const headers = new Headers(init.headers);
+    expect(init.body).toBeInstanceOf(Uint8Array);
+    expect(headers.get("content-length")).toBe(String(new TextEncoder().encode(body).byteLength));
+    expect(headers.get("authorization")).toMatch(/^AWS4-HMAC-SHA256 /);
+    expect(headers.get("cache-control")).toContain("immutable");
   });
 });
