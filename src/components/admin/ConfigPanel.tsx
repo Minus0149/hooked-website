@@ -23,6 +23,7 @@ type RuntimeConfig = {
   recsMinSupport: number;
   chartFeedsPerRun: number;
   catalogRebuildHours: number;
+  minAndroidVersionCode: number;
   indiaSharePct: number;
   pickedLangPct: number;
   artistCap: number;
@@ -96,6 +97,13 @@ const GROUPS: {
       { key: "staleWeeks", label: "off the charts for (weeks)", hint: "then it stops being dealt", min: 1, max: 520 },
       { key: "maxAgeYears", label: "back-catalogue cutoff (years)", hint: "older songs are dealt only while charting", min: 1, max: 100 },
       { key: "oldChartDays", label: "\"charting\" means within (days)", hint: "for those older songs; a full sweep takes two nights", min: 1, max: 365 },
+    ],
+  },
+  {
+    title: "App updates",
+    lede: "Screen and code changes reach phones over the air on their own. A new build on Google Play is offered in the app as a banner; set a minimum here to make a build required — phones below it can't continue until they update.",
+    fields: [
+      { key: "minAndroidVersionCode", label: "oldest Android build allowed", hint: "a versionCode, e.g. 5; 0 never forces an update", min: 0, max: 100000 },
     ],
   },
   {

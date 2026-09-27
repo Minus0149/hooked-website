@@ -72,6 +72,12 @@ export const RUNTIME_DEFAULTS = {
    */
   catalogRebuildHours: 12,
   /**
+   * The oldest Android build (versionCode) still allowed to run. Phones below
+   * it get Play's full-screen update and can't continue without it; above it,
+   * a newer build is only offered. 0 = never force. See mobile storeUpdate.ts.
+   */
+  minAndroidVersionCode: 0,
+  /**
    * Percent of the deck that is Indian music for a listener who picked no
    * language (guests, "just the hits"). 0 turns the mix off and leaves it to
    * the shuffle. Read by the clients' rankPool (src/data/ranking.ts).
@@ -123,6 +129,7 @@ const BOUNDS: Record<RuntimeKey, [number, number]> = {
   recsMinSupport: [1, 50],
   chartFeedsPerRun: [0, 100],
   catalogRebuildHours: [0.25, 48],
+  minAndroidVersionCode: [0, 100_000],
   indiaSharePct: [0, 100],
   pickedLangPct: [0, 100],
   artistCap: [1, 50],
@@ -181,6 +188,7 @@ export const set = mutation({
     recsMinSupport: v.optional(v.number()),
     chartFeedsPerRun: v.optional(v.number()),
     catalogRebuildHours: v.optional(v.number()),
+    minAndroidVersionCode: v.optional(v.number()),
     indiaSharePct: v.optional(v.number()),
     pickedLangPct: v.optional(v.number()),
     artistCap: v.optional(v.number()),
