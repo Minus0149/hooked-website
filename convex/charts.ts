@@ -303,9 +303,8 @@ export const report = internalMutation({
 });
 
 /**
- * Songs a chart carried that the catalogue already has: union the storefronts,
- * restart the chart clock, and re-place the language now that there may be a
- * new storefront to go on. Returns the ids it didn't know.
+ * Songs a chart carried that the catalogue already has: union the storefronts
+ * and restart the chart clock. Returns the ids it didn't know.
  */
 export const markSeen = internalMutation({
   args: {
@@ -326,7 +325,10 @@ export const markSeen = internalMutation({
         continue;
       }
       const markets = [...new Set([...(t.markets ?? []), ...r.markets])].slice(0, 12);
-      const lang = langOf({ ...t, markets });
+      // Only a song never placed gets a language here. Re-placing is the daily
+      // curation pass's job: it has the whole catalogue's artist hints, and a
+      // placement without them would undo its work every night.
+      const lang = t.lang === undefined ? langOf({ ...t, markets }) : t.lang;
       const grew = markets.length !== (t.markets?.length ?? 0);
       const moved = lang !== (t.lang ?? "");
       await ctx.db.patch(t._id, {
