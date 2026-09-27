@@ -6,15 +6,16 @@ broken.
 
 ## Why v3 exists
 
-These numbers come from a sample of 7,900 prod hook rows across 2,961 tracks,
-taken before v3:
+Before v3, measured on prod (3,076 tracks, 8,164 hooks). After the first v3
+pass on 2026-09-27 (4,441 tracks, 4,292 of them heard by the analyser):
 
-| | v2 |
-|---|---|
-| hook length | 8.3–10 s (median 9.7 s) |
-| tracks that replay the same seconds | **76 %** |
-| neighbouring hooks that overlap | 69 % (median overlap 37 % of a hook) |
-| hooks per track | 1: 115 · 2: 753 · 3: 2,093 |
+| | v2 (before) | v3 (after) |
+|---|---|---|
+| hook length | 8.3–10 s (median 9.7 s) | median 21.4 s (p10 15.6 s, p90 30 s) |
+| hooks under 15 s | 99.8 % | 0 % (one 9.9 s clip is shorter than 15 s in total, so it plays whole) |
+| tracks that replay the same seconds | **73.4 %** | **0 %** |
+| hooks per track | 1: 139 · 2: 786 · 3: 2,151 | 1: 4,441 (every track is a preview) |
+| method mix | legacy analyser 2,553 · provisional 503 | model 3,758 · preview 532 · provisional 149 · unheard 2 |
 
 v2 cut every 30 s Apple preview into three ~10 s windows, and they could
 overlap by half. The "three hooks" were one hook cut into overlapping pieces,
