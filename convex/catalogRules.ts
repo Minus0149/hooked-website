@@ -204,14 +204,18 @@ const FILLER_GENRE = /sound effects|meditation|healing|nature sounds|sleep|relax
 // Hymns, aartis and gurbani reach the Indian charts filed as "Worldwide", so
 // the genre alone misses them; their titles and credits don't.
 const DEVOTIONAL_CREDIT = /\b(?:bhakti|jatha|kirtan|bhajan|gurbani|sangat)\b/i;
-const DEVOTIONAL = /\b(?:waheguru|gurbani|shabad|kirtan|aarti|bhajan|chalisa|stotram|stotra|kavacham|jaap|ashtakam|sankirtan|naam simran|gurudwara|mahamantra|namavali)\b/i;
+const DEVOTIONAL = /\b(?:waheguru|gurbani|shabad|kirtan|aarti|bhajan|chalisa|stotram|stotra|kavacham|jaap|ashtakam|sankirtan|naam simran|gurudwara|mahamantra|namavali|devotional|bhakti)\b|\u092D\u091C\u0928|\u0906\u0930\u0924\u0940|\u091A\u093E\u0932\u0940\u0938\u093E/i;
+// "(Guitar Cover)", "[Piano Cover]": a cover by its own label
+const COVER_TAG = /[([][^)\]]*\bcover\b[^)\]]*[)\]]/i;
+const SOUNDSCAPE = /\b(?:rain|birds?|ocean|waves|nature|forest|thunder(?:storm)?|white noise|brown noise|pink noise)\s+sounds?\b/i;
 
 /** Why this track shouldn't be dealt at all, or null. */
 export function fillerReason(t: { title: string; artist: string; genre: string }): string | null {
   const genre = (t.genre ?? "").toLowerCase();
   if (/devotional/.test(genre) || DEVOTIONAL.test(t.title) || DEVOTIONAL_CREDIT.test(t.artist)) return "devotional";
   if (FILLER_GENRE.test(genre)) return "filler";
-  if (COVER.test(t.title) || COVER.test(t.artist)) return "cover";
+  if (COVER.test(t.title) || COVER.test(t.artist) || COVER_TAG.test(t.title)) return "cover";
+  if (SOUNDSCAPE.test(t.title)) return "filler";
   if (VARIANT.test(t.title)) return "variant";
   return null;
 }

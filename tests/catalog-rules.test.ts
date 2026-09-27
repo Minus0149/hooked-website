@@ -150,6 +150,7 @@ describe("fillerReason", () => {
     expect(f("Kale Kagaz (Lofi Mix)", "indian pop")).toBe("variant");
     expect(f("Love Story (Fast Piano Ver.)")).toBe("variant");
     expect(f("Numb [Instrumental]", "rock")).toBe("variant");
+    expect(f("Ruperi Walut (Guitar Cover)", "indian pop")).toBe("cover");
   });
 
   it("catches devotional spill and non-music genres", () => {
@@ -159,6 +160,9 @@ describe("fillerReason", () => {
     expect(f("Ujjain Mahakal Aarti Dhol", "worldwide")).toBe("devotional");
     expect(f("Sri Rudra Kavacham", "worldwide")).toBe("devotional");
     expect(f("Om Namah Shivaya", "worldwide", "Sanskar Bhakti")).toBe("devotional");
+    expect(f("Veer Hanumana | Hanuman Devotional Song | Ram Bhakti", "country")).toBe("devotional");
+    expect(f("मधुर वीर हनुमाना भजन", "country")).toBe("devotional");
+    expect(f("Birds Sound", "worldwide")).toBe("filler");
     // Apple files some of Sidhu Moose Wala under "New Age"; the genre alone proves nothing
     expect(f("Never Fold", "new age", "Sidhu Moose Wala")).toBeNull();
     expect(f("Mantra", "k-pop", "JENNIE")).toBeNull();
@@ -174,6 +178,8 @@ describe("fillerReason", () => {
     expect(f("Instrumental Love")).toBeNull(); // only a bracketed version tag counts
     expect(f("Pianos (Live)")).toBeNull();
     expect(f("Tauba Tauba", "sufi")).toBeNull();
+    expect(f("Cover Me (Live)")).toBeNull();
+    expect(f("Sound of Rain")).toBeNull();
   });
 });
 
