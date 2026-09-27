@@ -189,6 +189,8 @@ export function langOf(t: LangInput, byArtist?: Map<string, string>): string {
   if (/world/.test(genre) && (markets.includes("ae") || markets.includes("sa")) && !western) return "ar";
   if (western) return "en";
   if (markets.includes("kr")) return "ko";
+  // Brazil's charts file baile funk and sertanejo under Western genre names
+  if (markets.includes("br")) return "pt";
   // a Western genre chart in a non-Western storefront is still Western music
   if (WESTERN_GENRE.test(genre)) return "en";
   return "";
@@ -196,14 +198,18 @@ export function langOf(t: LangInput, byArtist?: Map<string, string>): string {
 
 // ------------------------------------------------------------------ filler
 
-const VARIANT = /\((?:[^)]*\b(?:sped[ -]?up|slowed|reverb|bass boost(?:ed)?|nightcore|8d audio|8d|lo-?fi version|super slowed|ultra slowed)\b[^)]*)\)|\b(?:sped[ -]?up|slowed \+ reverb|bass boosted)\b/i;
+const VARIANT = /[([](?:[^)\]]*\b(?:sped[ -]?up|slowed|reverb|bass boost(?:ed)?|nightcore|8d audio|8d|lo-?fi(?: mix| version| flip)?|super slowed|ultra slowed|instrumental|piano ver(?:sion|\.)?)(?![a-z])[^)\]]*)[)\]]|\b(?:sped[ -]?up|slowed \+ reverb|bass boosted)\b/i;
 const COVER = /\b(?:karaoke|originally performed by|in the style of|made famous by|as made famous|tribute to|backing track|cover version|instrumental version|lullaby (?:version|rendition)|piano version of)\b/i;
 const FILLER_GENRE = /sound effects|meditation|healing|nature sounds|sleep|relaxation|fitness|workout|white noise|children|karaoke|devotional/;
+// Hymns, aartis and gurbani reach the Indian charts filed as "Worldwide", so
+// the genre alone misses them; their titles and credits don't.
+const DEVOTIONAL_CREDIT = /\b(?:bhakti|jatha|kirtan|bhajan|gurbani|sangat)\b/i;
+const DEVOTIONAL = /\b(?:waheguru|gurbani|shabad|kirtan|aarti|bhajan|chalisa|stotram|stotra|kavacham|jaap|ashtakam|sankirtan|naam simran|gurudwara|mahamantra|namavali)\b/i;
 
 /** Why this track shouldn't be dealt at all, or null. */
 export function fillerReason(t: { title: string; artist: string; genre: string }): string | null {
   const genre = (t.genre ?? "").toLowerCase();
-  if (/devotional/.test(genre)) return "devotional";
+  if (/devotional/.test(genre) || DEVOTIONAL.test(t.title) || DEVOTIONAL_CREDIT.test(t.artist)) return "devotional";
   if (FILLER_GENRE.test(genre)) return "filler";
   if (COVER.test(t.title) || COVER.test(t.artist)) return "cover";
   if (VARIANT.test(t.title)) return "variant";

@@ -101,6 +101,10 @@ describe("langOf", () => {
     expect(langOf(t({ title: "Still Rollin", genre: "hip-hop", markets: ["in"] }))).toBe("in");
   });
 
+  it("reads Brazil's charts as Portuguese whatever genre they're filed under", () => {
+    expect(langOf(t({ title: "Tropa do Capitão", genre: "funk", markets: ["br"] }))).toBe("pt");
+  });
+
   it("calls a Western genre chart's song English even when only India charted it", () => {
     expect(langOf(t({ title: "Lady", genre: "country", markets: ["in"] }))).toBe("en");
     expect(langOf(t({ title: "Numb", genre: "hard rock", markets: ["ae"] }))).toBe("en");
@@ -141,8 +145,23 @@ describe("fillerReason", () => {
     expect(f("Blinding Lights (Nightcore)")).toBe("variant");
   });
 
+  it("catches instrumental, lo-fi and piano re-versions of a song", () => {
+    expect(f("Kabir's Theme (Instrumental)", "bollywood")).toBe("variant");
+    expect(f("Kale Kagaz (Lofi Mix)", "indian pop")).toBe("variant");
+    expect(f("Love Story (Fast Piano Ver.)")).toBe("variant");
+    expect(f("Numb [Instrumental]", "rock")).toBe("variant");
+  });
+
   it("catches devotional spill and non-music genres", () => {
     expect(f("Shiv Tandav", "devotional & spiritual")).toBe("devotional");
+    expect(f("Mera Ik Tuhi Waheguru", "worldwide")).toBe("devotional");
+    expect(f("Sukh Tera Dita Layiye / Shabad Gurbani", "worldwide")).toBe("devotional");
+    expect(f("Ujjain Mahakal Aarti Dhol", "worldwide")).toBe("devotional");
+    expect(f("Sri Rudra Kavacham", "worldwide")).toBe("devotional");
+    expect(f("Om Namah Shivaya", "worldwide", "Sanskar Bhakti")).toBe("devotional");
+    // Apple files some of Sidhu Moose Wala under "New Age"; the genre alone proves nothing
+    expect(f("Never Fold", "new age", "Sidhu Moose Wala")).toBeNull();
+    expect(f("Mantra", "k-pop", "JENNIE")).toBeNull();
     expect(f("Rain Sounds", "sound effects")).toBe("filler");
     expect(f("Twinkle", "children's music")).toBe("filler");
   });
@@ -152,6 +171,9 @@ describe("fillerReason", () => {
     expect(f("Cover Me Up", "country")).toBeNull();
     expect(f("Tum Hi Ho", "bollywood")).toBeNull();
     expect(f("Speed Drive")).toBeNull();
+    expect(f("Instrumental Love")).toBeNull(); // only a bracketed version tag counts
+    expect(f("Pianos (Live)")).toBeNull();
+    expect(f("Tauba Tauba", "sufi")).toBeNull();
   });
 });
 
