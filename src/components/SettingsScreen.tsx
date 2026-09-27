@@ -266,11 +266,11 @@ export function SettingsScreen({
 
   const targetLabel =
     state.saveTarget === "liked"
-      ? "Liked Songs"
+      ? tt("Liked Songs")
       : state.saveTarget === "discoveries"
-        ? "Discoveries"
+        ? tt("Discoveries")
         : (state.playlists.find((p) => `pl:${p.id}` === state.saveTarget)?.name ??
-          "Liked Songs");
+          tt("Liked Songs"));
 
   // ---------------------------------------------------------- sub-pages
 

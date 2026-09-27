@@ -4120,3 +4120,7 @@ a.sheet-option { color: var(--text); text-decoration: none; }
 .hotd-title { font-family: var(--font-display); font-weight: 800; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hotd-artist { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hotd-play { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #0b0b10; background: var(--hotd, var(--accent)); }
+
+/* Devanagari breaks apart when letter-spaced (the conjuncts split), so the
+   tracked-out labels sit flat in Hindi */
+html:lang(hi) body * { letter-spacing: 0 !important; }
