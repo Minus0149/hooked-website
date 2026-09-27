@@ -13,8 +13,11 @@ export const FEATURED_LABEL = "indie hook of the week";
 /** Paid content is marked as such on the content itself (ASCI). */
 export const SPONSORED_TAG = "Sponsored";
 
+/** The deck's name on Home; the English source for translation (lib/i18n.ts). */
+export const DECK_LABEL = "{title} · presented by {brand}";
+
 export function deckLabel(d: { title: string; brand: string }): string {
-  return `${d.title} · presented by ${d.brand}`;
+  return DECK_LABEL.replace("{title}", d.title).replace("{brand}", d.brand);
 }
 
 /** Plays counted per deck session, so one listener can't inflate a sponsor report. */

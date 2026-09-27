@@ -8,7 +8,7 @@ import { useT } from "../lib/lang";
 import { Face } from "./faces";
 import { RecapCard } from "./RecapCard";
 import { DAYPART_COPY, DAYPART_MOOD, daypartAt, moodById, moodsForHour, type MoodId } from "../data/mood";
-import { FEATURED_LABEL, SPONSORED_TAG, deckLabel } from "../lib/features";
+import { DECK_LABEL, FEATURED_LABEL, SPONSORED_TAG } from "../lib/features";
 
 /** This week's indie hook, as Home shows it (convex/featured.ts: current). */
 export type FeaturedPick = { blurb: string; track: Track };
@@ -202,11 +202,11 @@ export function HomeScreen({
           variants={rise}
           whileTap={{ scale: 0.98 }}
           onClick={() => onPlayFeatured?.(featured.track)}
-          aria-label={`${FEATURED_LABEL}: ${featured.track.title} by ${featured.track.artist}. Play it.`}
+          aria-label={`${t(FEATURED_LABEL)}: ${featured.track.title} — ${featured.track.artist}. ${t("Play it")}.`}
         >
           <img className="featured-art" src={art(featured.track.artwork, 300)} alt="" />
           <span className="featured-text">
-            <span className="featured-kicker">{FEATURED_LABEL}</span>
+            <span className="featured-kicker">{t(FEATURED_LABEL)}</span>
             <span className="featured-title">{featured.track.title}</span>
             <span className="featured-artist">{featured.track.artist}</span>
             <span className="featured-blurb">{featured.blurb}</span>
@@ -288,14 +288,14 @@ export function HomeScreen({
               className="deck-card"
               style={{ ["--face" as string]: mood?.accent ?? "var(--accent)" }}
               onClick={() => onOpenDeck?.(d)}
-              aria-label={`${deckLabel(d)}. ${SPONSORED_TAG}.`}
+              aria-label={`${t(DECK_LABEL, { title: d.title, brand: d.brand })}. ${t(SPONSORED_TAG)}.`}
             >
               {d.logoUrl ? <img className="deck-logo" src={d.logoUrl} alt="" /> : mood ? (
                 <span className="mood-disc"><Face mood={mood.id} size={26} /></span>
               ) : null}
               <span className="deck-text">
-                <span className="deck-title">{deckLabel(d)}</span>
-                <span className="deck-tag">{SPONSORED_TAG}</span>
+                <span className="deck-title">{t(DECK_LABEL, { title: d.title, brand: d.brand })}</span>
+                <span className="deck-tag">{t(SPONSORED_TAG)}</span>
               </span>
             </button>
           );

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DECK_PLAYS_PER_SESSION, FEATURED_LABEL, SPONSORED_TAG, deckLabel, deckTracks } from "../src/lib/features";
+import { DECK_LABEL, DECK_PLAYS_PER_SESSION, FEATURED_LABEL, SPONSORED_TAG, deckLabel, deckTracks } from "../src/lib/features";
+import { translate } from "../src/lib/i18n";
 
 /**
  * An unpaid pick must never be called promoted, a paid deck must always say
@@ -12,6 +13,11 @@ describe("Home artist features", () => {
     expect(FEATURED_LABEL.toLowerCase()).not.toContain("promoted");
     expect(SPONSORED_TAG).toBe("Sponsored");
     expect(deckLabel({ title: "Party deck", brand: "Acme" })).toBe("Party deck · presented by Acme");
+    // Home translates the same source string, and Hindi keeps the brand and the Sponsored mark
+    expect(translate("en", DECK_LABEL, { title: "Party deck", brand: "Acme" })).toBe("Party deck · presented by Acme");
+    expect(translate("hi", DECK_LABEL, { title: "Party deck", brand: "Acme" })).toContain("Acme");
+    expect(translate("hi", SPONSORED_TAG)).not.toBe(SPONSORED_TAG);
+    expect(translate("hi", FEATURED_LABEL)).not.toBe(FEATURED_LABEL);
   });
 
   const catalog = [

@@ -64,6 +64,7 @@ export const HI_REVIEW: string[] = [
   "Not in the beta yet? Apply",
   "Got an invite? Create your account",
   "Hook of the day",
+  "{title} · presented by {brand}",
   "obsession?",
   "what do you listen",
   "in?",
@@ -189,6 +190,11 @@ export const HI: Record<string, string> = {
     "2. TuneMyMusic में source के तौर पर “Free text” चुनें और पेस्ट करें।",
   "3. Pick where it goes — Spotify, Apple Music, YouTube Music — and confirm.":
     "3. चुनें कहाँ भेजना है — Spotify, Apple Music, YouTube Music — और कन्फ़र्म करें।",
+
+  // ---- indie hook of the week, sponsored mood decks (lib/features.ts)
+  "indie hook of the week": "इस हफ़्ते का indie hook",
+  "Sponsored": "प्रायोजित",
+  "{title} · presented by {brand}": "{title} · {brand} की ओर से",
 
   // ---- hook of the day
   "Hook of the day": "आज का hook",
