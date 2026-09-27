@@ -4164,3 +4164,4 @@ html:lang(hi) body * { letter-spacing: 0 !important; }
 .deck-title { font-weight: 700; font-size: 14px; }
 .deck-tag { align-self: flex-start; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; border: 1px solid rgba(255,255,255,.4); color: var(--muted); }
 .deck-actions { display: flex; gap: 6px; }
+.admin-card-head p a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
