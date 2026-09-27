@@ -13,7 +13,7 @@ describe("the product name", () => {
   it("is HookedCue wherever it is read as a word", () => {
     const files = execSync("git ls-files", { encoding: "utf8" })
       .split("\n")
-      .filter((f) => /\.(tsx?|html|json|md|txt)$/.test(f) && !/(^|\/)package(-lock)?\.json$/.test(f));
+      .filter((f) => /\.(tsx?|html|json|md|txt)$/.test(f) && !/(^|\/)package(-lock)?\.json$/.test(f) && f !== "tests/brand-name.test.ts");
     const offenders: string[] = [];
     for (const f of files) {
       const lines = readFileSync(f, "utf8").split("\n");
