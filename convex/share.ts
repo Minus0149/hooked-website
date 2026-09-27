@@ -2,6 +2,10 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { hooksByTrack } from "./tracks";
 import { cleanText } from "./security";
+import { fromBaked, type BakedTrack } from "./shareRules";
+import catalogJson from "../src/data/catalog.json";
+
+const BAKED = catalogJson as BakedTrack[];
 
 /**
  * One song, for a shared link (hookedcue.com/s/<trackId>).
@@ -10,7 +14,8 @@ import { cleanText } from "./security";
  * same fields the catalogue already publishes, for one visible track. Hidden
  * tracks and unknown ids answer null. The audio is never re-hosted: an iTunes
  * preview is streamed from Apple's own URL, and a creator upload from its
- * storage URL, exactly as the deck does.
+ * storage URL, exactly as the deck does. A song only in the bundled first deck
+ * is answered from that file (convex/shareRules.ts).
  */
 export const track = query({
   args: { trackId: v.string() },
@@ -21,7 +26,8 @@ export const track = query({
       .query("tracks")
       .withIndex("by_trackId", (q) => q.eq("trackId", id))
       .unique();
-    if (!t || t.hidden === true) return null;
+    if (!t) return fromBaked(BAKED, id);
+    if (t.hidden === true) return null;
     const hooks = (
       await ctx.db
         .query("hooks")

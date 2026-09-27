@@ -9,6 +9,8 @@ import {
   type ReferralInput,
 } from "../convex/referralRules";
 import { computeRecap, type RecapSwipe } from "../convex/recapRules";
+import { fromBaked, type BakedTrack } from "../convex/shareRules";
+import catalogJson from "../src/data/catalog.json";
 import { isRecapDay, recapStoryUrl, refFromSearch, songShareUrl, songStoryUrl } from "../src/lib/growth";
 
 /**
@@ -105,6 +107,20 @@ describe("share links", () => {
       t: "AP Dhillon",
       w: "2026-09-27",
     });
+  });
+});
+
+describe("shared songs", () => {
+  const baked = catalogJson as BakedTrack[];
+
+  it("opens a song from the bundled first deck, played from the preview's start", () => {
+    const t = fromBaked(baked, baked[0].id);
+    expect(t).toMatchObject({ trackId: baked[0].id, title: baked[0].title, artist: baked[0].artist, audioUrl: null, hooks: [] });
+    expect(t?.previewUrl).toMatch(/^https:\/\//);
+  });
+
+  it("answers null for an id nobody ships", () => {
+    expect(fromBaked(baked, "nope123")).toBeNull();
   });
 });
 

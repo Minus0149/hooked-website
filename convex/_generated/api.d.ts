@@ -42,6 +42,7 @@ import type * as retention from "../retention.js";
 import type * as runtime from "../runtime.js";
 import type * as security from "../security.js";
 import type * as share from "../share.js";
+import type * as shareRules from "../shareRules.js";
 import type * as tracks from "../tracks.js";
 
 import type {
@@ -85,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   runtime: typeof runtime;
   security: typeof security;
   share: typeof share;
+  shareRules: typeof shareRules;
   tracks: typeof tracks;
 }>;
 
