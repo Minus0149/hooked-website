@@ -19,7 +19,7 @@ describe("smtpSettings", () => {
     if (!v.ok) return;
     expect(v.settings.port).toBe(465);
     expect(v.settings.secure).toBe(true);
-    expect(v.settings.from).toBe("hookedcue <noreply@hookedcue.com>");
+    expect(v.settings.from).toBe("HookedCue <noreply@hookedcue.com>");
   });
 
   it("uses STARTTLS on 587", () => {
@@ -44,8 +44,8 @@ describe("smtpSettings", () => {
   });
 
   it("keeps an explicit sender", () => {
-    const v = smtpSettings({ ...full, SMTP_FROM: "hookedcue <hello@hookedcue.com>" });
-    expect(v.ok && v.settings.from).toBe("hookedcue <hello@hookedcue.com>");
+    const v = smtpSettings({ ...full, SMTP_FROM: "HookedCue <hello@hookedcue.com>" });
+    expect(v.ok && v.settings.from).toBe("HookedCue <hello@hookedcue.com>");
   });
 });
 

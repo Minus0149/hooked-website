@@ -47,7 +47,7 @@ export function ProfileScreen({
           <IconBack />
         </button>
         <span className="wordmark">
-          hookedcue<span className="dot">.</span>
+          HookedCue<span className="dot">.</span>
         </span>
         <span style={{ width: 42 }} />
       </header>
@@ -124,7 +124,7 @@ export function ProfileScreen({
             freeSwipes={0}
             intro={{
               kicker: "join the beta",
-              copy: "hookedcue is invite-only while it's in testing. Leave your email and we'll send you an invite when you're in.",
+              copy: "HookedCue is invite-only while it's in testing. Leave your email and we'll send you an invite when you're in.",
             }}
             onSignIn={() => setApplying(false)}
           />

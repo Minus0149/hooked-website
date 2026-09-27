@@ -63,7 +63,7 @@ export function ResetPasswordScreen({
                 href="/"
                 style={{ textDecoration: "none" }}
               >
-                hookedcue<span className="dot">.</span>
+                HookedCue<span className="dot">.</span>
               </a>
               <span style={{ width: 42 }} />
             </header>
@@ -104,7 +104,7 @@ export function ResetPasswordScreen({
                     new <em>password</em>
                   </h2>
                   <p className="ob-copy auth-copy">
-                    Choose a new password for your hookedcue account.
+                    Choose a new password for your HookedCue account.
                   </p>
                   <label className="auth-field">
                     <span className="auth-label">new password</span>

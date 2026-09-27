@@ -109,7 +109,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
         await sendEmail(ctx, user.email, mail.subject, mail.html, `verify ${user.email}: ${url}`);
       },
     },
-    // Accounts are invite-only: hookedcue is a beta you apply for, and only an
+    // Accounts are invite-only: HookedCue is a beta you apply for, and only an
     // approved email may create an account. Everyone else gets the message and
     // the app points them at the application form.
     databaseHooks: {

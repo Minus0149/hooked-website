@@ -206,12 +206,12 @@ export const HI: Record<string, string> = {
   "One song a day, picked for you, at the time you choose.":
     "रोज़ एक गाना, आपके लिए चुना हुआ, आपके चुने समय पर।",
   "Turn on notifications?": "नोटिफ़िकेशन चालू करें?",
-  "hookedcue will send one notification a day with a song picked for you. Nothing else, and you can turn it off here any time.":
-    "hookedcue रोज़ सिर्फ़ एक नोटिफ़िकेशन भेजेगा, आपके लिए चुने गाने के साथ। इसके अलावा कुछ नहीं, और आप इसे यहीं कभी भी बंद कर सकते हैं।",
+  "HookedCue will send one notification a day with a song picked for you. Nothing else, and you can turn it off here any time.":
+    "HookedCue रोज़ सिर्फ़ एक नोटिफ़िकेशन भेजेगा, आपके लिए चुने गाने के साथ। इसके अलावा कुछ नहीं, और आप इसे यहीं कभी भी बंद कर सकते हैं।",
   "Turn on": "चालू करें",
   "Not now": "अभी नहीं",
-  "Notifications are blocked for hookedcue. Allow them in your phone's settings to get your hook of the day.":
-    "hookedcue के नोटिफ़िकेशन बंद हैं। आज का hook पाने के लिए फ़ोन की सेटिंग्स में इन्हें चालू करें।",
+  "Notifications are blocked for HookedCue. Allow them in your phone's settings to get your hook of the day.":
+    "HookedCue के नोटिफ़िकेशन बंद हैं। आज का hook पाने के लिए फ़ोन की सेटिंग्स में इन्हें चालू करें।",
   "Show on Home": "होम पर दिखाएँ",
   "Time": "समय",
 
@@ -223,7 +223,7 @@ export const HI: Record<string, string> = {
   Playback: "प्लेबैक",
   Gestures: "जेस्चर",
   "Data & privacy": "डेटा और प्राइवेसी",
-  "Support hookedcue": "hookedcue को सपोर्ट करें",
+  "Support HookedCue": "HookedCue को सपोर्ट करें",
   "Delete my account": "मेरा अकाउंट हटाएँ",
 
   // ---- sign in / access
@@ -395,7 +395,7 @@ export const HI: Record<string, string> = {
   "house ads off": "हाउस ऐड बंद",
   "house ads on": "हाउस ऐड चालू",
   "languages, genres, blocked artists, replays": "भाषाएँ, genre, ब्लॉक किए आर्टिस्ट, दोबारा सुनना",
-  "How hookedcue looks on this screen.": "इस स्क्रीन पर hookedcue कैसा दिखता है।",
+  "How HookedCue looks on this screen.": "इस स्क्रीन पर HookedCue कैसा दिखता है।",
   "How songs behave in the deck.": "डेक में गाने कैसे चलते हैं।",
   "Tune the four swipes to your wrist.": "चारों स्वाइप को अपने हिसाब से सेट करें।",
   "Time of day": "दिन का समय",
@@ -523,17 +523,17 @@ export const HI: Record<string, string> = {
   "house ads": "हाउस ऐड",
   "less frequent": "कम बार",
   "more frequent": "ज़्यादा बार",
-  "On — keep hookedcue independent": "चालू — hookedcue को आज़ाद रखें",
+  "On — keep HookedCue independent": "चालू — HookedCue को आज़ाद रखें",
   "a card every": "एक कार्ड हर",
   "swipes": "स्वाइप",
   "minutes": "मिनट",
   "hours": "घंटे",
-  "pick a unit, set the number — the daily and weekly ceilings set by hookedcue always hold, and music never stops for a card": "इकाई चुनें, नंबर सेट करें — hookedcue की रोज़ और हफ़्ते की लिमिट हमेशा लागू रहती है, और किसी कार्ड के लिए संगीत कभी नहीं रुकता",
-  "hookedcue has no investors and no label money. Those few quiet cards between songs are what pay for the servers, the licences and the hours this takes. Turning them off won't cost you anything — but if a few hundred people do, this deck goes quiet with them.": "hookedcue के पीछे न कोई investor है, न किसी लेबल का पैसा। गानों के बीच के ये कुछ शांत कार्ड ही सर्वर, लाइसेंस और इसमें लगने वाले घंटों का खर्च उठाते हैं। इन्हें बंद करने से आपका कुछ नहीं जाएगा — लेकिन अगर कुछ सौ लोग ऐसा करें, तो ये डेक भी उनके साथ चुप हो जाएगा।",
+  "pick a unit, set the number — the daily and weekly ceilings set by HookedCue always hold, and music never stops for a card": "इकाई चुनें, नंबर सेट करें — HookedCue की रोज़ और हफ़्ते की लिमिट हमेशा लागू रहती है, और किसी कार्ड के लिए संगीत कभी नहीं रुकता",
+  "HookedCue has no investors and no label money. Those few quiet cards between songs are what pay for the servers, the licences and the hours this takes. Turning them off won't cost you anything — but if a few hundred people do, this deck goes quiet with them.": "HookedCue के पीछे न कोई investor है, न किसी लेबल का पैसा। गानों के बीच के ये कुछ शांत कार्ड ही सर्वर, लाइसेंस और इसमें लगने वाले घंटों का खर्च उठाते हैं। इन्हें बंद करने से आपका कुछ नहीं जाएगा — लेकिन अगर कुछ सौ लोग ऐसा करें, तो ये डेक भी उनके साथ चुप हो जाएगा।",
   "Whatever you choose, the music keeps playing. That's a promise.": "आप जो भी चुनें, संगीत चलता रहेगा। ये वादा है।",
   "Keep them on — I get it": "चालू रखें — बात समझ आती है",
   "Turn them off anyway": "फिर भी बंद करें",
-  "What hookedcue keeps about you, and what you can do about it.": "hookedcue आपके बारे में क्या रखता है, और आप उसका क्या कर सकते हैं।",
+  "What HookedCue keeps about you, and what you can do about it.": "HookedCue आपके बारे में क्या रखता है, और आप उसका क्या कर सकते हैं।",
   "Export my library": "मेरी लाइब्रेरी एक्सपोर्ट करें",
   "your lists and answers as JSON": "आपकी लिस्ट और जवाब, JSON फ़ाइल में",
   "Use it on the web": "वेब पर इस्तेमाल करें",

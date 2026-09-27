@@ -4,7 +4,7 @@ import { detectLang, HI, HI_REVIEW, placeholders, translate } from "../src/lib/i
 /**
  * Hindi. A missing translation must fall back to English (never a key or a
  * blank), every Hindi string must use exactly the placeholders its English
- * source does, and the brand name stays "hookedcue".
+ * source does, and the brand name stays "HookedCue".
  */
 describe("i18n", () => {
   it("detects Hindi from the device or browser", () => {
@@ -34,7 +34,7 @@ describe("i18n", () => {
   it("has no empty translations, and keeps the brand name", () => {
     expect(Object.entries(HI).filter(([, hi]) => !hi.trim())).toEqual([]);
     for (const [en, hi] of Object.entries(HI)) {
-      if (en.includes("hookedcue")) expect(hi).toContain("hookedcue");
+      if (en.includes("HookedCue")) expect(hi).toContain("HookedCue");
     }
   });
 

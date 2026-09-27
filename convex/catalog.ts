@@ -281,6 +281,19 @@ export const publish = internalMutation({
   },
 });
 
+/**
+ * Rebuild in REBUILD_DELAY_MS instead of at the background cadence — for an
+ * operator who changed something outside the catalogue that should show now
+ * (the R2 copy coming online, say):
+ *   npx convex run --prod catalog:refresh
+ */
+export const refresh = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    await touchCatalog(ctx, { urgent: true });
+  },
+});
+
 /** Operator/debug view: what's published and how big it is. */
 export const info = internalQuery({
   args: {},

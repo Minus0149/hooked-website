@@ -564,7 +564,7 @@ export function creatorNameFor(artistName: string | undefined, email: string): s
  * the same trust as admin:grantAdmin. Used for the Google Play reviewer
  * account, so the one set of sign-in details reaches every part of the app.
  *
- *   npx convex run --prod creators:grant '{"email":"hello@hookedcue.com","artistName":"hookedcue review"}'
+ *   npx convex run --prod creators:grant '{"email":"hello@hookedcue.com","artistName":"HookedCue review"}'
  */
 export const grant = internalMutation({
   args: { email: v.string(), artistName: v.optional(v.string()) },

@@ -13,7 +13,7 @@ import { useT } from "../lib/lang";
 /**
  * Sign in, or — with an invite — create the account.
  *
- * hookedcue is a beta you apply for, so this leads with signing in. Creating
+ * HookedCue is a beta you apply for, so this leads with signing in. Creating
  * an account is for invited emails only (the server refuses anyone else and
  * the form turns that refusal into an Apply button), reached from the invite
  * link (/join) or the small "Got an invite?" link.

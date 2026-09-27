@@ -7,11 +7,11 @@ import { htmlToText } from "../convex/emailConfig";
  * The sign-up and reset emails are the first thing a tester sees from us, and
  * the reader's own address is user input that lands inside HTML.
  */
-describe("hookedcue emails", () => {
+describe("HookedCue emails", () => {
   it("carries the brand, the icon and a working button", () => {
     const { subject, html } = verifyEmail("ada@example.com", "https://x.convex.site/verify?token=abc");
-    expect(subject).toBe("confirm your email for hookedcue");
-    expect(html).toContain("hookedcue<span");
+    expect(subject).toBe("confirm your email for HookedCue");
+    expect(html).toContain("HookedCue<span");
     expect(html).toContain('src="cid:hookedcue-logo"');
     expect(html).toContain('href="https://x.convex.site/verify?token=abc"');
     expect(html).toContain("<strong");
@@ -46,7 +46,7 @@ describe("hookedcue emails", () => {
 
   it("invites by first name and links to account creation", () => {
     const { subject, html } = inviteEmail("Ada Lovelace", "https://app.hookedcue.com/profile?signup=1");
-    expect(subject).toContain("hookedcue beta");
+    expect(subject).toContain("HookedCue beta");
     expect(html).toContain("You&#39;re in, Ada."); // the apostrophe is escaped like everything else
     expect(html).toContain('href="https://app.hookedcue.com/profile?signup=1"');
   });

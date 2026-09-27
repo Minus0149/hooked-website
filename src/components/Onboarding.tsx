@@ -265,7 +265,7 @@ export function Onboarding({
       exit={{ opacity: 0, scale: 1.04, transition: { duration: 0.35 } }}
     >
       <div className="ob-logo">
-        hookedcue<span style={{ color: "var(--accent)" }}>.</span>
+        HookedCue<span style={{ color: "var(--accent)" }}>.</span>
       </div>
 
       <AnimatePresence mode="wait">

@@ -1,6 +1,6 @@
 # iTunes preview attribution
 
-hookedcue plays 30-second previews and shows album art from the iTunes Search
+HookedCue plays 30-second previews and shows album art from the iTunes Search
 API. Apple allows that as "Promo Content" under conditions. This is what they
 are, and where the app meets each one. Researched 2026-09-26. Not legal advice.
 

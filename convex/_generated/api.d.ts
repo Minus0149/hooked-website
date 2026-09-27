@@ -15,6 +15,7 @@ import type * as analyzer from "../analyzer.js";
 import type * as applyOrigin from "../applyOrigin.js";
 import type * as auth from "../auth.js";
 import type * as catalog from "../catalog.js";
+import type * as catalogCdn from "../catalogCdn.js";
 import type * as catalogRules from "../catalogRules.js";
 import type * as charts from "../charts.js";
 import type * as collab from "../collab.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   applyOrigin: typeof applyOrigin;
   auth: typeof auth;
   catalog: typeof catalog;
+  catalogCdn: typeof catalogCdn;
   catalogRules: typeof catalogRules;
   charts: typeof charts;
   collab: typeof collab;

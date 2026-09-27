@@ -29,7 +29,7 @@ export function songStoryUrl(trackId: string, hookIndex = 0, site = SHARE_SITE):
 }
 
 export function shareText(title: string, artist: string): string {
-  return `${title} — ${artist}. hear the hook on hookedcue`;
+  return `${title} — ${artist}. hear the hook on HookedCue`;
 }
 
 export type RecapImage = {

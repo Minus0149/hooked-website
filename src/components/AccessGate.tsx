@@ -233,7 +233,7 @@ export function AccessGate({
       <p className="gate-kicker">{intro?.kicker ?? `that was your ${freeSwipes} free tastes`}</p>
       <p className="gate-copy">
         {intro?.copy ??
-          "hookedcue is invite-only while it's in testing. leave your email and we'll send you an invite."}
+          "HookedCue is invite-only while it's in testing. leave your email and we'll send you an invite."}
       </p>
 
       <label className="access-field">

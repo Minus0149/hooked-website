@@ -4,7 +4,7 @@
  *
  * Mirrored in mobile/src/lib/authForms.ts (scripts/check-mirrors.mjs).
  *
- * hookedcue is a beta you apply for: nobody makes an account on a whim. The
+ * HookedCue is a beta you apply for: nobody makes an account on a whim. The
  * sign-in screen leads with signing in; the create-account form exists for
  * people holding an invite, and the server refuses anyone else.
  */

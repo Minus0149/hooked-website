@@ -31,10 +31,10 @@ export function InviteCard() {
 
   const share = async () => {
     if (!data.link) return;
-    const text = "Come find songs with me on hookedcue — this link skips the waitlist.";
+    const text = "Come find songs with me on HookedCue — this link skips the waitlist.";
     try {
       if (navigator.share) {
-        await navigator.share({ title: "hookedcue", text, url: data.link });
+        await navigator.share({ title: "HookedCue", text, url: data.link });
         return;
       }
     } catch {

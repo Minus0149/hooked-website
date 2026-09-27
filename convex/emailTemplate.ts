@@ -1,5 +1,5 @@
 /**
- * The one look every hookedcue email shares.
+ * The one look every HookedCue email shares.
  *
  * Email clients are not browsers: no stylesheets, no web fonts to rely on,
  * images blocked until the reader allows them, and Outlook still lays out with
@@ -80,8 +80,8 @@ export function renderEmail(c: EmailContent): string {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
 <tr><td style="padding:0 4px 20px;">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td style="padding-right:12px;"><img src="${EMAIL_ICON_SRC}" width="44" height="44" alt="hookedcue" style="display:block;border:0;border-radius:11px;"></td>
-<td style="font:800 24px/1 ${FONT};letter-spacing:-0.5px;color:#f4f2ee;">hookedcue<span style="color:#ff3d71;">.</span></td>
+<td style="padding-right:12px;"><img src="${EMAIL_ICON_SRC}" width="44" height="44" alt="HookedCue" style="display:block;border:0;border-radius:11px;"></td>
+<td style="font:800 24px/1 ${FONT};letter-spacing:-0.5px;color:#f4f2ee;">HookedCue<span style="color:#ff3d71;">.</span></td>
 </tr></table>
 </td></tr>
 <tr><td bgcolor="#13131b" style="background:#13131b;border:1px solid #23232e;border-radius:20px;padding:32px 28px;">
@@ -95,7 +95,7 @@ ${c.note ? `<p style="margin:0 0 12px;font:400 13px/1.5 ${FONT};color:#8e8c99;">
 <p style="margin:0;font:400 12px/1.5 ${FONT};color:#6f6d7a;">Button not working? Paste this into your browser:<br><a href="${escapeHtml(url)}" style="color:#ff7aa0;word-break:break-all;">${escapeHtml(url)}</a></p>
 </td></tr>
 <tr><td style="padding:20px 4px 0;font:400 12px/1.6 ${FONT};color:#6f6d7a;">
-hookedcue — every song starts at its hook.<br>
+HookedCue — every song starts at its hook.<br>
 <a href="${SITE}" style="color:#8e8c99;">hookedcue.com</a> · <a href="${SITE}/privacy" style="color:#8e8c99;">privacy</a> · questions? <a href="mailto:hello@hookedcue.com" style="color:#8e8c99;">hello@hookedcue.com</a>
 </td></tr>
 </table>
@@ -107,12 +107,12 @@ hookedcue — every song starts at its hook.<br>
 /** Sign-up confirmation. */
 export function verifyEmail(email: string, url: string): { subject: string; html: string } {
   return {
-    subject: "confirm your email for hookedcue",
+    subject: "confirm your email for HookedCue",
     html: renderEmail({
       preheader: "One tap and you're in.",
       heading: "Confirm your email",
       paragraphs: [
-        `You're one tap from hookedcue. Confirm **${email}** so we know this inbox is yours.`,
+        `You're one tap from HookedCue. Confirm **${email}** so we know this inbox is yours.`,
         "Every song starts at its hook — skip, save, or ask for more like it.",
       ],
       button: { label: "Confirm my email", url },
@@ -124,7 +124,7 @@ export function verifyEmail(email: string, url: string): { subject: string; html
 /** Password reset. */
 export function resetEmail(email: string, url: string): { subject: string; html: string } {
   return {
-    subject: "reset your hookedcue password",
+    subject: "reset your HookedCue password",
     html: renderEmail({
       preheader: "Choose a new password.",
       heading: "Reset your password",
@@ -144,16 +144,16 @@ export const PLAY_OPT_IN_URL = "https://play.google.com/apps/testing/com.minus.h
 export function inviteEmail(name: string, url: string): { subject: string; html: string } {
   const first = name.trim().split(/\s+/)[0] || "there";
   return {
-    subject: "you're in — welcome to the hookedcue beta",
+    subject: "you're in — welcome to the HookedCue beta",
     html: renderEmail({
       preheader: "Your spot in the beta is ready — three quick steps.",
       heading: `You're in, ${first}.`,
       paragraphs: [
-        "Your spot in the hookedcue beta is ready. Three quick steps on your Android phone, signed in to Google with the same Gmail you want to test with:",
+        "Your spot in the HookedCue beta is ready. Three quick steps on your Android phone, signed in to Google with the same Gmail you want to test with:",
       ],
       steps: [
         { label: "Join the testers group", detail: "One tap — Google needs this before it shows you the app.", url: TESTER_GROUP_URL },
-        { label: "Install hookedcue from Google Play", detail: "Tap “Become a tester”, then install.", url: PLAY_OPT_IN_URL },
+        { label: "Install HookedCue from Google Play", detail: "Tap “Become a tester”, then install.", url: PLAY_OPT_IN_URL },
       ],
       button: { label: "3. Create my account", url },
       note: "This invite is for this email address only. If you weren't expecting it, you can ignore it.",
@@ -219,12 +219,12 @@ export function featuredEmail(opts: { song: string; week: string; blurb: string;
 } {
   const from = new Date(`${opts.week}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "long", timeZone: "UTC" });
   return {
-    subject: `${opts.song} is this week's indie hook on hookedcue`,
+    subject: `${opts.song} is this week's indie hook on HookedCue`,
     html: renderEmail({
       preheader: "Your song is at the top of everyone's Home this week.",
       heading: "You're this week's indie hook",
       paragraphs: [
-        `We picked **${opts.song}** as the indie hook of the week. From ${from}, it's at the top of Home for everyone on hookedcue, starting at its hook.`,
+        `We picked **${opts.song}** as the indie hook of the week. From ${from}, it's at the top of Home for everyone on HookedCue, starting at its hook.`,
         `What we wrote about it: ${opts.blurb}`,
         "Share it — the link below opens a page made for Instagram stories.",
       ],

@@ -14,7 +14,7 @@ export const ITUNES_CREDIT = "provided courtesy of iTunes";
 
 /** The standing credit on Settings → Data & privacy, word for word in both apps. */
 export const APPLE_CREDIT_NOTE =
-  "Song previews and artwork are provided courtesy of iTunes and stream straight from Apple. hookedcue isn’t affiliated with Apple.";
+  "Song previews and artwork are provided courtesy of iTunes and stream straight from Apple. HookedCue isn’t affiliated with Apple.";
 
 type Creditable = { id: string; previewUrl?: string };
 

@@ -67,7 +67,7 @@ schedule are dealt first.
 | Playlist Push | campaigns from $280 | ₹23,000+ |
 | Bot-stream sellers | fractions of a rupee per 1,000 streams | these are fake; we must never look like them |
 
-hookedcue's position: **₹0.60–1.00 per distinct listener who actually hears
+HookedCue's position: **₹0.60–1.00 per distinct listener who actually hears
 the hook**, targeted to people already listening to music. That's below
 YouTube's per-view cost and far below Spotify's per click, in the same range
 as a genuine Reels listen, and about a thousand times what fake-stream
@@ -93,7 +93,7 @@ sellers charge, so it can't be mistaken for one.
   in a window (default 1,000 while in beta). A package bigger than what's
   left shows as full. Selling 5,000 listeners to a 12-person beta would
   only mean refunds.
-- **No GST line** until hookedcue registers for GST (not required below the
+- **No GST line** until HookedCue registers for GST (not required below the
   ₹20 lakh turnover threshold for services). Prices are final.
 
 ## Refunds and cancellation

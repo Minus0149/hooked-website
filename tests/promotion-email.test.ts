@@ -58,7 +58,7 @@ describe("promotion emails", () => {
       blurb: "A <b>bright</b> hook.",
       shareUrl: "https://hookedcue.com/indie-hook",
     });
-    expect(subject).toBe("Self Aware is this week's indie hook on hookedcue");
+    expect(subject).toBe("Self Aware is this week's indie hook on HookedCue");
     expect(htmlToText(html)).toContain("From 28 September");
     expect(html).toContain("&lt;b&gt;bright&lt;/b&gt;");
     expect(html).toContain('href="https://hookedcue.com/indie-hook"');

@@ -9,7 +9,7 @@ import {
 import { NOT_APPROVED_MESSAGE } from "../convex/access";
 
 /**
- * The sign-in / invite / reset forms, identical in both apps. hookedcue is a
+ * The sign-in / invite / reset forms, identical in both apps. HookedCue is a
  * beta you apply for, so the form leads with signing in and turns the server's
  * "not approved" into an Apply button.
  */

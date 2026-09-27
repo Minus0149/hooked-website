@@ -9,7 +9,7 @@
  *   SMTP_PORT  465 (implicit TLS) or 587 (STARTTLS); 465 if unset
  *   SMTP_USER  the mailbox, e.g. noreply@hookedcue.com
  *   SMTP_PASS  that mailbox's password
- *   SMTP_FROM  optional display sender; defaults to "hookedcue <SMTP_USER>"
+ *   SMTP_FROM  optional display sender; defaults to "HookedCue <SMTP_USER>"
  *
  * Kept out of the "use node" sender so it can be unit-tested and read from the
  * default runtime, where the auth callbacks decide whether to send at all.
@@ -42,7 +42,7 @@ export function smtpSettings(env: Record<string, string | undefined>): SmtpVerdi
   const user = get("SMTP_USER");
   if (user && !user.includes("@")) missing.push("SMTP_USER (a full mailbox address)");
 
-  const from = get("SMTP_FROM") || (user ? `hookedcue <${user}>` : "");
+  const from = get("SMTP_FROM") || (user ? `HookedCue <${user}>` : "");
   if (get("SMTP_FROM") && !from.includes("@")) missing.push("SMTP_FROM (must contain an address)");
 
   if (missing.length > 0) return { ok: false, missing };

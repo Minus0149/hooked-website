@@ -2,7 +2,7 @@
  * "Your week in hooks" — the arithmetic, pure so it's testable.
  *
  * Built from the listener's own swipes over the last seven days. Every card in
- * hookedcue starts at its hook, so every card heard is an intro skipped — that
+ * HookedCue starts at its hook, so every card heard is an intro skipped — that
  * is the honest version of the headline number, not an estimate of seconds.
  */
 

@@ -139,7 +139,7 @@ export function PromotePanel({ tracks }: { tracks: Track[] }) {
           key: co.keyId,
           amount: co.amount,
           currency: co.currency,
-          name: "hookedcue",
+          name: "HookedCue",
           description: `${listeners.toLocaleString("en-IN")} listeners · ${title}`,
           order_id: co.razorpayOrderId,
           theme: { color: "#ff3d71" },

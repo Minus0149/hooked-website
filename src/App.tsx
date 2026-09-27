@@ -1074,7 +1074,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     [jumpTo],
   );
 
-  // A shared song link ("Open in hookedcue" on hookedcue.com/s/<id>) arrives as
+  // A shared song link ("Open in HookedCue" on hookedcue.com/s/<id>) arrives as
   // ?track=<id>: put that song on top of the deck as soon as the catalogue that
   // holds it has loaded, once, and tidy the address.
   const sharedTrack = useRef<string | null>(
@@ -1175,7 +1175,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
                   <IconUser />
                 </button>
                 <span className="wordmark">
-                  hookedcue<span className="dot">.</span>
+                  HookedCue<span className="dot">.</span>
                 </span>
                 <button
                   className="topbar-btn"
@@ -1469,7 +1469,7 @@ export default function App() {
     return (
       <div className="notfound">
         <span className="wordmark">
-          hookedcue<span className="dot">.</span>
+          HookedCue<span className="dot">.</span>
         </span>
         <h1>404</h1>
         <p>That page doesn&apos;t exist. The songs are all still where you left them.</p>

@@ -7,7 +7,7 @@ import { creatorNameFor } from "../convex/creators";
  */
 describe("creatorNameFor", () => {
   it("keeps the name that was asked for", () => {
-    expect(creatorNameFor("hookedcue review", "hello@hookedcue.com")).toBe("hookedcue review");
+    expect(creatorNameFor("HookedCue review", "hello@hookedcue.com")).toBe("HookedCue review");
   });
 
   it("falls back to the address when no name is given", () => {
