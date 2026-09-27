@@ -111,3 +111,8 @@ A Hindi + Punjabi listener's first 50 cards had one Hindi or Punjabi song.
   catalogue's composition and the first 50 cards for three onboarding answers.
 - **One-offs**: `npx convex run curation:backfill` (languages + release dates),
   `npx convex run charts:refresh '{"all":true}'` (every feed at once).
+- **2026-09-27 before/after**: `docs/audits/2026-09-27-before.md` and
+  `-after.md` — Indian share 7% → 28% of the catalogue (60% of a no-language
+  deck), a Hindi + Punjabi listener's first 50 from 1 to 33 in their languages,
+  US country in the first 50 from 3–5 to 0, released in the last five years
+  47% → 62%, no artist above 3 (was 38).
