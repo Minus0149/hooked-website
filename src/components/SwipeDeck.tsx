@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ReportSong } from "./ReportSong";
+import { shareText, songShareUrl, songStoryUrl } from "../lib/growth";
 import { REPORT_COPY } from "../lib/contentReport";
 import {
   AnimatePresence,
@@ -196,6 +197,25 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
   const dialog = useDialog({ onClose });
   // "Report this song" turns this sheet into the report form (Play's UGC policy)
   const [reporting, setReporting] = useState(false);
+  const [shareNote, setShareNote] = useState<string | null>(null);
+  const shareUrl = songShareUrl(track.id);
+  // native share sheet where the browser has one, else the link on the clipboard
+  const shareSong = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: track.title, text: shareText(track.title, track.artist), url: shareUrl });
+        return;
+      }
+    } catch {
+      // cancelled — fall back to copying
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareNote("Link copied — it opens at the hook");
+    } catch {
+      setShareNote(shareUrl);
+    }
+  };
   // Drawn into the app's frame (.phone), like the mood wheel: inside the deck
   // it was positioned against the Discover screen, which on a short window is
   // scrolled up inside the frame — the report form's title sat off the top.
@@ -228,6 +248,15 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
           <ReportSong track={track} onBack={() => setReporting(false)} onDone={onClose} />
         ) : (
         <>
+        <button type="button" className="sheet-option sheet-share" onClick={() => void shareSong()}>
+          <span style={{ color: "var(--accent)" }}>↗</span>
+          Share this song
+          <span className="sheet-share-sub">opens at the hook</span>
+        </button>
+        <a className="sheet-share-story" href={songStoryUrl(track.id)} target="_blank" rel="noreferrer">
+          story image for Instagram
+        </a>
+        {shareNote && <p className="sheet-share-note" role="status">{shareNote}</p>}
         <h3 className="sheet-title">Hear the whole thing</h3>
         <p className="sheet-sub">
           "{track.title}" — {track.artist}. Previews stop at 30 seconds; pick where

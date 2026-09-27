@@ -3,6 +3,8 @@ import { internalMutation, internalQuery, mutation, query, type MutationCtx } fr
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { inviteEmail } from "./emailTemplate";
+import { cleanCode, referralDecision } from "./referralRules";
+import { runtimeFor } from "./runtime";
 import {
   cleanText,
   enforceRateLimit,
@@ -172,8 +174,9 @@ export const submit = internalMutation({
     genres: v.optional(v.array(v.string())),
     notes: v.optional(v.string()),
     userAgent: v.optional(v.string()),
+    ref: v.optional(v.string()),
   },
-  handler: async (ctx, { ip, ...args }) => {
+  handler: async (ctx, { ip, ref, ...args }) => {
     // per-IP first: the ceiling that actually costs an attacker something
     await enforceRateLimit(ctx, `access:ip:${ip}`, 8, 60 * 60_000);
     const key = cleanText(args.email, MAX.email).toLowerCase() || "anon";
@@ -181,7 +184,8 @@ export const submit = internalMutation({
     // and a floor under the whole queue, so a botnet spread across many IPs
     // can't fill the table one "valid" row at a time
     await enforceRateLimit(ctx, "access:global", 300, 60 * 60_000);
-    return await upsertRequest(ctx, { ...args, source: "app" });
+    const result = await upsertRequest(ctx, { ...args, source: "app" });
+    return await applyReferral(ctx, ref, args.email, result);
   },
 });
 
@@ -199,12 +203,14 @@ export const record = internalMutation({
     lastSkipped: v.optional(v.string()),
     notes: v.optional(v.string()),
     userAgent: v.optional(v.string()),
+    ref: v.optional(v.string()),
   },
-  handler: async (ctx, { ip, ...args }) => {
+  handler: async (ctx, { ip, ref, ...args }) => {
     // the landing server is trusted, but the shared secret could leak
     if (ip) await enforceRateLimit(ctx, `access:ip:${ip}`, 30, 60 * 60_000);
     await enforceRateLimit(ctx, "access:global", 300, 60 * 60_000);
-    return await upsertRequest(ctx, { ...args, source: "landing" });
+    const result = await upsertRequest(ctx, { ...args, source: "landing" });
+    return await applyReferral(ctx, ref, args.email, result);
   },
 });
 
@@ -394,4 +400,63 @@ async function sendInvite(ctx: MutationCtx, id: Id<"accessRequests">) {
   const mail = inviteEmail(row.name, joinUrl(site, row.email));
   await ctx.scheduler.runAfter(0, internal.email.send, { to: row.email, subject: mail.subject, html: mail.html });
   await ctx.db.patch(id, { invited: true });
+}
+
+/**
+ * A friend applied through someone's invite link: approve them on the spot
+ * (skipping the waitlist) if the inviter still has invites left, and send the
+ * usual "you're in" email. Anything that doesn't qualify — an unknown code,
+ * self-invites, a decision already made, a used-up allowance, a code being
+ * hammered — leaves the application exactly as a normal one.
+ */
+async function applyReferral(
+  ctx: MutationCtx,
+  rawRef: string | undefined,
+  rawEmail: string,
+  result: { status: "pending" | "approved" | "rejected"; duplicate: boolean },
+): Promise<{ status: "pending" | "approved" | "rejected"; duplicate: boolean; referred: boolean }> {
+  const code = cleanCode(rawRef);
+  const email = cleanText(rawEmail, MAX.email).toLowerCase();
+  if (!code || !email) return { ...result, referred: false };
+  try {
+    // a leaked code can't be used to mass-approve: 20 uses an hour, then it
+    // quietly stops working and applications queue as normal
+    await enforceRateLimit(ctx, `referral:code:${code}`, 20, 60 * 60_000);
+  } catch {
+    return { ...result, referred: false };
+  }
+  const codeRow = await ctx.db
+    .query("referralCodes")
+    .withIndex("by_code", (q) => q.eq("code", code))
+    .first();
+  const inviterProfile = codeRow ? await getProfile(ctx, codeRow.userId) : null;
+  const row = await ctx.db
+    .query("accessRequests")
+    .withIndex("by_email", (q) => q.eq("email", email))
+    .unique();
+  const used = codeRow
+    ? (await ctx.db
+        .query("accessRequests")
+        .withIndex("by_referredBy", (q) => q.eq("referredBy", codeRow.userId))
+        .collect()).length
+    : 0;
+  const runtime = await runtimeFor(ctx);
+  const decision = referralDecision({
+    cap: runtime.referralCap,
+    inviter: codeRow && inviterProfile ? { userId: codeRow.userId, email: inviterProfile.email } : null,
+    applicantEmail: email,
+    // the row was just written as pending when new, so "new" and "pending" are the same case
+    existingStatus: result.duplicate ? result.status : null,
+    used,
+  });
+  if (decision !== "approve" || !row || !codeRow) return { ...result, referred: false };
+  await ctx.db.patch(row._id, {
+    status: "approved",
+    decidedAt: new Date().toISOString(),
+    decidedBy: `referral:${code}`,
+    referredBy: codeRow.userId,
+    referralCode: code,
+  });
+  await sendInvite(ctx, row._id);
+  return { status: "approved", duplicate: result.duplicate, referred: true };
 }

@@ -1020,6 +1020,27 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     [jumpTo],
   );
 
+  // A shared song link ("Open in hookedcue" on hookedcue.com/s/<id>) arrives as
+  // ?track=<id>: put that song on top of the deck as soon as the catalogue that
+  // holds it has loaded, once, and tidy the address.
+  const sharedTrack = useRef<string | null>(
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("track"),
+  );
+  useEffect(() => {
+    const id = sharedTrack.current;
+    if (!id || !state.catalog.some((t) => t.id === id)) return;
+    sharedTrack.current = null;
+    goDiscover(id);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("track");
+      url.searchParams.delete("h");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    } catch {
+      // address stays as it was — harmless
+    }
+  }, [state.catalog, goDiscover]);
+
   // tint the whole room with the on-deck track's accent — or a fixed colour
   // if they chose one in Settings → Appearance
   const trackAccent = inDiscover && onDeck ? onDeck.accent : "#FF3D71";

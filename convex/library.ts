@@ -638,6 +638,7 @@ export const ACCOUNT_DELETION = {
     "promotionRates",
     "promotionViews",
     "promotionRequests",
+    "referralCodes",
     // and in the auth component: the user (email, name, password), sessions and linked accounts
   ],
   kept: {
@@ -730,6 +731,19 @@ export const deleteMyAccount = mutation({
         .unique();
       if (request) await ctx.db.delete(request._id);
     }
+
+    // their invite code goes, and friends they invited stop pointing at them
+    // (the friends' own applications and accounts are theirs, and stay)
+    const codes = await ctx.db
+      .query("referralCodes")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+    for (const c of codes) await ctx.db.delete(c._id);
+    const invitedFriends = await ctx.db
+      .query("accessRequests")
+      .withIndex("by_referredBy", (q) => q.eq("referredBy", userId))
+      .collect();
+    for (const f of invitedFriends) await ctx.db.patch(f._id, { referredBy: undefined });
 
     await ctx.db.delete(profile._id);
 

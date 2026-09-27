@@ -98,7 +98,10 @@ export default defineSchema({
         includeBlockedArtists: v.boolean(),
       }),
     ),
-  }).index("by_userId", ["userId"]),
+  })
+    .index("by_userId", ["userId"])
+    // invite links report which invited friends actually made an account
+    .index("by_email", ["email"]),
 
   playlists: defineTable({
     userId: v.string(),
@@ -484,10 +487,14 @@ export default defineSchema({
     decidedAt: v.optional(v.string()),
     decidedBy: v.optional(v.string()),
     invited: v.optional(v.boolean()),
+    /** the listener whose invite link this came through (convex/referrals.ts) */
+    referredBy: v.optional(v.string()),
+    referralCode: v.optional(v.string()),
   })
     .index("by_email", ["email"])
     .index("by_status", ["status"])
-    .index("by_source", ["source"]),
+    .index("by_source", ["source"])
+    .index("by_referredBy", ["referredBy"]),
 
   rateLimits: defineTable({
     key: v.string(),
@@ -712,4 +719,16 @@ export default defineSchema({
     tracks: v.optional(v.number()),
     builtAt: v.optional(v.number()),
   }).index("by_key", ["key"]),
+
+  /**
+   * One personal invite code per approved listener. A friend applying through
+   * it skips the waitlist, up to the runtime `referralCap` (see referralRules.ts).
+   */
+  referralCodes: defineTable({
+    code: v.string(),
+    userId: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_code", ["code"])
+    .index("by_userId", ["userId"]),
 });

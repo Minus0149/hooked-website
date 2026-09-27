@@ -12,6 +12,15 @@ import {
   type AccessStage as Stage,
   type ApplyResult,
 } from "../lib/accessApply";
+import { REF_STORAGE_KEY } from "../lib/growth";
+
+const storedRef = (): string | null => {
+  try {
+    return localStorage.getItem(REF_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+};
 
 // the apply endpoint is an HTTP route, not a mutation, so the server can see
 // the caller's IP and rate limit on it — a websocket mutation can't
@@ -71,7 +80,7 @@ export function AccessGate({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
-          applyBody({ name, email, trap, startedAt: startedAt.current }, extra),
+          applyBody({ name, email, trap, startedAt: startedAt.current }, { ...extra, ref: storedRef() }),
         ),
       });
       const data = (await res.json().catch(() => ({}))) as ApplyResult;

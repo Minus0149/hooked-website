@@ -118,6 +118,7 @@ http.route({
         genres: list(body.genres),
         notes: str(body.notes) || undefined,
         userAgent: (request.headers.get("user-agent") ?? "").slice(0, 200),
+        ref: str(body.ref) || undefined,
       });
       return Response.json({ ok: true, ...result }, { headers });
     } catch (error) {
@@ -168,10 +169,17 @@ http.route({
         lastSkipped: str(body.lastSkipped),
         notes: str(body.notes),
         userAgent: str(body.userAgent) || (request.headers.get("user-agent") ?? "").slice(0, 200),
+        ref: str(body.ref) || undefined,
       });
       // a duplicate is still a 200 — the landing has already told the person
-      // they are on the list, and they are
-      return Response.json({ ok: true, duplicate: result.duplicate });
+      // they are on the list, and they are. `referred` means a friend's invite
+      // link approved them on the spot, so the landing can say "you're in".
+      return Response.json({
+        ok: true,
+        duplicate: result.duplicate,
+        status: result.status,
+        referred: result.referred,
+      });
     } catch (error) {
       console.error("[access] landing ingest failed:", error);
       const message = error instanceof Error ? error.message : "";

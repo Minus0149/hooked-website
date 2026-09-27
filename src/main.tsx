@@ -3,6 +3,16 @@ import { createRoot } from "react-dom/client";
 import { ConvexReactClient } from "convex/react";
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
 import App from "./App";
+import { REF_STORAGE_KEY, refFromSearch } from "./lib/growth";
+
+// A friend's invite link (?ref=CODE) is remembered until this visitor applies,
+// however many songs they swipe first and whichever screen they apply from.
+try {
+  const ref = refFromSearch(window.location.search);
+  if (ref) localStorage.setItem(REF_STORAGE_KEY, ref);
+} catch {
+  // storage blocked: the landing's beta form still carries the code
+}
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { DialogProvider } from "./components/ui/Dialogs";
 import { authClient } from "./lib/auth-client";

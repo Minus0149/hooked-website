@@ -25,6 +25,15 @@ describe("stageAfterApply", () => {
   it("shows the settled answer to a rejected email", () => {
     expect(stageAfterApply({ ok: true, duplicate: true, status: "rejected" })).toBe("already");
   });
+  it("sends a friend approved through an invite link straight on to their account", () => {
+    expect(stageAfterApply({ ok: true, duplicate: false, status: "approved", referred: true })).toBe("signin");
+  });
+  it("carries an invite code only when there is one", () => {
+    const f = { name: "A", email: "a@b.co", trap: "", startedAt: 1 };
+    expect(applyBody(f, { ref: "ABCDEFG" }).ref).toBe("ABCDEFG");
+    expect("ref" in applyBody(f, {})).toBe(false);
+    expect("ref" in applyBody(f, { ref: null })).toBe(false);
+  });
 });
 
 describe("emailLooksValid", () => {

@@ -62,6 +62,11 @@ export const RUNTIME_DEFAULTS = {
    * off switch for the only thing in here that reaches outside on a timer.
    */
   chartFeedsPerRun: 10,
+  /**
+   * How many friends each listener's invite link may approve straight past
+   * the waitlist (convex/referrals.ts). Zero switches invite links off.
+   */
+  referralCap: 3,
 } as const;
 
 export type RuntimeKey = keyof typeof RUNTIME_DEFAULTS;
@@ -81,6 +86,7 @@ const BOUNDS: Record<RuntimeKey, [number, number]> = {
   moodStrength: [0, 40],
   moodMinVotes: [1, 50],
   modelStrength: [0, 40],
+  referralCap: [0, 50],
 };
 
 export type RuntimeConfig = Record<RuntimeKey, number>;
@@ -130,6 +136,7 @@ export const set = mutation({
     moodStrength: v.optional(v.number()),
     moodMinVotes: v.optional(v.number()),
     modelStrength: v.optional(v.number()),
+    referralCap: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requirePermission(ctx, "config.manage");

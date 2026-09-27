@@ -25,6 +25,7 @@ type RuntimeConfig = {
   moodStrength: number;
   moodMinVotes: number;
   modelStrength: number;
+  referralCap: number;
 };
 
 const GROUPS: {
@@ -34,9 +35,10 @@ const GROUPS: {
 }[] = [
   {
     title: "Gate & growth",
-    lede: "The anonymous wall before sign-up.",
+    lede: "The anonymous wall before sign-up, and invite links.",
     fields: [
       { key: "gateFreeSwipes", label: "free swipes before the wall", hint: "0 shows the wall immediately", min: 0, max: 100 },
+      { key: "referralCap", label: "friends each invite link approves", hint: "they skip the waitlist; past this they queue as normal. 0 turns invite links off", min: 0, max: 50 },
     ],
   },
   {

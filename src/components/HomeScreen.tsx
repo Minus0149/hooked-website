@@ -5,6 +5,7 @@ import type { Track } from "../types";
 import { art } from "../lib/art";
 import { IconHeart, IconFolder } from "./icons";
 import { Face } from "./faces";
+import { RecapCard } from "./RecapCard";
 import { DAYPART_COPY, DAYPART_MOOD, daypartAt, moodsForHour } from "../data/mood";
 
 const stagger = {
@@ -199,6 +200,8 @@ export function HomeScreen({
           <span className="mood-nudge">{DAYPART_COPY[hour.part].nudge}</span>
         )}
       </motion.section>
+
+      <RecapCard />
 
       <motion.div className="section-head" variants={rise}>
         <h3 className="section-title">Your library</h3>

@@ -6,6 +6,7 @@ import { IconBack, IconCheck, IconHeart } from "./icons";
 import { AccessGate } from "./AccessGate";
 import { AuthForm } from "./AuthForm";
 import { inApp } from "../lib/navigate";
+import { InviteCard } from "./InviteCard";
 
 export function ProfileScreen({
   isAdmin,
@@ -100,6 +101,8 @@ export function ProfileScreen({
               </div>
             </div>
           )}
+
+          <InviteCard />
 
           {isAdmin && (
             <a className="ob-primary profile-admin-link" href="/admin" onClick={inApp("/admin")}>

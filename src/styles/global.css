@@ -3925,3 +3925,132 @@ a.sheet-option { color: var(--text); text-decoration: none; }
 .promo-req-actions .admin-card-foot { margin-top: 12px; }
 .promo-req-reason { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
 .promo-req-reason textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; color: var(--text); padding: 8px 10px; font: inherit; resize: vertical; }
+
+/* ---------- invite friends (profile) ---------- */
+.invite-card {
+  width: 100%;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 16px;
+  text-align: left;
+}
+.invite-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.invite-head h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.badge-founding {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: #0b0b10;
+  background: var(--accent-default, #ff3d71);
+}
+.invite-copy { margin: 10px 0 12px; font-size: 14px; line-height: 1.45; color: var(--text); }
+.invite-link {
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: all;
+}
+.invite-actions { display: flex; gap: 8px; margin-top: 10px; }
+.invite-share { flex: 1; margin: 0; }
+.invite-copy-btn {
+  flex: 0 0 auto;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.invite-copy-btn:disabled, .invite-share:disabled { opacity: 0.45; cursor: default; }
+.invite-note { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
+.invite-people { list-style: none; margin: 12px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.invite-people li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.invite-person { font-weight: 600; }
+.invite-state { font-size: 12px; font-weight: 700; color: var(--muted); }
+.invite-state.joined { color: var(--save); }
+
+/* ---------- share a song (full-song sheet) ---------- */
+.sheet-share { width: 100%; font: inherit; cursor: pointer; text-align: left; }
+.sheet-share-sub { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
+.sheet-share-story {
+  display: block;
+  margin: 6px 4px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.sheet-share-note { margin: -6px 4px 12px; font-size: 12.5px; color: var(--save); word-break: break-all; }
+
+/* ---------- your week in hooks (home, Sundays & Mondays) ---------- */
+.recap-card {
+  margin: 18px 0 6px;
+  border-radius: 22px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(255, 61, 113, 0.22), transparent 60%),
+    var(--surface);
+}
+.recap-kicker {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.recap-big { margin: 8px 0 2px; font-family: "Unbounded", system-ui, sans-serif; font-size: 22px; font-weight: 700; }
+.recap-big strong { color: var(--accent-default, #ff3d71); }
+.recap-sub { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+.recap-stats { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13.5px; color: var(--muted); }
+.recap-stats strong { color: var(--text); font-size: 16px; margin-right: 3px; }
+.recap-moods { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.recap-mood {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px 5px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--face, var(--line));
+  color: var(--face, var(--text));
+  font-size: 13px;
+  font-weight: 700;
+}
+.recap-artist { margin: 12px 0 0; font-size: 13.5px; color: var(--text); }
+.recap-share { width: 100%; margin: 14px 0 0; }
+.recap-note { margin: 8px 0 0; font-size: 12.5px; color: var(--save); }
+
+/* ---------- admin: invite link stats ---------- */
+.invite-stats { margin: 0 0 16px; }
+.invite-stats h3 { margin: 0 0 6px; font-size: 14px; }
+.invite-stats p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.invite-top { margin: 10px 0 0; padding-left: 18px; font-size: 13px; }

@@ -8,6 +8,8 @@
  * shared primitives in ui/ as it is next worked on.
  */
 import { useState } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 
 type RequestStatus = "pending" | "approved" | "rejected";
 type AccessRow = {
@@ -53,6 +55,8 @@ export function RequestsPanel({
         </p>
       </header>
 
+      <InviteStats />
+
       <div className="aq-filters">
         {(["pending", "approved", "rejected", "all"] as const).map((f) => (
           <button
@@ -81,7 +85,11 @@ export function RequestsPanel({
                 {r.device ? ` · ${r.device}` : ""}
                 {r.genres?.length ? ` · ${r.genres.join(", ")}` : ""}
                 {r.notes ? ` · “${r.notes}”` : ""}
-                {r.decidedBy ? ` · decided by ${r.decidedBy}` : ""}
+                {r.decidedBy?.startsWith("referral:")
+                  ? " · approved through a friend's invite link"
+                  : r.decidedBy
+                    ? ` · decided by ${r.decidedBy}`
+                    : ""}
               </div>
             </div>
             <div className="aq-actions">
@@ -112,5 +120,32 @@ export function RequestsPanel({
         ))
       )}
     </>
+  );
+}
+
+/** How invite links are doing — the allowance itself lives in Config → Gate & growth. */
+function InviteStats() {
+  const stats = useQuery(api.referrals.adminStats);
+  if (!stats) return null;
+  return (
+    <section className="admin-panel invite-stats">
+      <h3>Invite links</h3>
+      <p>
+        {stats.cap === 0
+          ? "Off — set \"friends each invite link approves\" above 0 in Config to turn them on."
+          : `Each listener's link approves up to ${stats.cap} friends past the waitlist.`}{" "}
+        {stats.codes} links made · {stats.approvedViaInvite} friends approved through one · {stats.joined} of them made an account.
+      </p>
+      {stats.top.length > 0 && (
+        <ol className="invite-top">
+          {stats.top.map((t) => (
+            <li key={t.email}>
+              {t.email} — {t.joined} joined of {t.approved}
+              {t.foundingListener ? " · founding listener" : ""}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   );
 }

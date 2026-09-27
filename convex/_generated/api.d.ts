@@ -33,10 +33,15 @@ import type * as matching from "../matching.js";
 import type * as moods from "../moods.js";
 import type * as promotionRules from "../promotionRules.js";
 import type * as promotions from "../promotions.js";
+import type * as recap from "../recap.js";
+import type * as recapRules from "../recapRules.js";
 import type * as recommend from "../recommend.js";
+import type * as referralRules from "../referralRules.js";
+import type * as referrals from "../referrals.js";
 import type * as retention from "../retention.js";
 import type * as runtime from "../runtime.js";
 import type * as security from "../security.js";
+import type * as share from "../share.js";
 import type * as tracks from "../tracks.js";
 
 import type {
@@ -71,10 +76,15 @@ declare const fullApi: ApiFromModules<{
   moods: typeof moods;
   promotionRules: typeof promotionRules;
   promotions: typeof promotions;
+  recap: typeof recap;
+  recapRules: typeof recapRules;
   recommend: typeof recommend;
+  referralRules: typeof referralRules;
+  referrals: typeof referrals;
   retention: typeof retention;
   runtime: typeof runtime;
   security: typeof security;
+  share: typeof share;
   tracks: typeof tracks;
 }>;
 

@@ -25,6 +25,8 @@ export interface ApplyResult {
   duplicate?: boolean;
   status?: string;
   message?: string;
+  /** approved on the spot through a friend's invite link */
+  referred?: boolean;
 }
 
 /** Loose on purpose: the server validates properly; this only catches typos. */
@@ -45,6 +47,9 @@ export function toggleAccessGenre(list: string[], genre: string): string[] {
  * (rejected) gets the "already" screen.
  */
 export function stageAfterApply(data: ApplyResult): AccessStage {
+  // approved — whether just now through a friend's invite link or earlier —
+  // means the next step is making the account, not more questions
+  if (data.status === "approved") return "signin";
   if (!data.duplicate) return "details";
   if (data.status === "approved") return "signin";
   if (data.status === "pending") return "details";
@@ -54,7 +59,7 @@ export function stageAfterApply(data: ApplyResult): AccessStage {
 /** The body the apply route expects; blank optional fields are left out. */
 export function applyBody(
   fields: { name: string; email: string; trap: string; startedAt: number },
-  extra: { device?: string; notes?: string; genres?: string[] } = {},
+  extra: { device?: string; notes?: string; genres?: string[]; ref?: string | null } = {},
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     name: fields.name.trim(),
@@ -67,5 +72,7 @@ export function applyBody(
   if (device) body.device = device;
   if (notes) body.notes = notes;
   if (extra.genres && extra.genres.length > 0) body.genres = extra.genres;
+  // a friend's invite code (lib/growth.ts refFromSearch) — the server decides what it's worth
+  if (extra.ref) body.ref = extra.ref;
   return body;
 }
