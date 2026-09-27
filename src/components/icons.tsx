@@ -196,3 +196,21 @@ export const IconMic = ({ size = 17, strokeWidth = 2 }: IconProps) => (
     <line x1="8" y1="23" x2="16" y2="23" />
   </svg>
 );
+
+export const IconShuffle = ({ size = 18, strokeWidth = 2 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={strokeWidth}>
+    <path d="M16 3h5v5" />
+    <path d="M4 20 21 3" />
+    <path d="M21 16v5h-5" />
+    <path d="m15 15 6 6" />
+    <path d="M4 4l5 5" />
+  </svg>
+);
+
+export const IconShare = ({ size = 17, strokeWidth = 2 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={strokeWidth}>
+    <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" />
+    <path d="M16 6l-4-4-4 4" />
+    <path d="M12 2v13" />
+  </svg>
+);

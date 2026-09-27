@@ -31,6 +31,8 @@ import { IconBack, IconChart, IconDroplet, IconHeart, IconMic, IconMove, IconMus
 import { BUILD_TAG } from "../buildInfo";
 import { APPLE_CREDIT_NOTE } from "../lib/attribution";
 import { useDialogs } from "./ui/Dialogs";
+import { useLang, useT, type LangSetting } from "../lib/lang";
+import { readHookOfDayShown, writeHookOfDayShown } from "../lib/useHookOfDay";
 
 const BETA_URL = import.meta.env.VITE_BETA_URL ?? "https://hookedcue.com/beta";
 
@@ -41,10 +43,12 @@ export type SettingsPage =
   | "gestures"
   | "sound"
   | "support"
-  | "data";
+  | "data"
+  | "language";
 
 function Group({ children }: { children: string }) {
-  return <p className="settings-group">{children}</p>;
+  const t = useT();
+  return <p className="settings-group">{t(children)}</p>;
 }
 
 function Segmented<T extends string>({
@@ -56,6 +60,7 @@ function Segmented<T extends string>({
   value: T;
   onChange: (id: T) => void;
 }) {
+  const tt = useT();
   return (
     <div className="prefs-segmented" role="radiogroup">
       {options.map((o) => (
@@ -66,7 +71,7 @@ function Segmented<T extends string>({
           className={`prefs-chip ${o.id === value ? "on" : ""}`}
           onClick={() => onChange(o.id)}
         >
-          {o.label}
+          {tt(o.label)}
         </button>
       ))}
     </div>
@@ -85,6 +90,7 @@ function PageShell({
   onBack: () => void;
   children: ReactNode;
 }) {
+  const t = useT();
   return (
     <>
       <header className="topbar">
@@ -103,11 +109,11 @@ function PageShell({
         transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
       >
         <h2 className="library-title" style={{ marginBottom: 6 }}>
-          {title}
+          {t(title)}
         </h2>
         {sub && (
           <p className="prefs-hint" style={{ marginBottom: 16 }}>
-            {sub}
+            {t(sub)}
           </p>
         )}
         {children}
@@ -130,14 +136,15 @@ function NavRow({
   sub: string;
   onOpen: () => void;
 }) {
+  const t = useT();
   return (
     <button className="settings-row" onClick={onOpen}>
       <span className="settings-row-icon" style={iconColor ? { color: iconColor } : undefined}>
         {icon}
       </span>
       <span className="settings-row-label">
-        {title}
-        <small>{sub}</small>
+        {t(title)}
+        <small>{t(sub)}</small>
       </span>
       <span className="settings-row-value" aria-hidden>
         ›
@@ -187,6 +194,7 @@ export function SettingsScreen({
     maxPerDay: number;
   } | null;
 }) {
+  const tt = useT();
   const { confirm, notify } = useDialogs();
   const { state, setTaste } = useStore();
   const session = authClient.useSession();
@@ -204,16 +212,16 @@ export function SettingsScreen({
   // Google Play requires an in-app route to delete an account and its data.
   const removeAccount = async () => {
     const first = await confirm({
-      title: "Delete your account?",
-      body: "Your account and everything in it goes. This can't be undone.",
-      confirmLabel: "Continue",
+      title: tt("Delete your account?"),
+      body: tt("Your account and everything in it goes. This can't be undone."),
+      confirmLabel: tt("Continue"),
       danger: true,
     });
     if (!first) return;
     const last = await confirm({
-      title: "Last check",
-      body: "Your library, playlists and swipe history are deleted for good.",
-      confirmLabel: "Delete my account",
+      title: tt("Last check"),
+      body: tt("Your library, playlists and swipe history are deleted for good."),
+      confirmLabel: tt("Delete my account"),
       danger: true,
     });
     if (!last) return;
@@ -269,7 +277,7 @@ export function SettingsScreen({
   const appearancePage = (
     <PageShell title="Appearance" sub="How hookedcue looks on this screen." onBack={() => onOpenPage("hub")}>
       <div className="prefs-block">
-        <span className="prefs-label">Accent</span>
+        <span className="prefs-label">{tt("Accent")}</span>
         <Segmented<AccentMode>
           options={[
             { id: "track", label: "From each song" },
@@ -295,13 +303,13 @@ export function SettingsScreen({
         )}
       </div>
       <div className="prefs-block">
-        <span className="prefs-label">Motion</span>
+        <span className="prefs-label">{tt("Motion")}</span>
         <Segmented<MotionLevel>
           options={MOTION_LEVELS}
           value={state.prefs.motion}
           onChange={(motion) => onSetPrefs({ motion })}
         />
-        <span className="prefs-hint">off also skips the vinyl save animation</span>
+        <span className="prefs-hint">{tt("off also skips the vinyl save animation")}</span>
       </div>
     </PageShell>
   );
@@ -311,8 +319,8 @@ export function SettingsScreen({
       <button className="settings-row" onClick={() => onAutoAdvance(!state.autoAdvance)}>
         <span className="settings-row-icon" style={{ color: "var(--more)" }}>▶</span>
         <span className="settings-row-label">
-          Auto-advance
-          <small>jump to the next song when a preview ends</small>
+          {tt("Auto-advance")}
+          <small>{tt("jump to the next song when a preview ends")}</small>
         </span>
         <span className={`toggle ${state.autoAdvance ? "on" : ""}`}>
           <span className="toggle-knob" />
@@ -321,7 +329,7 @@ export function SettingsScreen({
       <div className="settings-row" style={{ cursor: "default" }}>
         <span className="settings-row-icon">♪</span>
         <span className="settings-row-label">
-          Volume
+          {tt("Volume")}
           <small>{Math.round(volume * 100)}%</small>
         </span>
         <input
@@ -334,25 +342,29 @@ export function SettingsScreen({
       <button className="settings-row" onClick={onOpenSaveTarget}>
         <span className="settings-row-icon" style={{ color: "var(--save)" }}>♥</span>
         <span className="settings-row-label">
-          Swipe down saves to
+          {tt("Swipe down saves to")}
           <small>{targetLabel}</small>
         </span>
-        <span className="settings-row-value">change</span>
+        <span className="settings-row-value">{tt("change")}</span>
       </button>
+
+      <HookOfDayToggle />
 
       <Group>Time of day</Group>
       <div className="prefs-block">
-        <span className="prefs-label">Mood by the clock</span>
+        <span className="prefs-label">{tt("Mood by the clock")}</span>
         <Segmented<MoodByTime>
           options={MOOD_BY_TIME}
           value={state.prefs.moodByTime}
           onChange={(moodByTime) => onSetPrefs({ moodByTime })}
         />
         <span className="prefs-hint">
-          {MOOD_BY_TIME.find((o) => o.id === state.prefs.moodByTime)?.copy}
-          {" — right now that's "}
-          {moodById(DAYPART_MOOD[daypartAt()])?.label.toLowerCase()}
-          {`, because it's ${DAYPART_COPY[daypartAt()].label}`}
+          {tt(MOOD_BY_TIME.find((o) => o.id === state.prefs.moodByTime)?.copy ?? "")}
+          {" — "}
+          {tt("right now that's {mood}, because it's {part}", {
+            mood: tt(moodById(DAYPART_MOOD[daypartAt()])?.label ?? "").toLowerCase(),
+            part: tt(DAYPART_COPY[daypartAt()].label),
+          })}
         </span>
       </div>
     </PageShell>
@@ -363,7 +375,7 @@ export function SettingsScreen({
       <div className="settings-row" style={{ cursor: "default" }}>
         <span className="settings-row-icon" style={{ color: "var(--save)" }}>✥</span>
         <span className="settings-row-label">
-          Swipe distance
+          {tt("Swipe distance")}
           <small>
             {state.prefs.swipeSensitivity < 0.9
               ? "feather-light flicks"
@@ -381,7 +393,7 @@ export function SettingsScreen({
         />
       </div>
       <div className="prefs-block">
-        <span className="prefs-label">Haptics</span>
+        <span className="prefs-label">{tt("Haptics")}</span>
         <Segmented<HapticsLevel>
           options={HAPTICS_LEVELS}
           value={state.prefs.haptics}
@@ -397,7 +409,7 @@ export function SettingsScreen({
       sub="The deck tilts toward these answers without ever walling anything out."
       onBack={() => onOpenPage("hub")}
     >
-      <span className="prefs-label">Languages</span>
+      <span className="prefs-label">{tt("Languages")}</span>
       <div className="prefs-segmented" role="group" aria-label="languages">
         {options.languages.map((l) => (
           <button
@@ -406,11 +418,11 @@ export function SettingsScreen({
             className={`prefs-chip ${taste.languages.includes(l.id) ? "on" : ""}`}
             onClick={() => editTaste({ languages: toggleIn(taste.languages, l.id) })}
           >
-            {l.label}
+            {tt(l.label)}
           </button>
         ))}
       </div>
-      <span className="prefs-label">Genres</span>
+      <span className="prefs-label">{tt("Genres")}</span>
       <div className="prefs-segmented" role="group" aria-label="genres">
         {options.genres.map((g) => (
           <button
@@ -419,11 +431,11 @@ export function SettingsScreen({
             className={`prefs-chip ${taste.genres.includes(g.id) ? "on" : ""}`}
             onClick={() => editTaste({ genres: toggleIn(taste.genres, g.id) })}
           >
-            {g.label}
+            {tt(g.label)}
           </button>
         ))}
       </div>
-      <span className="prefs-label">Adventure</span>
+      <span className="prefs-label">{tt("Adventure")}</span>
       <Segmented<Adventure>
         options={ADVENTURE.map((a) => ({ id: a.id, label: a.label }))}
         value={taste.adventure}
@@ -432,8 +444,7 @@ export function SettingsScreen({
 
       <Group>discovery rules</Group>
       <p className="prefs-hint">
-        The deck's default strictness. Playlists can relax these for themselves,
-        per playlist.
+        {tt("The deck's default strictness. Playlists can relax these for themselves, per playlist.")}
       </p>
       <button
         className="settings-row"
@@ -455,7 +466,7 @@ export function SettingsScreen({
         <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>
         <span className="settings-row-label">
           Deal buried songs
-          <small>songs you swiped left can return</small>
+          <small>{tt("songs you swiped left can return")}</small>
         </span>
         <span className={`toggle ${state.prefs.includeBuried ? "on" : ""}`}>
           <span className="toggle-knob" />
@@ -470,7 +481,7 @@ export function SettingsScreen({
         <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>
         <span className="settings-row-label">
           Deal blocked artists
-          <small>artists you blocked can return</small>
+          <small>{tt("artists you blocked can return")}</small>
         </span>
         <span className={`toggle ${state.prefs.includeBlockedArtists ? "on" : ""}`}>
           <span className="toggle-knob" />
@@ -487,7 +498,7 @@ export function SettingsScreen({
             <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>
             <span className="settings-row-label">
               Blocked artists ({state.neverArtists.length})
-              <small>their songs never reach your deck</small>
+              <small>{tt("their songs never reach your deck")}</small>
             </span>
             <span className="settings-row-value">{showBlocked ? "hide" : "unblock"}</span>
           </button>
@@ -500,7 +511,7 @@ export function SettingsScreen({
                   <small>blocked</small>
                 </span>
                 <span className="settings-row-value" style={{ color: "var(--more)" }}>
-                  unblock
+                  {tt("unblock")}
                 </span>
               </button>
             ))}
@@ -516,7 +527,7 @@ export function SettingsScreen({
       onBack={() => onOpenPage("hub")}
     >
       <div className="prefs-block">
-        <span className="prefs-label">House ads</span>
+        <span className="prefs-label">{tt("House ads")}</span>
         <p className="prefs-hint" style={{ marginTop: 2 }}>
           {state.prefs.adsOptOut
             ? "You've turned these off. Fair enough — they'll stay off until you change your mind."
@@ -545,7 +556,7 @@ export function SettingsScreen({
         </div>
         {!state.prefs.adsOptOut && (
           <>
-            <span className="prefs-label">How often</span>
+            <span className="prefs-label">{tt("How often")}</span>
             <Segmented
               options={AD_FREQUENCIES}
               value={state.prefs.adCadence === null ? state.prefs.adFrequency : ("custom" as never)}
@@ -556,7 +567,7 @@ export function SettingsScreen({
 
             {/* the listener's exact dial: pick the unit, set the number */}
             <div className="prefs-block" style={{ marginTop: 10 }}>
-              <span className="prefs-label">Your own pace</span>
+              <span className="prefs-label">{tt("Your own pace")}</span>
               <Segmented
                 options={AD_UNITS}
                 value={state.prefs.adCadence?.unit ?? ("none" as never)}
@@ -592,13 +603,13 @@ export function SettingsScreen({
                   </button>
                   <span className="ad-stepper-value">
                     {state.prefs.adCadence.unit === "swipes" && (
-                      <>a card every <b>{state.prefs.adCadence.value}</b> swipes</>
+                      <>{tt("a card every")} <b>{state.prefs.adCadence.value}</b> {tt("swipes")}</>
                     )}
                     {state.prefs.adCadence.unit === "minutes" && (
-                      <>a card every <b>{state.prefs.adCadence.value}</b> minutes</>
+                      <>{tt("a card every")} <b>{state.prefs.adCadence.value}</b> {tt("minutes")}</>
                     )}
                     {state.prefs.adCadence.unit === "hours" && (
-                      <>a card every <b>{state.prefs.adCadence.value}</b> hours</>
+                      <>{tt("a card every")} <b>{state.prefs.adCadence.value}</b> {tt("hours")}</>
                     )}
                     {state.prefs.adCadence.unit === "day" && (
                       <><b>{state.prefs.adCadence.value}</b> card{state.prefs.adCadence.value > 1 ? "s" : ""} a day</>
@@ -623,8 +634,7 @@ export function SettingsScreen({
                 </div>
               )}
               <span className="prefs-hint">
-                pick a unit, set the number — the daily and weekly ceilings set
-                by hookedcue always hold, and music never stops for a card
+                {tt("pick a unit, set the number — the daily and weekly ceilings set by hookedcue always hold, and music never stops for a card")}
               </span>
             </div>
           </>
@@ -642,10 +652,10 @@ export function SettingsScreen({
       <button className="settings-row" onClick={exportData}>
         <span className="settings-row-icon" style={{ color: "var(--more)" }}>↓</span>
         <span className="settings-row-label">
-          Export my library
-          <small>your lists and answers as JSON</small>
+          {tt("Export my library")}
+          <small>{tt("your lists and answers as JSON")}</small>
         </span>
-        <span className="settings-row-value">save</span>
+        <span className="settings-row-value">{tt("save")}</span>
       </button>
       <a
         className="settings-row"
@@ -656,16 +666,16 @@ export function SettingsScreen({
       >
         <span className="settings-row-icon" style={{ color: "var(--save)" }}>↓</span>
         <span className="settings-row-label">
-          Get it on your phone
-          <small>join the android closed test</small>
+          {tt("Get it on your phone")}
+          <small>{tt("join the android closed test")}</small>
         </span>
-        <span className="settings-row-value">open</span>
+        <span className="settings-row-value">{tt("open")}</span>
       </a>
       <button className="settings-row" onClick={onReplayTutorial}>
         <span className="settings-row-icon">↻</span>
         <span className="settings-row-label">
-          Replay the swipe tutorial
-          <small>relearn the four gestures</small>
+          {tt("Replay the swipe tutorial")}
+          <small>{tt("relearn the four gestures")}</small>
         </span>
       </button>
       <a
@@ -677,18 +687,18 @@ export function SettingsScreen({
       >
         <span className="settings-row-icon">§</span>
         <span className="settings-row-label">
-          Privacy &amp; terms
-          <small>what we store, and how to get it deleted</small>
+          {tt("Privacy & terms")}
+          <small>{tt("what we store, and how to get it deleted")}</small>
         </span>
-        <span className="settings-row-value">open</span>
+        <span className="settings-row-value">{tt("open")}</span>
       </a>
       <button
         className="settings-row"
         onClick={async () => {
           const ok = await confirm({
-            title: "Clear this device?",
-            body: "Your local library and history on this device are removed. Anything synced to your account stays.",
-            confirmLabel: "Clear",
+            title: tt("Clear this device?"),
+            body: tt("Your local library and history on this device are removed. Anything synced to your account stays."),
+            confirmLabel: tt("Clear"),
             danger: true,
           });
           if (!ok) return;
@@ -698,8 +708,8 @@ export function SettingsScreen({
       >
         <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>
         <span className="settings-row-label" style={{ color: "var(--never)" }}>
-          Reset local data
-          <small>cloud library is untouched</small>
+          {tt("Reset local data")}
+          <small>{tt("cloud library is untouched")}</small>
         </span>
       </button>
       {session.data && (
@@ -707,7 +717,7 @@ export function SettingsScreen({
           <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>
           <span className="settings-row-label" style={{ color: "var(--never)" }}>
             {deleting ? "Deleting…" : "Delete my account"}
-            <small>removes your library, playlists and history for good</small>
+            <small>{tt("removes your library, playlists and history for good")}</small>
           </span>
         </button>
       )}
@@ -725,6 +735,7 @@ export function SettingsScreen({
   else if (page === "sound") body = soundPage;
   else if (page === "support") body = supportPage;
   else if (page === "data") body = dataPage;
+  else if (page === "language") body = <LanguagePage onBack={() => onOpenPage("hub")} />;
   else {
     body = (
       <>
@@ -743,7 +754,7 @@ export function SettingsScreen({
         animate={{ opacity: 1, y: 0 }}
       >
         <h2 className="library-title" style={{ marginBottom: 4 }}>
-          Settings
+          {tt("Settings")}
         </h2>
 
         {/* three short cards instead of one long column of boxes — the same
@@ -788,6 +799,7 @@ export function SettingsScreen({
             sub={`accent · motion ${state.prefs.motion}`}
             onOpen={() => onOpenPage("appearance")}
           />
+          <LanguageRow onOpen={() => onOpenPage("language")} />
           <NavRow
             icon={<IconShield />}
             title="Data & privacy"
@@ -810,8 +822,8 @@ export function SettingsScreen({
               <IconMic />
             </span>
             <span className="settings-row-label">
-              Creator dashboard
-              <small>put your own music in the deck</small>
+              {tt("Creator dashboard")}
+              <small>{tt("put your own music in the deck")}</small>
             </span>
             <span className="settings-row-value" aria-hidden>
               ›
@@ -823,8 +835,8 @@ export function SettingsScreen({
                 <IconChart />
               </span>
               <span className="settings-row-label">
-                Admin dashboard
-                <small>live stats, users, permissions, catalog</small>
+                {tt("Admin dashboard")}
+                <small>{tt("live stats, users, permissions, catalog")}</small>
               </span>
               <span className="settings-row-value" aria-hidden>
                 ›
@@ -860,15 +872,12 @@ export function SettingsScreen({
               exit={{ y: "110%" }}
               transition={{ type: "spring", stiffness: 380, damping: 34 }}
             >
-              <h3 className="sheet-title">Before you go…</h3>
+              <h3 className="sheet-title">{tt("Before you go…")}</h3>
               <p className="ad-ask-copy">
-                hookedcue has no investors and no label money. Those few quiet cards
-                between songs are what pay for the servers, the licences and the
-                hours this takes. Turning them off won't cost you anything — but
-                if a few hundred people do, this deck goes quiet with them.
+                {tt("hookedcue has no investors and no label money. Those few quiet cards between songs are what pay for the servers, the licences and the hours this takes. Turning them off won't cost you anything — but if a few hundred people do, this deck goes quiet with them.")}
               </p>
               <p className="ad-ask-copy">
-                Whatever you choose, the music keeps playing. That's a promise.
+                {tt("Whatever you choose, the music keeps playing. That's a promise.")}
               </p>
               <div className="ad-ask-actions">
                 <button
@@ -878,7 +887,7 @@ export function SettingsScreen({
                     onSetPrefs({ adsOptOut: false });
                   }}
                 >
-                  Keep them on — I get it
+                  {tt("Keep them on — I get it")}
                 </button>
                 <button
                   className="prefs-chip"
@@ -887,7 +896,7 @@ export function SettingsScreen({
                     onSetPrefs({ adsOptOut: true });
                   }}
                 >
-                  Turn them off anyway
+                  {tt("Turn them off anyway")}
                 </button>
               </div>
             </motion.div>
@@ -898,4 +907,71 @@ export function SettingsScreen({
   );
 }
 
+/** Settings → Playback: show today's pick on Home (lib/useHookOfDay.ts). */
+function HookOfDayToggle() {
+  const t = useT();
+  const [on, setOn] = useState(readHookOfDayShown);
+  return (
+    <button
+      className="settings-row"
+      onClick={() => {
+        writeHookOfDayShown(!on);
+        setOn(!on);
+        window.dispatchEvent(new Event("hooked-hotd"));
+      }}
+      aria-pressed={on}
+    >
+      <span className="settings-row-icon" style={{ color: "var(--accent)" }}>★</span>
+      <span className="settings-row-label">
+        {t("Hook of the day")}
+        <small>{t("Show on Home")}</small>
+      </span>
+      <span className={`toggle ${on ? "on" : ""}`}>
+        <span className="toggle-knob" />
+      </span>
+    </button>
+  );
+}
 
+/** The hub row that opens the language page, showing the current choice. */
+function LanguageRow({ onOpen }: { onOpen: () => void }) {
+  const { setting, t } = useLang();
+  const current =
+    setting === "auto" ? t("Follow my browser") : setting === "hi" ? "हिन्दी" : "English";
+  return (
+    <button className="settings-row" onClick={onOpen}>
+      <span className="settings-row-icon" aria-hidden>
+        अ
+      </span>
+      <span className="settings-row-label">
+        {t("App language")}
+        <small>{current}</small>
+      </span>
+      <span className="settings-row-value" aria-hidden>
+        ›
+      </span>
+    </button>
+  );
+}
+
+const LANG_OPTIONS: { id: LangSetting; label: string }[] = [
+  { id: "auto", label: "Follow my browser" },
+  { id: "en", label: "English" },
+  { id: "hi", label: "हिन्दी" },
+];
+
+/** Settings → Language. Stored on this device only (lib/lang.tsx). */
+function LanguagePage({ onBack }: { onBack: () => void }) {
+  const { setting, setLang, t } = useLang();
+  return (
+    <PageShell title="App language" onBack={onBack}>
+      <div className="prefs-block">
+        <Segmented<LangSetting>
+          options={LANG_OPTIONS.map((o) => ({ id: o.id, label: t(o.label) }))}
+          value={setting}
+          onChange={setLang}
+        />
+      </div>
+    </PageShell>
+  );
+}

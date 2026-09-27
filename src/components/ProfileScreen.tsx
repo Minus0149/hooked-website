@@ -8,6 +8,7 @@ import { AuthForm } from "./AuthForm";
 import { inApp } from "../lib/navigate";
 import { InviteCard } from "./InviteCard";
 
+import { useT } from "../lib/lang";
 export function ProfileScreen({
   isAdmin,
   onBack,
@@ -18,6 +19,7 @@ export function ProfileScreen({
   /** set when the page was opened from an invite link (/join?email=…) */
   joinEmail?: string;
 }) {
+  const tt = useT();
   const session = authClient.useSession();
   // "Not in the beta yet? Apply" swaps the sign-in form for the application
   const [applying, setApplying] = useState(
@@ -72,22 +74,22 @@ export function ProfileScreen({
               <div className="tile-sub">{state.liked.length} songs</div>
             </div>
             <div className="tile">
-              <div className="tile-name">Discoveries</div>
+              <div className="tile-name">{tt("Discoveries")}</div>
               <div className="tile-sub">{state.discoveries.length} songs</div>
             </div>
             <div className="tile">
-              <div className="tile-name">Playlists</div>
+              <div className="tile-name">{tt("Playlists")}</div>
               <div className="tile-sub">{state.playlists.length} created</div>
             </div>
             <div className="tile">
-              <div className="tile-name">Blocked artists</div>
+              <div className="tile-name">{tt("Blocked artists")}</div>
               <div className="tile-sub">{state.neverArtists.length} never again</div>
             </div>
           </div>
 
           {topGenres.length > 0 && (
             <div style={{ width: "100%" }}>
-              <p className="settings-group" style={{ marginTop: 4 }}>your taste</p>
+              <p className="settings-group" style={{ marginTop: 4 }}>{tt("your taste")}</p>
               <div className="taste-chips">
                 {topGenres.map(([genre, count], i) => (
                   <span

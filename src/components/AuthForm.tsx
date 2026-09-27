@@ -9,6 +9,7 @@ import {
   type AuthMode,
 } from "../lib/authForms";
 
+import { useT } from "../lib/lang";
 /**
  * Sign in, or — with an invite — create the account.
  *
@@ -27,6 +28,7 @@ export function AuthForm({
   /** open the beta application; without it the Apply link goes to the profile screen */
   onApply?: () => void;
 }) {
+  const tt = useT();
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
@@ -123,17 +125,17 @@ export function AuthForm({
       animate={{ opacity: 1, y: 0 }}
     >
       <h2 className="ob-headline auth-title">
-        {copy.title.lead} <em>{copy.title.accent}</em>
+        {tt(copy.title.lead)} <em>{tt(copy.title.accent)}</em>
       </h2>
-      <p className="ob-copy auth-copy">{copy.copy}</p>
+      <p className="ob-copy auth-copy">{tt(copy.copy)}</p>
 
       <label className="auth-field">
-        <span className="auth-label">{AUTH_COPY.emailLabel}</span>
+        <span className="auth-label">{tt(AUTH_COPY.emailLabel)}</span>
         <input
           className="auth-input"
           type="email"
           inputMode="email"
-          placeholder={AUTH_COPY.emailPlaceholder}
+          placeholder={tt(AUTH_COPY.emailPlaceholder)}
           value={email}
           autoComplete="email"
           onChange={(e) => setEmail(e.target.value)}
@@ -143,7 +145,7 @@ export function AuthForm({
       <div className="auth-field">
         <span className="auth-label-row">
           <label className="auth-label" htmlFor="auth-password">
-            {AUTH_COPY.passwordLabel}
+            {tt(AUTH_COPY.passwordLabel)}
           </label>
           {mode === "signin" && (
             <button
@@ -182,7 +184,7 @@ export function AuthForm({
 
       {resetSent && !error && (
         <p className="auth-note" role="status">
-          {AUTH_COPY.resetSent}
+          {tt(AUTH_COPY.resetSent)}
         </p>
       )}
       {error && (
@@ -204,14 +206,14 @@ export function AuthForm({
         {mode === "signin" ? (
           <>
             <button type="button" className="auth-secondary" onClick={apply}>
-              {AUTH_COPY.apply}
+              {tt(AUTH_COPY.apply)}
             </button>
             <button
               type="button"
               className="auth-link auth-link-center"
               onClick={() => switchMode("join")}
             >
-              {AUTH_COPY.haveInvite}
+              {tt(AUTH_COPY.haveInvite)}
             </button>
           </>
         ) : (
@@ -220,7 +222,7 @@ export function AuthForm({
             className="auth-link auth-link-center"
             onClick={() => switchMode("signin")}
           >
-            {AUTH_COPY.haveAccount}
+            {tt(AUTH_COPY.haveAccount)}
           </button>
         )}
       </div>

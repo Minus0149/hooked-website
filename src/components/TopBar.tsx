@@ -1,7 +1,8 @@
 import type { Track } from "../types";
 import { art } from "../lib/art";
 import { moodById, type MoodId } from "../data/mood";
-import { IconBack, IconFolder, IconHeart } from "./icons";
+import { IconBack, IconFolder, IconHeart, IconPlay } from "./icons";
+import { useT } from "../lib/lang";
 import { Face } from "./faces";
 
 interface Props {
@@ -12,6 +13,9 @@ interface Props {
   /** the lens on the deck, shown where the wordmark usually is */
   mood: MoodId | null;
   onClearMood: () => void;
+  /** a playlist playing through the deck: its title and "3 of 14" */
+  session?: { title: string; index: number; total: number } | null;
+  onEndSession?: () => void;
 }
 
 /**
@@ -29,8 +33,11 @@ export function TopBar({
   onOpenSettings,
   mood,
   onClearMood,
+  session,
+  onEndSession,
 }: Props) {
   const lens = moodById(mood);
+  const t = useT();
   return (
     <header className="topbar">
       <button
@@ -44,7 +51,22 @@ export function TopBar({
         <IconBack />
       </button>
 
-      {lens ? (
+      {session ? (
+        <button
+          type="button"
+          className="session-pill"
+          onClick={onEndSession}
+          aria-label={t("Stop playing {title}", { title: session.title })}
+          title={t("Stop playing {title}", { title: session.title })}
+        >
+          <IconPlay size={12} />
+          <span className="session-pill-title">{session.title}</span>
+          <span className="session-pill-count">
+            {t("{i} of {n}", { i: session.index, n: session.total })}
+          </span>
+          <span className="session-pill-x" aria-hidden="true">✕</span>
+        </button>
+      ) : lens ? (
         <button
           type="button"
           className="mood-pill"

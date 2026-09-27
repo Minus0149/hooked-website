@@ -23,6 +23,14 @@ import {
   type Steer,
 } from "../data/ranking";
 import { insertPromoted } from "../lib/promoted";
+import {
+  inSession,
+  pendingSession,
+  sessionOrder,
+  sessionQueue,
+  withoutSession,
+  type PlaySession,
+} from "../lib/playSession";
 import { coerceMood, type CrowdMoods, type MoodId } from "../data/mood";
 import { trainFromHistory, type TasteModel } from "../data/predict";
 import { SOUND_PLACES, soundTaste, type SoundTaste } from "../data/sound";
@@ -115,6 +123,8 @@ export interface AppState {
   moodStrength: number;
   /** How far the locally-trained model may move a track (runtime config). */
   modelStrength: number;
+  /** A playlist being played through the deck (lib/playSession.ts), or null. */
+  session: PlaySession | null;
 }
 
 type Action =
@@ -123,6 +133,16 @@ type Action =
   | { type: "JUMP_TO"; trackId: string }
   // a paid, labelled song goes next in line (lib/promoted.ts)
   | { type: "INJECT_NEXT"; track: Track }
+  // play Liked Songs / Discoveries / a playlist through the deck
+  | {
+      type: "START_SESSION";
+      container: string;
+      title: string;
+      tracks: Track[];
+      shuffle: boolean;
+      startId?: string;
+    }
+  | { type: "END_SESSION" }
   | { type: "SET_SAVE_TARGET"; target: SaveTarget }
   | { type: "SET_AUTO_ADVANCE"; value: boolean }
   | { type: "SET_REPLAY"; container: string; allow: boolean }
@@ -393,6 +413,7 @@ function initState(): AppState {
     autoAdvance: saved?.autoAdvance ?? true,
     allowedIds: null,
     deckMemory: saved?.deckMemory ?? {},
+    session: null,
   };
 }
 
@@ -403,6 +424,8 @@ function reducer(state: AppState, action: Action): AppState {
       if (!current) return state;
       let rest = state.queue.slice(1);
       let { liked, discoveries, playlists, neverArtists, neverTracks, boostGenres } = state;
+      // playing your own playlist: up is "next", not a verdict on the song
+      const playingSession = inSession(state.session, current.id);
 
       const savedToLibrary =
         action.action === "save" && !libraryIds(state).has(current.id);
@@ -433,9 +456,13 @@ function reducer(state: AppState, action: Action): AppState {
         const others = tail.filter(
           (t) => t.genre !== current.genre && t.artist !== current.artist,
         );
-        rest = peek
-          ? [peek, ...shuffle(similar), ...others]
-          : [...shuffle(similar), ...others];
+        // inside a playlist the order is the playlist's, so "more" only steers
+        // what the deck deals after it
+        if (!playingSession) {
+          rest = peek
+            ? [peek, ...shuffle(similar), ...others]
+            : [...shuffle(similar), ...others];
+        }
         boostGenres = [
           current.genre,
           ...boostGenres.filter((g) => g !== current.genre),
@@ -526,24 +553,31 @@ function reducer(state: AppState, action: Action): AppState {
       for (const [id, m] of Object.entries(state.deckMemory)) {
         if (Date.now() - m.seen < 90 * 86_400_000) mem[id] = m; // prune >90d
       }
-      const prev = mem[current.id] ?? { seen: 0, skips: 0 };
-      mem[current.id] = {
-        seen: Date.now(),
-        skips: action.action === "skip" ? prev.skips + 1 : prev.skips,
-      };
-      if (
-        action.action === "skip" &&
-        mem[current.id].skips >= 2 &&
-        !neverTracks.includes(current.id)
-      ) {
-        // skipped twice: that's the listener voting with their thumb. Bury the
-        // SONG — it lands in the Buried list where it can be unburied.
-        neverTracks = [...neverTracks, current.id];
+      // a session's own songs are the listener's library: skipping one is
+      // "next", so it neither counts toward the auto-bury nor marks it seen
+      if (!playingSession) {
+        const prev = mem[current.id] ?? { seen: 0, skips: 0 };
+        mem[current.id] = {
+          seen: Date.now(),
+          skips: action.action === "skip" ? prev.skips + 1 : prev.skips,
+        };
+        if (
+          action.action === "skip" &&
+          mem[current.id].skips >= 2 &&
+          !neverTracks.includes(current.id)
+        ) {
+          // skipped twice: that's the listener voting with their thumb. Bury the
+          // SONG — it lands in the Buried list where it can be unburied.
+          neverTracks = [...neverTracks, current.id];
+        }
       }
 
+      const stillPlaying = inSession(state.session, rest[0]?.id);
       return {
         ...state,
-        queue: spreadAlbums(uniqueById(rest)),
+        // a playlist keeps its own order; only the discovery deck is spread
+        queue: stillPlaying ? uniqueById(rest) : spreadAlbums(uniqueById(rest)),
+        session: stillPlaying ? state.session : null,
         history: [
           ...state.history,
           { track: current, action: action.action, savedToLibrary },
@@ -678,10 +712,35 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, autoAdvance: action.value };
 
     case "INJECT_NEXT": {
+      // no paid songs in the middle of someone's own playlist
+      if (inSession(state.session, state.queue[0]?.id)) return state;
       if (state.neverTracks.includes(action.track.id) || state.neverArtists.includes(action.track.artist)) {
         return state; // someone who buried a song or blocked an artist never gets it back as an ad
       }
       return { ...state, queue: insertPromoted(state.queue, action.track) };
+    }
+
+    case "START_SESSION": {
+      const order = sessionOrder(action.tracks, action.shuffle, action.startId);
+      if (order.length === 0) return state;
+      const deck = withoutSession(state.queue, state.session);
+      return {
+        ...state,
+        session: { container: action.container, title: action.title, ids: order.map((t) => t.id) },
+        queue: sessionQueue(order, deck),
+        // a lens would reorder the playlist, so it steps aside while it plays
+        mood: null,
+        moodSetAt: 0,
+      };
+    }
+
+    case "END_SESSION": {
+      if (!state.session) return state;
+      let queue = withoutSession(state.queue, state.session);
+      if (queue.length === 0) {
+        queue = spreadAlbums(buildQueue(state.catalog, libraryIds(state), state.neverArtists, steerOf(state)));
+      }
+      return { ...state, session: null, queue };
     }
 
     case "JUMP_TO": {
@@ -764,17 +823,30 @@ function reducer(state: AppState, action: Action): AppState {
       const head = state.queue[0];
       const exclude = libraryIds(state);
       if (head) exclude.add(head.id);
+      // a playlist being played keeps its place: its songs stay in front
+      const pending = pendingSession(state.queue, state.session);
+      for (const t of pending) exclude.add(t.id);
 
       const rest = buildQueue(action.tracks, exclude, state.neverArtists, steerOf(state));
       return {
         ...state,
         catalog: action.tracks,
         allowedIds: ids,
-        queue: keepOnScreen(head, spreadAlbums(uniqueById(rest))),
+        queue:
+          pending.length > 0
+            ? uniqueById([...pending, ...spreadAlbums(uniqueById(rest))])
+            : keepOnScreen(head, spreadAlbums(uniqueById(rest))),
       };
     }
 
     case "SET_MOOD": {
+      if (state.session && action.mood) {
+        // picking a mood means "switch the deck", which ends the playlist
+        return reducer(
+          { ...state, session: null, queue: withoutSession(state.queue, state.session) },
+          action,
+        );
+      }
       const mood = action.mood;
       const moodPicks =
         action.trackId && mood
@@ -846,6 +918,9 @@ interface StoreValue {
   swipe: (action: SwipeAction) => void;
   back: () => void;
   jumpTo: (trackId: string) => void;
+  /** play a library container through the deck, in order or shuffled */
+  startSession: (session: { container: string; title: string; tracks: Track[]; shuffle: boolean; startId?: string }) => void;
+  endSession: () => void;
   injectNext: (track: Track) => void;
   setSaveTarget: (target: SaveTarget) => void;
   createPlaylist: (playlist: Playlist) => void;
@@ -909,6 +984,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       swipe: (action: SwipeAction) => dispatch({ type: "SWIPE", action }),
       back: () => dispatch({ type: "BACK" }),
       jumpTo: (trackId: string) => dispatch({ type: "JUMP_TO", trackId }),
+      startSession: (session: { container: string; title: string; tracks: Track[]; shuffle: boolean; startId?: string }) =>
+        dispatch({ type: "START_SESSION", ...session }),
+      endSession: () => dispatch({ type: "END_SESSION" }),
       injectNext: (track: Track) => dispatch({ type: "INJECT_NEXT", track }),
       setSaveTarget: (target: SaveTarget) => dispatch({ type: "SET_SAVE_TARGET", target }),
       createPlaylist: (playlist: Playlist) => dispatch({ type: "CREATE_PLAYLIST", playlist }),

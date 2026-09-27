@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { IconDisc, IconHome } from "./icons";
 
+import { useT } from "../lib/lang";
 export type View = "home" | "discover";
 
 const NOTCH_R = 33; // notch circle radius
@@ -59,6 +60,7 @@ export function BottomNav({
   /** held instead of tapped: open the mood ring around the + */
   onHoldCreate?: (x: number, y: number) => void;
 }) {
+  const tt = useT();
   // A tap makes a playlist; a hold opens the faces. The click that follows a
   // hold's release must not ALSO open the new-playlist sheet.
   const hold = useRef<{ timer?: number; fired: boolean }>({ fired: false });
@@ -113,7 +115,7 @@ export function BottomNav({
           onClick={() => onChange("home")}
         >
           <IconHome size={22} />
-          <span className="nav-btn-label">Home</span>
+          <span className="nav-btn-label">{tt("Home")}</span>
         </button>
         <span className="nav-fab-slot" aria-hidden />
         <button
@@ -121,7 +123,7 @@ export function BottomNav({
           onClick={() => onChange("discover")}
         >
           <IconDisc size={22} />
-          <span className="nav-btn-label">Discover</span>
+          <span className="nav-btn-label">{tt("Discover")}</span>
         </button>
         {/* lives INSIDE the bar so the + and the notch share one center */}
         <AnimatePresence initial={false}>

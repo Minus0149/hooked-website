@@ -62,5 +62,5 @@ export function useDialog({
     };
   }, [enabled, onClose]);
 
-  return { ref, role: "dialog" as const, ariaModal: true as const, tabIndex: -1 };
+  return { ref, role: "dialog" as const, "aria-modal": true as const, tabIndex: -1 };
 }

@@ -21,6 +21,9 @@ import { MoodWheel } from "./components/MoodWheel";
 import { verdict as verdictFor } from "./data/predict";
 import { soundScore } from "./data/sound";
 import { TopBar } from "./components/TopBar";
+import { sessionPosition } from "./lib/playSession";
+import { readHookOfDayShown, useHookOfDay } from "./lib/useHookOfDay";
+import { useT } from "./lib/lang";
 import { BottomNav } from "./components/BottomNav";
 import { HomeScreen } from "./components/HomeScreen";
 import { Onboarding } from "./components/Onboarding";
@@ -143,6 +146,8 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     swipe,
     back,
     jumpTo,
+    startSession,
+    endSession,
     injectNext,
     setSaveTarget,
     createPlaylist,
@@ -205,9 +210,13 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
   const [toast, setToast] = useState<{ key: number; msg: string; icon: string } | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
 
+  const tx = useT();
+  const txRef = useRef(tx);
+  txRef.current = tx;
+  // every toast is shown in the listener's language (lib/i18n.ts)
   const showToast = useCallback((msg: string, icon: string) => {
     window.clearTimeout(toastTimer.current);
-    setToast({ key: Date.now(), msg, icon });
+    setToast({ key: Date.now(), msg: txRef.current(msg), icon });
     toastTimer.current = window.setTimeout(() => setToast(null), 1600);
   }, []);
 
@@ -1012,6 +1021,19 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     return [...fromQueue, ...extra];
   }, [state.queue, state.catalog]);
 
+  // Hook of the day: picked from the ranked deck, excluding what's already kept
+  const libraryIdSet = useMemo(
+    () => new Set([...state.liked, ...state.discoveries, ...state.playlists.flatMap((p) => p.tracks)].map((t) => t.id)),
+    [state.liked, state.discoveries, state.playlists],
+  );
+  const hookOfDay = useHookOfDay(state.queue, state.catalog, libraryIdSet);
+  const [hookOfDayShown, setHookOfDayShown] = useState(readHookOfDayShown);
+  useEffect(() => {
+    const on = () => setHookOfDayShown(readHookOfDayShown());
+    window.addEventListener("hooked-hotd", on);
+    return () => window.removeEventListener("hooked-hotd", on);
+  }, []);
+
   const goDiscover = useCallback(
     (trackId?: string) => {
       if (trackId) jumpTo(trackId);
@@ -1091,6 +1113,8 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
                 onDiscover={goDiscover}
                 onOpenLibrary={(c) => setViewWithHistory(`library:${c}`)}
                 onNewPlaylist={() => setNewPlaylistOpen(true)}
+                hookOfDay={hookOfDayShown ? hookOfDay : null}
+                onPlayHookOfDay={(t) => goDiscover(t.id)}
               />
             </>
           )}
@@ -1103,6 +1127,15 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
                 onOpenSettings={() => setSheetOpen(true)}
                 mood={state.mood}
                 onClearMood={() => setMood(null)}
+                session={
+                  state.session
+                    ? (() => {
+                        const pos = sessionPosition(state.session, onDeck?.id);
+                        return pos ? { title: state.session.title, ...pos } : null;
+                      })()
+                    : null
+                }
+                onEndSession={endSession}
               />
               <SwipeDeck
                 tracks={state.queue.slice(0, 3)}
@@ -1182,7 +1215,10 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
             <LibraryScreen
               container={view.slice(8) as LibraryContainer}
               onBack={() => setViewWithHistory("home")}
-              onPlay={(id) => goDiscover(id)}
+              onPlay={(s) => {
+                startSession({ container: view.slice(8), ...s });
+                setViewWithHistory("discover");
+              }}
               onRemove={handleRemoveSong}
               onDeletePlaylist={handleDeletePlaylist}
               onDiscoverInto={handleDiscoverInto}

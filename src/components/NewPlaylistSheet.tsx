@@ -4,6 +4,7 @@ import { MOODS, moodById, type MoodId } from "../data/mood";
 import { nameAfterMoodPick } from "../lib/playlistMood";
 import { Face } from "./faces";
 
+import { useT } from "../lib/lang";
 const SWATCHES = ["#FF3D71", "#7C5CFF", "#00C2FF", "#00E5A0", "#FFB627", "#FF6B35", "#E040FB"];
 
 export interface PlaylistRules {
@@ -24,6 +25,7 @@ export function NewPlaylistSheet({
   ) => Promise<unknown> | void;
   onClose: () => void;
 }) {
+  const tt = useT();
   const [name, setName] = useState("");
   const [accent, setAccent] = useState(SWATCHES[1]);
   const [rules, setRules] = useState<PlaylistRules>({});
@@ -79,8 +81,8 @@ export function NewPlaylistSheet({
       aria-pressed={!!rules[key]}
     >
       <span className="settings-row-label">
-        {title}
-        <small>{sub}</small>
+        {tt(title)}
+        <small>{tt(sub)}</small>
       </span>
       <span className={`toggle ${rules[key] ? "on" : ""}`}>
         <span className="toggle-knob" />
@@ -104,14 +106,16 @@ export function NewPlaylistSheet({
         exit={{ y: "110%" }}
         transition={{ type: "spring", stiffness: 380, damping: 34 }}
       >
-        <h3 className="sheet-title">New playlist</h3>
+        <h3 className="sheet-title">{tt("New playlist")}</h3>
         <p className="sheet-sub">
           {mood
-            ? `Swipe down to save here. The deck leans ${moodById(mood)?.label.toLowerCase()} while you fill it.`
-            : "Every song you swipe down is saved here until you pick another."}
+            ? tt("Swipe down to save here. The deck leans {mood} while you fill it.", {
+                mood: tt(moodById(mood)?.label ?? "").toLowerCase(),
+              })
+            : tt("Every song you swipe down is saved here until you pick another.")}
         </p>
 
-        <p className="settings-group np-label">mood</p>
+        <p className="settings-group np-label">{tt("mood")}</p>
         <div className="np-moods" role="radiogroup" aria-label="Mood for this playlist">
           <button
             type="button"
@@ -130,7 +134,7 @@ export function NewPlaylistSheet({
               type="button"
               role="radio"
               aria-checked={mood === m.id}
-              aria-label={`${m.label} — ${m.line}`}
+              aria-label={`${tt(m.label)} — ${tt(m.line)}`}
               className={`np-mood${mood === m.id ? " on" : ""}`}
               style={{ ["--face" as string]: m.accent }}
               onClick={() => pickMood(m.id)}
@@ -138,16 +142,16 @@ export function NewPlaylistSheet({
               <span className="np-mood-face">
                 <Face mood={m.id} size={24} animated={mood === m.id} />
               </span>
-              <small>{m.label}</small>
+              <small>{tt(m.label)}</small>
             </button>
           ))}
         </div>
 
-        <p className="settings-group np-label">name</p>
+        <p className="settings-group np-label">{tt("name")}</p>
         <input
           ref={inputRef}
           className="auth-input"
-          placeholder="late night drives, gym, focus…"
+          placeholder={tt("late night drives, gym, focus…")}
           value={name}
           maxLength={40}
           onChange={(e) => {
@@ -178,8 +182,8 @@ export function NewPlaylistSheet({
           aria-expanded={more}
           onClick={() => setMore((v) => !v)}
         >
-          {more ? "fewer options" : "more options"}
-          {!more && activeRules > 0 && <span className="np-more-count">{activeRules} on</span>}
+          {tt(more ? "fewer options" : "more options")}
+          {!more && activeRules > 0 && <span className="np-more-count">{tt("{n} on", { n: activeRules })}</span>}
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" style={{ transform: more ? "rotate(180deg)" : undefined }}>
             <path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>

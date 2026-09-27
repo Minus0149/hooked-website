@@ -16,6 +16,7 @@ try {
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { DialogProvider } from "./components/ui/Dialogs";
 import { authClient } from "./lib/auth-client";
+import { LangProvider } from "./lib/lang";
 import "./styles/global.css";
 
 // Fail loudly and early: an unset Convex URL used to surface as a deep,
@@ -45,9 +46,11 @@ createRoot(document.getElementById("root")!).render(
       >
         {/* inner boundary: the app's crashes get the full report panel */}
         <AppErrorBoundary reportable>
-          <DialogProvider>
-            <App />
-          </DialogProvider>
+          <LangProvider>
+            <DialogProvider>
+              <App />
+            </DialogProvider>
+          </LangProvider>
         </AppErrorBoundary>
       </ConvexBetterAuthProvider>
     </AppErrorBoundary>

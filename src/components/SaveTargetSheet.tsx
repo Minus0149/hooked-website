@@ -4,6 +4,7 @@ import type { Playlist, SaveTarget } from "../types";
 import { useDialog } from "../lib/dialog";
 import { IconCheck, IconFolder, IconHeart } from "./icons";
 
+import { useT } from "../lib/lang";
 const PLAYLIST_ACCENTS = ["#7C5CFF", "#00C2FF", "#FF6B35", "#E040FB", "#69F0AE", "#FFD740"];
 
 export function SaveTargetSheet({
@@ -19,6 +20,7 @@ export function SaveTargetSheet({
   onCreatePlaylist: (name: string, accent: string) => Promise<unknown> | void;
   onClose: () => void;
 }) {
+  const tt = useT();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const dialog = useDialog({ onClose });
@@ -55,8 +57,8 @@ export function SaveTargetSheet({
         transition={{ type: "spring", stiffness: 380, damping: 34 }}
         {...dialog}
       >
-        <h3 className="sheet-title">Swipe down saves to…</h3>
-        <p className="sheet-sub">Pick where a ↓ swipe sends the song.</p>
+        <h3 className="sheet-title">{tt("Swipe down saves to…")}</h3>
+        <p className="sheet-sub">{tt("Pick where a ↓ swipe sends the song.")}</p>
 
         <div className="sheet-options">
           <button
@@ -64,7 +66,7 @@ export function SaveTargetSheet({
             onClick={() => pick("liked")}
           >
             <span style={{ color: "var(--save)" }}><IconHeart /></span>
-            Liked Songs
+            {tt("Liked Songs")}
             <span className="check"><IconCheck /></span>
           </button>
           <button
@@ -72,7 +74,7 @@ export function SaveTargetSheet({
             onClick={() => pick("discoveries")}
           >
             <span style={{ color: "var(--more)" }}><IconFolder /></span>
-            Discoveries playlist
+            {tt("Discoveries playlist")}
             <span className="check"><IconCheck /></span>
           </button>
           {playlists.map((p) => (
@@ -91,7 +93,7 @@ export function SaveTargetSheet({
         <div className="sheet-create">
           <input
             className="auth-input"
-            placeholder="new playlist name…"
+            placeholder={tt("new playlist name…")}
             value={name}
             maxLength={40}
             onChange={(e) => setName(e.target.value)}
@@ -102,7 +104,7 @@ export function SaveTargetSheet({
             disabled={!name.trim() || busy}
             onClick={() => void create()}
           >
-            {busy ? "…" : "create"}
+            {busy ? "…" : tt("create")}
           </button>
         </div>
       </motion.div>

@@ -19,9 +19,10 @@ import { IconArrow } from "./icons";
 import { MoodWheel, type WheelOrigin } from "./MoodWheel";
 import { moodById, type MoodId } from "../data/mood";
 
+import { useT } from "../lib/lang";
 interface GestureStep {
   dir: SwipeDir;
-  headline: ReactNode;
+  headline: { lead: string; accent: string };
   copy: string;
   color: string;
   arrowRotate: number;
@@ -31,11 +32,7 @@ interface GestureStep {
 const GESTURE_STEPS: GestureStep[] = [
   {
     dir: "up",
-    headline: (
-      <>
-        not feeling it? <em>swipe up</em>
-      </>
-    ),
+    headline: { lead: "not feeling it?", accent: "swipe up" },
     copy: "Skips to the next song instantly. No hard feelings — we learn from it anyway.",
     color: "#ffffff",
     arrowRotate: 0,
@@ -43,11 +40,7 @@ const GESTURE_STEPS: GestureStep[] = [
   },
   {
     dir: "down",
-    headline: (
-      <>
-        love it? <em>swipe down</em>
-      </>
-    ),
+    headline: { lead: "love it?", accent: "swipe down" },
     copy: "Saves it to your Liked Songs or a playlist — you choose where in settings.",
     color: "var(--save)",
     arrowRotate: 180,
@@ -55,11 +48,7 @@ const GESTURE_STEPS: GestureStep[] = [
   },
   {
     dir: "right",
-    headline: (
-      <>
-        want more like it? <em>swipe right</em>
-      </>
-    ),
+    headline: { lead: "want more like it?", accent: "swipe right" },
     copy: "Doesn't save it — just tells the algorithm to chase this exact vibe.",
     color: "var(--more)",
     arrowRotate: 90,
@@ -67,11 +56,7 @@ const GESTURE_STEPS: GestureStep[] = [
   },
   {
     dir: "left",
-    headline: (
-      <>
-        hate it? <em>swipe left</em>
-      </>
-    ),
+    headline: { lead: "hate it?", accent: "swipe left" },
     copy: "Never plays it again, and steers your feed far away from it.",
     color: "var(--never)",
     arrowRotate: -90,
@@ -231,6 +216,7 @@ export function Onboarding({
   demoCatalog: Track[];
   onFinish: (taste: TastePrefs, mood: MoodId | null) => void;
 }) {
+  const tt = useT();
   // 0 = welcome, 1-3 = taste, 4-7 = the four swipes, 8 = the hold, 9 = done
   const [step, setStep] = useState(0);
   const [taste, setTaste] = useState<TastePrefs>(EMPTY_TASTE);
@@ -292,9 +278,9 @@ export function Onboarding({
             exit={{ opacity: 0, y: -18 }}
           >
             <h1 className="ob-headline">
-              {TOUR_COPY.welcome.headline.lead} <em>{TOUR_COPY.welcome.headline.accent}</em>
+              {tt(TOUR_COPY.welcome.headline.lead)} <em>{tt(TOUR_COPY.welcome.headline.accent)}</em>
             </h1>
-            <p className="ob-copy">{TOUR_COPY.welcome.copy}</p>
+            <p className="ob-copy">{tt(TOUR_COPY.welcome.copy)}</p>
             <span className="eq" style={{ height: 22 }}>
               <span /><span /><span /><span />
             </span>
@@ -310,9 +296,9 @@ export function Onboarding({
             exit={{ opacity: 0, y: -18 }}
           >
             <h1 className="ob-headline">
-              {TOUR_COPY.languages.headline.lead} <em>{TOUR_COPY.languages.headline.accent}</em>
+              {tt(TOUR_COPY.languages.headline.lead)} <em>{tt(TOUR_COPY.languages.headline.accent)}</em>
             </h1>
-            <p className="ob-copy">{TOUR_COPY.languages.copy}</p>
+            <p className="ob-copy">{tt(TOUR_COPY.languages.copy)}</p>
             <div className="ob-chips">
               {options.languages.map((l) => (
                 <button
@@ -321,7 +307,7 @@ export function Onboarding({
                   onClick={() => toggle("languages", l.id)}
                   aria-pressed={taste.languages.includes(l.id)}
                 >
-                  {l.label}
+                  {tt(l.label)}
                 </button>
               ))}
             </div>
@@ -337,9 +323,9 @@ export function Onboarding({
             exit={{ opacity: 0, y: -18 }}
           >
             <h1 className="ob-headline">
-              {TOUR_COPY.genres.headline.lead} <em>{TOUR_COPY.genres.headline.accent}</em>
+              {tt(TOUR_COPY.genres.headline.lead)} <em>{tt(TOUR_COPY.genres.headline.accent)}</em>
             </h1>
-            <p className="ob-copy">{TOUR_COPY.genres.copy}</p>
+            <p className="ob-copy">{tt(TOUR_COPY.genres.copy)}</p>
             <div className="ob-chips">
               {options.genres.map((g) => (
                 <button
@@ -348,7 +334,7 @@ export function Onboarding({
                   onClick={() => toggle("genres", g.id)}
                   aria-pressed={taste.genres.includes(g.id)}
                 >
-                  {g.label}
+                  {tt(g.label)}
                 </button>
               ))}
             </div>
@@ -364,7 +350,7 @@ export function Onboarding({
             exit={{ opacity: 0, y: -18 }}
           >
             <h1 className="ob-headline">
-              {TOUR_COPY.adventure.headline.lead} <em>{TOUR_COPY.adventure.headline.accent}</em>
+              {tt(TOUR_COPY.adventure.headline.lead)} <em>{tt(TOUR_COPY.adventure.headline.accent)}</em>
             </h1>
             <div className="ob-choices">
               {ADVENTURE.map((a) => (
@@ -374,8 +360,8 @@ export function Onboarding({
                   onClick={() => setTaste((t) => ({ ...t, adventure: a.id as Adventure }))}
                   aria-pressed={taste.adventure === a.id}
                 >
-                  <strong>{a.label}</strong>
-                  <small>{a.copy}</small>
+                  <strong>{tt(a.label)}</strong>
+                  <small>{tt(a.copy)}</small>
                 </button>
               ))}
             </div>
@@ -391,7 +377,7 @@ export function Onboarding({
             exit={{ opacity: 0, y: -18 }}
           >
             <h1 className="ob-headline" style={{ fontSize: 22 }}>
-              {gs.headline}
+              {tt(gs.headline.lead)} <em>{tt(gs.headline.accent)}</em>
             </h1>
             <div className="ob-demo">
               <motion.div
@@ -418,7 +404,7 @@ export function Onboarding({
                 )}
               </AnimatePresence>
             </div>
-            <p className="ob-copy">{gs.copy}</p>
+            <p className="ob-copy">{tt(gs.copy)}</p>
           </motion.div>
         )}
 
@@ -431,7 +417,7 @@ export function Onboarding({
             exit={{ opacity: 0, y: -18 }}
           >
             <h1 className="ob-headline" style={{ fontSize: 22 }}>
-              and <em>hold</em>, then push
+              {tt("and")} <em>{tt("hold")}</em>{tt(", then push")}
             </h1>
             <div className="ob-demo ob-demo-hold">
               {demoTracks.length > 0 && (
@@ -451,14 +437,16 @@ export function Onboarding({
                   animate={{ opacity: [0.35, 1, 0.35] }}
                   transition={{ duration: 1.6, repeat: Infinity }}
                 >
-                  press and hold
+                  {tt("press and hold")}
                 </motion.span>
               )}
             </div>
             <p className="ob-copy">
               {mood
-                ? `Nice — we'll open with ${moodById(mood)?.label.toLowerCase()}. Hold any card to change it, any time.`
-                : TOUR_COPY.hold.copy}
+                ? tt("Nice — we'll open with {mood}. Hold any card to change it, any time.", {
+                    mood: tt(moodById(mood)?.label ?? "").toLowerCase(),
+                  })
+                : tt(TOUR_COPY.hold.copy)}
             </p>
           </motion.div>
         )}
@@ -472,11 +460,10 @@ export function Onboarding({
             exit={{ opacity: 0 }}
           >
             <h1 className="ob-headline">
-              you're <em>ready.</em>
+              {tt("you're")} <em>{tt("ready.")}</em>
             </h1>
             <p className="ob-copy">
-              Four swipes and a hold. The ↩ button up top always brings back
-              the last song, in case you go too fast.
+              {tt("Four swipes and a hold. The ↩ button up top always brings back the last song, in case you go too fast.")}
             </p>
           </motion.div>
         )}
@@ -511,23 +498,23 @@ export function Onboarding({
 
       {step === 0 && (
         <button className="ob-primary" onClick={() => setStep(1)}>
-          {TOUR_COPY.start}
+          {tt(TOUR_COPY.start)}
         </button>
       )}
       {step >= 1 && step <= TASTE_STEPS && (
         <button className="ob-primary" onClick={() => setStep(step + 1)}>
           {/* never blocked on an answer — an empty one simply tilts nothing */}
-          {tasteStepButton(step, taste)}
+          {tt(tasteStepButton(step, taste))}
         </button>
       )}
       {step === LAST_STEP && (
         <button className="ob-primary" onClick={finish}>
-          Start discovering
+          {tt("Start discovering")}
         </button>
       )}
       {step > TASTE_STEPS && step < HOLD_STEP && (
         <button className="ob-primary" style={{ opacity: 0.25 }} disabled>
-          Swipe the card to continue
+          {tt("Swipe the card to continue")}
         </button>
       )}
       {step === HOLD_STEP && (
@@ -537,12 +524,12 @@ export function Onboarding({
           onClick={() => setStep(LAST_STEP)}
           disabled={!mood}
         >
-          {mood ? "Next" : "Hold the card to continue"}
+          {tt(mood ? "Next" : "Hold the card to continue")}
         </button>
       )}
       {step < LAST_STEP && (
         <button className="ob-skip" onClick={finish}>
-          {TOUR_COPY.skip}
+          {tt(TOUR_COPY.skip)}
         </button>
       )}
     </motion.div>

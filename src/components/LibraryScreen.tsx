@@ -5,7 +5,9 @@ import { api } from "../../convex/_generated/api";
 import { useStore } from "../state/store";
 import type { LibraryContainer, Track } from "../types";
 import { art } from "../lib/art";
-import { IconBack, IconHeart, IconPlay, IconSparkle, IconX, IconFolder } from "./icons";
+import { IconBack, IconHeart, IconPlay, IconSparkle, IconX, IconFolder, IconShuffle, IconShare } from "./icons";
+import { ExportSheet } from "./ExportSheet";
+import { useT } from "../lib/lang";
 import { useDialogs } from "./ui/Dialogs";
 import { Face } from "./faces";
 import { moodById, type MoodId } from "../data/mood";
@@ -44,7 +46,8 @@ export function LibraryScreen({
 }: {
   container: LibraryContainer;
   onBack: () => void;
-  onPlay: (trackId: string) => void;
+  /** play this container through the deck (lib/playSession.ts) */
+  onPlay: (session: { title: string; tracks: Track[]; shuffle: boolean; startId?: string }) => void;
   onRemove: (trackId: string) => void;
   onDeletePlaylist: (id: string) => void;
   onDiscoverInto: (container: LibraryContainer) => void;
@@ -53,6 +56,8 @@ export function LibraryScreen({
   const { state, updatePlaylistRules } = useStore();
   const updateRulesOnServer = useMutation(api.library.updatePlaylistRules);
   const [showRules, setShowRules] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const tx = useT();
 
   let title: string;
   let tracks: Track[];
@@ -67,12 +72,12 @@ export function LibraryScreen({
   } | null = null;
 
   if (container === "liked") {
-    title = "Liked Songs";
+    title = tx("Liked Songs");
     tracks = state.liked;
     accent = "#00E5A0";
     icon = <IconHeart size={15} />;
   } else if (container === "discoveries") {
-    title = "Discoveries";
+    title = tx("Discoveries");
     tracks = state.discoveries;
     accent = "#FFB627";
   } else {
@@ -109,13 +114,13 @@ export function LibraryScreen({
           <button
             className="topbar-btn"
             style={{ color: "var(--never)" }}
-            aria-label="Delete playlist"
-            title="Delete playlist"
+            aria-label={tx("Delete playlist")}
+            title={tx("Delete playlist")}
             onClick={async () => {
               const ok = await confirm({
-                title: `Delete “${title}”?`,
-                body: "The songs in it leave your library too.",
-                confirmLabel: "Delete playlist",
+                title: tx("Delete “{title}”?", { title }),
+                body: tx("The songs in it leave your library too."),
+                confirmLabel: tx("Delete playlist"),
                 danger: true,
               });
               if (!ok) return;
@@ -148,13 +153,17 @@ export function LibraryScreen({
           <div className="library-hero-meta">
             <span className="library-kicker">
               {icon}
-              {playlistId ? (mood ? `${moodById(mood)?.label ?? mood} playlist` : "playlist") : "collection"}
-              {isSaveTarget && <em>· saving here</em>}
+              {playlistId
+                ? mood
+                  ? `${tx(moodById(mood)?.label ?? mood)} ${tx("playlist")}`
+                  : tx("playlist")
+                : tx("collection")}
+              {isSaveTarget && <em>· {tx("saving here")}</em>}
             </span>
             <h2 className="library-title">{title}</h2>
             <p className="library-sub">
-              {tracks.length} {tracks.length === 1 ? "song" : "songs"}
-              {tracks.length > 0 && <> · ~{totalMinutes(tracks)} min of music</>}
+              {tx(tracks.length === 1 ? "{n} song" : "{n} songs", { n: tracks.length })}
+              {tracks.length > 0 && <> · {tx("~{m} min of music", { m: totalMinutes(tracks) })}</>}
             </p>
           </div>
         </motion.div>
@@ -163,16 +172,30 @@ export function LibraryScreen({
           <button
             className="library-cta"
             disabled={tracks.length === 0}
-            onClick={() => tracks[0] && onPlay(tracks[0].id)}
+            onClick={() => onPlay({ title, tracks, shuffle: false })}
           >
-            <IconPlay size={16} /> Play
+            <IconPlay size={16} /> {tx("Play")}
+          </button>
+          <button
+            className="library-cta ghost"
+            disabled={tracks.length < 2}
+            onClick={() => onPlay({ title, tracks, shuffle: true })}
+          >
+            <IconShuffle size={15} /> {tx("Shuffle")}
           </button>
           <button
             className="library-cta ghost"
             onClick={() => onDiscoverInto(container)}
             title="New discoveries get saved straight into this"
           >
-            <IconSparkle size={15} /> Discover into this
+            <IconSparkle size={15} /> {tx("Discover into this")}
+          </button>
+          <button
+            className="library-cta ghost"
+            disabled={tracks.length === 0}
+            onClick={() => setExporting(true)}
+          >
+            <IconShare size={15} /> {tx("Export")}
           </button>
         </motion.div>
 
@@ -185,20 +208,22 @@ export function LibraryScreen({
             >
               <span className="settings-row-icon" style={{ color: "var(--accent)" }}>⚙</span>
               <span className="settings-row-label">
-                Discovery rules
+                {tx("Discovery rules")}
                 <small>
                   {rules.allowRepeats || rules.includeBuried || rules.includeBlockedArtists
-                    ? [
-                        rules.allowRepeats && "repeats",
-                        rules.includeBuried && "buried",
-                        rules.includeBlockedArtists && "blocked",
-                      ]
-                        .filter(Boolean)
-                        .join(" · ") + " allowed"
-                    : "strict — no repeats, no buried, no blocked"}
+                    ? tx("{list} allowed", {
+                        list: [
+                          rules.allowRepeats && tx("repeats"),
+                          rules.includeBuried && tx("buried"),
+                          rules.includeBlockedArtists && tx("blocked"),
+                        ]
+                          .filter(Boolean)
+                          .join(" · "),
+                      })
+                    : tx("strict — no repeats, no buried, no blocked")}
                 </small>
               </span>
-              <span className="settings-row-value">{showRules ? "hide" : "edit"}</span>
+              <span className="settings-row-value">{tx(showRules ? "hide" : "edit")}</span>
             </button>
             {showRules && (
               <>
@@ -222,8 +247,8 @@ export function LibraryScreen({
                     aria-pressed={rules[key]}
                   >
                     <span className="settings-row-label">
-                      {label}
-                      <small>{sub}</small>
+                      {tx(label)}
+                      <small>{tx(sub)}</small>
                     </span>
                     <span className={`toggle ${rules[key] ? "on" : ""}`}>
                       <span className="toggle-knob" />
@@ -231,7 +256,7 @@ export function LibraryScreen({
                   </button>
                 ))}
                 <p className="settings-hint" style={{ margin: "4px 2px 0" }}>
-                  Applies while this playlist is your swipe-down target.
+                  {tx("Applies while this playlist is your swipe-down target.")}
                 </p>
               </>
             )}
@@ -241,8 +266,7 @@ export function LibraryScreen({
         {tracks.length === 0 ? (
           <motion.div className="library-empty" variants={rise}>
             <p>
-              Nothing in here yet. Hit <strong>Discover into this</strong> — every
-              song you swipe down will land right here.
+              {tx("Nothing in here yet. Hit Discover into this — every song you swipe down will land right here.")}
             </p>
           </motion.div>
         ) : (
@@ -250,7 +274,10 @@ export function LibraryScreen({
             {tracks.map((t, i) => (
               <motion.div className="library-row" key={t.id} variants={{ ...rise, ...fall }}>
               <span className="library-index">{String(i + 1).padStart(2, "0")}</span>
-              <button className="library-row-main" onClick={() => onPlay(t.id)}>
+              <button
+                className="library-row-main"
+                onClick={() => onPlay({ title, tracks, shuffle: false, startId: t.id })}
+              >
                 <span className="library-art-wrap">
                   <img src={art(t.artwork, 100)} alt="" />
                   <span className="library-art-play"><IconPlay size={13} /></span>
@@ -274,6 +301,11 @@ export function LibraryScreen({
         )}
         <div style={{ height: 10 }} />
       </motion.div>
+      <AnimatePresence>
+        {exporting && (
+          <ExportSheet title={title} tracks={tracks} onClose={() => setExporting(false)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

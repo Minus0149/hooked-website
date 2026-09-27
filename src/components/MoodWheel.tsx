@@ -6,6 +6,7 @@ import type { Verdict } from "../data/predict";
 import { Face } from "./faces";
 import { faceIdle } from "./faceMotion";
 
+import { useT } from "../lib/lang";
 /**
  * The mood ring — a wheel of six wedges around the thumb that summoned it.
  *
@@ -87,6 +88,7 @@ export function MoodWheel({
   /** how much more a downward push counts (the + ring sits near the bottom; see PLUS_DOWN_GAIN) */
   downGain?: number;
 }) {
+  const tt = useT();
   const ref = useRef<HTMLDivElement | null>(null);
   const [keyIndex, setKeyIndex] = useState<number | null>(null);
 
@@ -256,7 +258,7 @@ export function MoodWheel({
                     textAnchor="middle"
                     dominantBaseline="central"
                   >
-                    {m.label}
+                    {tt(m.label)}
                   </text>
                 </g>
               );
@@ -309,7 +311,7 @@ export function MoodWheel({
                 if (!dragging) setKeyIndex(null);
               }}
               onClick={() => onCommit(m.id)}
-              aria-label={`${m.label} — ${m.line}`}
+              aria-label={`${tt(m.label)} — ${tt(m.line)}`}
               aria-pressed={picked === m.id}
             >
               {/* its own element, so the idle loop never fights the spring */}
@@ -343,8 +345,8 @@ export function MoodWheel({
             // one card for both lines: the description on its own, over busy
             // artwork, was the hardest thing on screen to read
             <span className="ring-label-card">
-              <b style={{ color: lead.accent }}>{lead.label}</b>
-              <small>{lead.line}</small>
+              <b style={{ color: lead.accent }}>{tt(lead.label)}</b>
+              <small>{tt(lead.line)}</small>
             </span>
           ) : (
             <span>

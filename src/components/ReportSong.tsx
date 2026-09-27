@@ -10,12 +10,14 @@ import {
   type ReportReason,
 } from "../lib/contentReport";
 
+import { useT } from "../lib/lang";
 /**
  * "Report this song", inside the full-song sheet (Google Play's UGC policy).
  * Works signed out: the device's anonymous key holds guests to a rate limit.
  * Same words and order as the phone app (lib/contentReport.ts).
  */
 export function ReportSong({ track, onBack, onDone }: { track: Track; onBack: () => void; onDone: () => void }) {
+  const tt = useT();
   const submit = useMutation(api.contentReports.submit);
   const [reason, setReason] = useState<ReportReason | null>(null);
   const [note, setNote] = useState("");
@@ -58,10 +60,10 @@ export function ReportSong({ track, onBack, onDone }: { track: Track; onBack: ()
   if (sent) {
     return (
       <div className="report" role="status">
-        <h3 className="sheet-title">{REPORT_COPY.doneTitle}</h3>
-        <p className="sheet-sub">{REPORT_COPY.doneSub}</p>
+        <h3 className="sheet-title">{tt(REPORT_COPY.doneTitle)}</h3>
+        <p className="sheet-sub">{tt(REPORT_COPY.doneSub)}</p>
         <button className="ob-primary auth-submit" onClick={onDone}>
-          {REPORT_COPY.close}
+          {tt(REPORT_COPY.close)}
         </button>
       </div>
     );
@@ -69,9 +71,9 @@ export function ReportSong({ track, onBack, onDone }: { track: Track; onBack: ()
 
   return (
     <div className="report">
-      <h3 className="sheet-title">{REPORT_COPY.title}</h3>
+      <h3 className="sheet-title">{tt(REPORT_COPY.title)}</h3>
       <p className="sheet-sub">
-        "{track.title}" — {track.artist}. {REPORT_COPY.sub}
+        "{track.title}" — {track.artist}. {tt(REPORT_COPY.sub)}
       </p>
       <div className="report-reasons" role="radiogroup" aria-label="Reason">
         {REPORT_REASONS.map((r) => (
@@ -88,17 +90,17 @@ export function ReportSong({ track, onBack, onDone }: { track: Track; onBack: ()
           >
             <span className="report-dot" aria-hidden />
             <span className="report-reason-text">
-              <strong>{r.label}</strong>
-              <small>{r.hint}</small>
+              <strong>{tt(r.label)}</strong>
+              <small>{tt(r.hint)}</small>
             </span>
           </button>
         ))}
       </div>
       <label className="auth-field">
-        <span className="auth-label">{REPORT_COPY.noteLabel}</span>
+        <span className="auth-label">{tt(REPORT_COPY.noteLabel)}</span>
         <textarea
           className="auth-input report-note"
-          placeholder={REPORT_COPY.notePlaceholder}
+          placeholder={tt(REPORT_COPY.notePlaceholder)}
           value={note}
           maxLength={REPORT_NOTE_MAX}
           rows={2}
@@ -114,7 +116,7 @@ export function ReportSong({ track, onBack, onDone }: { track: Track; onBack: ()
         {busy ? REPORT_COPY.busy : REPORT_COPY.submit}
       </button>
       <button type="button" className="auth-link auth-link-center" onClick={onBack}>
-        {REPORT_COPY.back}
+        {tt(REPORT_COPY.back)}
       </button>
     </div>
   );

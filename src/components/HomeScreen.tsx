@@ -3,7 +3,8 @@ import { motion } from "motion/react";
 import { useStore } from "../state/store";
 import type { Track } from "../types";
 import { art } from "../lib/art";
-import { IconHeart, IconFolder } from "./icons";
+import { IconHeart, IconFolder, IconPlay } from "./icons";
+import { useT } from "../lib/lang";
 import { Face } from "./faces";
 import { RecapCard } from "./RecapCard";
 import { DAYPART_COPY, DAYPART_MOOD, daypartAt, moodsForHour } from "../data/mood";
@@ -25,6 +26,32 @@ function greeting(): string {
   return "good evening";
 }
 
+/** Today's song, picked for this listener (lib/hookOfDay.ts). */
+function HookOfDayCard({ track, onPlay }: { track: Track; onPlay: (t: Track) => void }) {
+  const t = useT();
+  return (
+    <motion.button
+      type="button"
+      className="hotd"
+      variants={rise}
+      whileTap={{ scale: 0.98 }}
+      style={{ ["--hotd" as string]: track.accent }}
+      onClick={() => onPlay(track)}
+      aria-label={`${t("Hook of the day")}: ${track.title} — ${track.artist}`}
+    >
+      <img src={art(track.artwork, 200)} alt="" />
+      <span className="hotd-meta">
+        <span className="hotd-kicker">{t("Hook of the day")}</span>
+        <span className="hotd-title">{track.title}</span>
+        <span className="hotd-artist">{track.artist}</span>
+      </span>
+      <span className="hotd-play" aria-hidden="true">
+        <IconPlay size={16} />
+      </span>
+    </motion.button>
+  );
+}
+
 function TrackRow({ track, onPick }: { track: Track; onPick: (id: string) => void }) {
   return (
     <button className="row-card" onClick={() => onPick(track.id)}>
@@ -39,11 +66,18 @@ export function HomeScreen({
   onDiscover,
   onOpenLibrary,
   onNewPlaylist,
+  hookOfDay,
+  onPlayHookOfDay,
 }: {
   onDiscover: (trackId?: string) => void;
   onOpenLibrary: (container: string) => void;
   onNewPlaylist: () => void;
+  /** today's pick, or null when hidden in Settings / nothing to pick */
+  hookOfDay?: Track | null;
+  onPlayHookOfDay?: (t: Track) => void;
 }) {
+  const tt = useT();
+  const t = useT();
   const { state, catalog, setMood } = useStore();
   const { liked, discoveries, playlists, boostGenres, queue } = state;
 
@@ -133,16 +167,16 @@ export function HomeScreen({
 
   return (
     <motion.div className="home" variants={stagger} initial="hidden" animate="show">
-      <motion.p className="home-greeting" variants={rise}>{greeting()}</motion.p>
+      <motion.p className="home-greeting" variants={rise}>{t(greeting())}</motion.p>
       <motion.h1 className="home-title" variants={rise}>
-        what's your next <em>obsession?</em>
+        {t("what's your next")} <em>{t("obsession?")}</em>
       </motion.h1>
 
       <motion.button className="cta" variants={rise} whileTap={{ scale: 0.97 }} onClick={() => onDiscover()}>
         <div>
-          <div className="cta-label">Start discovering</div>
+          <div className="cta-label">{t("Start discovering")}</div>
           <div className="cta-sub">
-            {queue.length} songs queued for you
+            {t("{n} songs queued for you", { n: queue.length })}
           </div>
         </div>
         <span className="eq">
@@ -150,9 +184,11 @@ export function HomeScreen({
         </span>
       </motion.button>
 
+      {hookOfDay && onPlayHookOfDay && <HookOfDayCard track={hookOfDay} onPlay={onPlayHookOfDay} />}
+
       <motion.section className="mood-section" variants={rise}>
         <div className="section-head">
-          <h3 className="section-title">What&apos;s the mood?</h3>
+          <h3 className="section-title">{t("What's the mood?")}</h3>
         </div>
         <div className="mood-row">
           {hour.moods.map((mood) => {
@@ -169,13 +205,13 @@ export function HomeScreen({
                   setMood(mood.id);
                   onDiscover();
                 }}
-                aria-label={`${mood.label} — ${mood.line}`}
-                title={mood.line}
+                aria-label={`${tt(mood.label)} — ${tt(mood.line)}`}
+                title={tt(mood.line)}
               >
                 <span className="mood-disc">
                   <Face mood={mood.id} size={26} animated={isOn && state.prefs.motion === "full"} />
                 </span>
-                <span className="mood-chip-label">{mood.label}</span>
+                <span className="mood-chip-label">{t(mood.label)}</span>
               </button>
             );
           })}
@@ -183,7 +219,7 @@ export function HomeScreen({
             type="button"
             className={`mood-chip mood-chip-any${state.mood === null ? " is-on" : ""}`}
             style={{ ["--face" as string]: "var(--text)" }}
-            aria-label="Any — no mood on the deck"
+            aria-label={t("Any — no mood on the deck")}
             onClick={() => {
               setMood(null);
               onDiscover();
@@ -193,18 +229,18 @@ export function HomeScreen({
             <span className="mood-disc">
               <span className="mood-any-mark" aria-hidden="true">∞</span>
             </span>
-            <span className="mood-chip-label">Any</span>
+            <span className="mood-chip-label">{t("Any")}</span>
           </button>
         </div>
         {state.prefs.moodByTime !== "off" && (
-          <span className="mood-nudge">{DAYPART_COPY[hour.part].nudge}</span>
+          <span className="mood-nudge">{tt(DAYPART_COPY[hour.part].nudge)}</span>
         )}
       </motion.section>
 
       <RecapCard />
 
       <motion.div className="section-head" variants={rise}>
-        <h3 className="section-title">Your library</h3>
+        <h3 className="section-title">{t("Your library")}</h3>
       </motion.div>
       {libraryEmpty ? (
         // one invitation, not two empty boxes pretending to be a library
@@ -213,24 +249,24 @@ export function HomeScreen({
             <IconHeart size={18} />
           </span>
           <span>
-            <b>Nothing saved yet</b>
-            <small>Swipe a song down to keep it. Tap here, or hold +, to start a playlist.</small>
+            <b>{t("Nothing saved yet")}</b>
+            <small>{t("Swipe a song down to keep it. Tap here, or hold +, to start a playlist.")}</small>
           </span>
         </motion.button>
       ) : (
       <motion.div className="tiles" variants={rise}>
         <button className="tile" onClick={() => onOpenLibrary("liked")}>
           {mosaic(liked)}
-          <div className="tile-name">Liked Songs</div>
+          <div className="tile-name">{t("Liked Songs")}</div>
           <div className="tile-sub">
-            {liked.length} {liked.length === 1 ? "song" : "songs"}
+            {t(liked.length === 1 ? "{n} song" : "{n} songs", { n: liked.length })}
           </div>
         </button>
         <button className="tile" onClick={() => onOpenLibrary("discoveries")}>
           {mosaic(discoveries)}
-          <div className="tile-name">Discoveries</div>
+          <div className="tile-name">{t("Discoveries")}</div>
           <div className="tile-sub">
-            {discoveries.length} {discoveries.length === 1 ? "song" : "songs"}
+            {t(discoveries.length === 1 ? "{n} song" : "{n} songs", { n: discoveries.length })}
           </div>
         </button>
         {playlists.map((p) => (
@@ -243,7 +279,7 @@ export function HomeScreen({
             {mosaic(p.tracks)}
             <div className="tile-name">{p.name}</div>
             <div className="tile-sub">
-              {p.tracks.length} {p.tracks.length === 1 ? "song" : "songs"}
+              {t(p.tracks.length === 1 ? "{n} song" : "{n} songs", { n: p.tracks.length })}
             </div>
           </button>
         ))}
@@ -254,7 +290,7 @@ export function HomeScreen({
         <motion.section key={row.genre} variants={rise}>
           <div className="section-head">
             <h3 className="section-title">
-              Because you wanted more <em style={{ color: "var(--accent)", fontStyle: "normal" }}>{row.genre}</em>
+              {t("Because you wanted more")} <em style={{ color: "var(--accent)", fontStyle: "normal" }}>{row.genre}</em>
             </h3>
           </div>
           <div className="row-scroll">
@@ -266,8 +302,8 @@ export function HomeScreen({
       ))}
 
       <motion.div className="section-head" variants={rise}>
-        <h3 className="section-title">Fresh for you</h3>
-        <span className="section-count">tap to play</span>
+        <h3 className="section-title">{t("Fresh for you")}</h3>
+        <span className="section-count">{t("tap to play")}</span>
       </motion.div>
       <motion.div className="row-scroll" variants={rise}>
         {fresh.map((t) => (
@@ -279,7 +315,7 @@ export function HomeScreen({
         <motion.div variants={rise}>
           <div className="section-head">
             <h3 className="section-title">
-              <IconFolder size={14} /> Recently saved
+              <IconFolder size={14} /> {t("Recently saved")}
             </h3>
           </div>
           {liked.slice(0, 5).map((t) => (

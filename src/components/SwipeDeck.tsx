@@ -18,6 +18,7 @@ import { gesture } from "../design/tokens";
 import { useDialog } from "../lib/dialog";
 import { appleMusicUrl, ITUNES_CREDIT, needsItunesCredit } from "../lib/attribution";
 import { PROMOTED_LABEL, PROMOTED_WHY } from "../lib/promoted";
+import { useT } from "../lib/lang";
 import { DiscFX, type SaveFxData, type SaveRelease } from "./DiscFX";
 import {
   IconHeart,
@@ -194,6 +195,7 @@ function ScrubBar({
 
 /** Links out to where the track can legally play in full. */
 function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }) {
+  const tx = useT();
   const dialog = useDialog({ onClose });
   // "Report this song" turns this sheet into the report form (Play's UGC policy)
   const [reporting, setReporting] = useState(false);
@@ -250,17 +252,17 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
         <>
         <button type="button" className="sheet-option sheet-share" onClick={() => void shareSong()}>
           <span style={{ color: "var(--accent)" }}>↗</span>
-          Share this song
-          <span className="sheet-share-sub">opens at the hook</span>
+          {tx("Share this song")}
+          <span className="sheet-share-sub">{tx("opens at the hook")}</span>
         </button>
         <a className="sheet-share-story" href={songStoryUrl(track.id)} target="_blank" rel="noreferrer">
-          story image for Instagram
+          {tx("story image for Instagram")}
         </a>
         {shareNote && <p className="sheet-share-note" role="status">{shareNote}</p>}
-        <h3 className="sheet-title">Hear the whole thing</h3>
+        <h3 className="sheet-title">{tx("Hear the whole thing")}</h3>
         <p className="sheet-sub">
-          "{track.title}" — {track.artist}. Previews stop at 30 seconds; pick where
-          to keep listening.
+          "{track.title}" — {track.artist}.{" "}
+          {tx("Previews stop at 30 seconds; pick where to keep listening.")}
         </p>
         {services.map((s) => (
           <a
@@ -276,7 +278,7 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
             <span className="check" style={{ opacity: 1 }}>↗</span>
           </a>
         ))}
-        {needsItunesCredit(track) && <p className="sheet-credit">preview {ITUNES_CREDIT}</p>}
+        {needsItunesCredit(track) && <p className="sheet-credit">{tx("preview provided courtesy of iTunes")}</p>}
         <button type="button" className="sheet-report" onClick={() => setReporting(true)}>
           {REPORT_COPY.link}
         </button>
@@ -358,6 +360,7 @@ function TopCard({
   holding: boolean;
   verdict: Verdict | null;
 }) {
+  const tx = useT();
   const x = useMotionValue(0);
   const y = useMotionValue(0);
   const rotate = useTransform(x, [-220, 220], [-13, 13]);
@@ -449,23 +452,23 @@ function TopCard({
       )}
 
       <motion.div className="stamp stamp-up" style={{ opacity: upOpacity }}>
-        skip ↑
+        {tx("skip")} ↑
       </motion.div>
       <motion.div className="stamp stamp-down" style={{ opacity: downOpacity }}>
-        ♥ saved
+        ♥ {tx("saved")}
       </motion.div>
       <motion.div className="stamp stamp-right" style={{ opacity: rightOpacity }}>
-        ✦ more like this
+        ✦ {tx("more like this")}
       </motion.div>
       <motion.div className="stamp stamp-left" style={{ opacity: leftOpacity }}>
-        ✕ never
+        ✕ {tx("never")}
       </motion.div>
 
       <div className="card-meta">
         {track.promotedCampaignId && (
           // paid content is marked on the card itself (ASCI); the title says why
-          <span className="card-promoted" title={PROMOTED_WHY}>
-            {PROMOTED_LABEL}
+          <span className="card-promoted" title={tx(PROMOTED_WHY)}>
+            {tx(PROMOTED_LABEL)}
           </span>
         )}
         <span className="card-genre">
@@ -491,7 +494,7 @@ function TopCard({
           {track.artist}
         </p>
         {/* Apple's condition for playing its previews (lib/attribution.ts) */}
-        {needsItunesCredit(track) && <p className="card-credit">{ITUNES_CREDIT}</p>}
+        {needsItunesCredit(track) && <p className="card-credit">{tx(ITUNES_CREDIT)}</p>}
       </div>
       <ScrubBar progress={progress} onSeek={onSeek} />
     </motion.div>
@@ -521,6 +524,7 @@ export function SwipeDeck({
   onPickMood,
   onClearMood,
 }: Props) {
+  const tx = useT();
   const [onDeck, next, nextNext] = tracks;
   const lastDir = useRef<SwipeDir>("up");
   const deckRef = useRef<HTMLDivElement | null>(null);
@@ -725,7 +729,7 @@ export function SwipeDeck({
               transition={{ type: "spring", stiffness: 420, damping: 26 }}
               onClick={() => setFullSongOpen(true)}
             >
-              keep listening ▸
+              {tx("keep listening")} ▸
             </motion.button>
           )}
         </AnimatePresence>
