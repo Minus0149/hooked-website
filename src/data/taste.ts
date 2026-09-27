@@ -101,8 +101,49 @@ export const flattenGenre = (value: string) =>
 /** Local alias — this file reads better with the short name. */
 const flatten = flattenGenre;
 
+/**
+ * The languages the deck counts as Indian, for the India/global mix. "in" is a
+ * song the server knows is Indian without knowing which language (Apple files
+ * much of it as "worldwide"). Same list as convex/catalogRules.ts.
+ */
+export const INDIAN_LANGUAGES = ["hi", "pa", "ta", "te", "ml", "kn", "mr", "bn", "ur", "in"];
+export const isIndianLanguage = (lang: string | undefined) =>
+  !!lang && INDIAN_LANGUAGES.includes(lang);
+
+/**
+ * How well a track's language answers the ones picked: 2 exactly, 1 close,
+ * 0 not at all.
+ *
+ * The server tags each song with a language (`lang`: from its script, genre
+ * and the charts it came from), and that is used when present. "Close" is an
+ * Indian song of unknown language for someone who picked an Indian language.
+ * A catalogue without tags (the bundled one, an older server) falls back to
+ * what this used to do: the genre, then a storefront the language charts in —
+ * which is how an English song charting in India once counted as Hindi.
+ */
+export function langMatch(
+  track: { genre: string; markets?: string[]; lang?: string },
+  languages: string[],
+): 0 | 1 | 2 {
+  if (languages.length === 0) return 0;
+  if (track.lang) {
+    if (languages.includes(track.lang)) return 2;
+    return track.lang === "in" && languages.some(isIndianLanguage) ? 1 : 0;
+  }
+  const genre = flatten(track.genre ?? "");
+  const markets = track.markets ?? [];
+  let best: 0 | 1 | 2 = 0;
+  for (const id of languages) {
+    const l = LANGUAGES.find((x) => x.id === id);
+    if (!l) continue;
+    if (l.genres?.some((m) => genre.includes(flatten(m)))) return 2;
+    if (l.markets.some((m) => markets.includes(m))) best = 1;
+  }
+  return best;
+}
+
 export function tasteScore(
-  track: { genre: string; markets?: string[]; heat?: number },
+  track: { genre: string; markets?: string[]; heat?: number; lang?: string },
   prefs: TastePrefs,
 ): number {
   let score = 0;
@@ -116,19 +157,9 @@ export function tasteScore(
     }
   }
 
-  const markets = track.markets ?? [];
-  for (const id of prefs.languages) {
-    const l = LANGUAGES.find((x) => x.id === id);
-    if (!l) continue;
-    if (l.genres?.some((m) => genre.includes(flatten(m)))) {
-      score += 3; // an explicit genre match is stronger than a chart it appeared in
-      break;
-    }
-    if (l.markets.some((m) => markets.includes(m))) {
-      score += 1.5;
-      break;
-    }
-  }
+  // an exact language match is stronger than a chart it appeared in
+  const lang = langMatch(track, prefs.languages);
+  score += lang === 2 ? 3 : lang === 1 ? 1.5 : 0;
 
   // "The hits / a bit of both / take me deep" finally does something: `heat`
   // is each track's play count normalised against the catalogue's leader

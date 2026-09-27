@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import {
   internalAction,
   internalMutation,
@@ -90,25 +91,38 @@ export const current = internalQuery({
 });
 
 /**
- * Everything a client needs, read once. Same selection and hook order as
- * tracks.list (kept for app builds that predate this), plus the dirty counter
- * at the moment of reading so the publish step knows what it covered.
+ * Tracks per snapshot page. One query reading the whole table grew toward
+ * Convex's per-query read limits (8 MB / 16k documents) as the chart pull
+ * started keeping more songs; pages keep every read small whatever the size.
  */
-export const snapshot = internalQuery({
+const SNAPSHOT_PAGE = 400;
+
+/** The dirty counter and version at the start of a build, so publish knows what it covered. */
+export const snapshotStart = internalQuery({
   args: {},
   handler: async (ctx) => {
     const meta = await metaRow(ctx);
-    const [all, activeHooks] = await Promise.all([
-      ctx.db.query("tracks").collect(),
-      ctx.db
-        .query("hooks")
-        .withIndex("by_active", (q) => q.eq("active", true))
-        .collect(),
-    ]);
-    const byTrack = hooksByTrack(activeHooks);
+    return { seq: meta?.dirtySeq ?? 0, version: meta?.version ?? 0 };
+  },
+});
+
+/**
+ * One page of what a client needs. Same selection and hook order as
+ * tracks.list (kept for app builds that predate this); hooks are read per
+ * track by index rather than all at once, for the same reason as the paging.
+ */
+export const snapshotPage = internalQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    const page = await ctx.db.query("tracks").paginate(paginationOpts);
     const tracks: CatalogTrack[] = [];
-    for (const t of all) {
+    for (const t of page.page) {
       if (t.hidden === true) continue;
+      const hooks = await ctx.db
+        .query("hooks")
+        .withIndex("by_trackId", (q) => q.eq("trackId", t.trackId))
+        .collect();
+      const active = hooksByTrack(hooks.filter((h) => h.active)).get(t.trackId) ?? [];
       tracks.push({
         trackId: t.trackId,
         title: t.title,
@@ -126,7 +140,8 @@ export const snapshot = internalQuery({
         audioMood: t.audioMood,
         vocal: t.vocal,
         audioUrl: t.audioStorageId ? await ctx.storage.getUrl(t.audioStorageId) : null,
-        hooks: (byTrack.get(t.trackId) ?? []).map((h) => ({
+        lang: t.lang,
+        hooks: active.map((h) => ({
           id: h._id,
           startMs: h.startMs,
           durationMs: h.durationMs,
@@ -134,7 +149,7 @@ export const snapshot = internalQuery({
         })),
       });
     }
-    return { seq: meta?.dirtySeq ?? 0, version: meta?.version ?? 0, tracks };
+    return { tracks, isDone: page.isDone, continueCursor: page.continueCursor };
   },
 });
 
@@ -142,9 +157,20 @@ export const snapshot = internalQuery({
 export const rebuild = internalAction({
   args: {},
   handler: async (ctx): Promise<{ version: number; parts: number; bytes: number } | null> => {
-    const snap = await ctx.runQuery(internal.catalog.snapshot, {});
+    const snap = await ctx.runQuery(internal.catalog.snapshotStart, {});
+    const tracks: CatalogTrack[] = [];
+    let cursor: string | null = null;
+    for (;;) {
+      const page: { tracks: CatalogTrack[]; isDone: boolean; continueCursor: string } =
+        await ctx.runQuery(internal.catalog.snapshotPage, {
+          paginationOpts: { numItems: SNAPSHOT_PAGE, cursor },
+        });
+      tracks.push(...page.tracks);
+      if (page.isDone) break;
+      cursor = page.continueCursor;
+    }
     const next = snap.version + 1;
-    const docs = encodeCatalog(snap.tracks, next);
+    const docs = encodeCatalog(tracks, next);
     const partIds: Id<"_storage">[] = [];
     let bytes = 0;
     for (const doc of docs) {
@@ -157,7 +183,7 @@ export const rebuild = internalAction({
       seq: snap.seq,
       partIds,
       bytes,
-      tracks: snap.tracks.length,
+      tracks: tracks.length,
     });
     if (!published) {
       for (const id of partIds) await ctx.storage.delete(id);

@@ -12,6 +12,7 @@ import { EMPTY_TASTE, genreBoostScore, tasteScore, type TastePrefs } from "../da
 import { coercePrefs, DEFAULT_PREFS, type UserPrefs } from "../data/prefs";
 import {
   buildQueue,
+  DEFAULT_MIX,
   MODEL_PLACES,
   MOOD_PLACES,
   moodQueue,
@@ -20,6 +21,7 @@ import {
   keepOnScreen,
   spreadAlbums,
   uniqueById,
+  type RegionMix,
   type Steer,
 } from "../data/ranking";
 import { insertPromoted } from "../lib/promoted";
@@ -123,6 +125,8 @@ export interface AppState {
   moodStrength: number;
   /** How far the locally-trained model may move a track (runtime config). */
   modelStrength: number;
+  /** The India/global and picked-language split of the deck (runtime config). */
+  mix: RegionMix;
   /** A playlist being played through the deck (lib/playSession.ts), or null. */
   session: PlaySession | null;
 }
@@ -194,7 +198,7 @@ type Action =
   // this listener's own labels, from the profile rather than this device
   | { type: "APPLY_MOOD_PICKS"; picks: Record<string, MoodId> }
   // the admin's dials for the two client-side signals
-  | { type: "SET_STRENGTHS"; mood: number; model: number };
+  | { type: "SET_STRENGTHS"; mood: number; model: number; mix?: RegionMix };
 
 /**
  * The trained model, rebuilt only when the evidence behind it changed.
@@ -278,6 +282,7 @@ function steerOf(state: AppState): Steer {
     modelStrength: state.modelStrength,
     sound: soundFor(state),
     soundStrength: SOUND_PLACES,
+    mix: state.mix,
   };
 }
 
@@ -382,6 +387,7 @@ function initState(): AppState {
     crowdMoods,
     moodStrength: MOOD_PLACES,
     modelStrength: MODEL_PLACES,
+    mix: DEFAULT_MIX,
     neverTracks: saved?.neverTracks ?? [],
     replayContainers: saved?.replayContainers ?? [],
     taste,
@@ -885,10 +891,17 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, moodPicks: picks };
     }
 
-    case "SET_STRENGTHS":
-      if (state.moodStrength === action.mood && state.modelStrength === action.model)
+    case "SET_STRENGTHS": {
+      const mix = action.mix ?? state.mix;
+      if (
+        state.moodStrength === action.mood &&
+        state.modelStrength === action.model &&
+        state.mix.indiaPct === mix.indiaPct &&
+        state.mix.pickedPct === mix.pickedPct
+      )
         return state;
-      return { ...state, moodStrength: action.mood, modelStrength: action.model };
+      return { ...state, moodStrength: action.mood, modelStrength: action.model, mix };
+    }
 
     case "APPLY_AFFINITY": {
       // Deliberately does NOT rebuild the queue. The model's opinion is worth
@@ -950,7 +963,8 @@ interface StoreValue {
   setMood: (mood: MoodId | null, trackId?: string) => void;
   applyCrowdMoods: (crowd: CrowdMoods) => void;
   applyMoodPicks: (picks: Record<string, MoodId>) => void;
-  setStrengths: (mood: number, model: number) => void;
+  /** Runtime config for the client-side signals; `mix` is absent from older servers. */
+  setStrengths: (mood: number, model: number, mix?: RegionMix) => void;
   /**
    * What this device has learned about this listener, or null before there is
    * anything to learn from. Exposed because the deck shows its verdict, and
@@ -1020,8 +1034,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "APPLY_CROWD_MOODS", crowd }),
       applyMoodPicks: (picks: Record<string, MoodId>) =>
         dispatch({ type: "APPLY_MOOD_PICKS", picks }),
-      setStrengths: (mood: number, model: number) =>
-        dispatch({ type: "SET_STRENGTHS", mood, model }),
+      setStrengths: (mood: number, model: number, mix?: RegionMix) =>
+        dispatch({ type: "SET_STRENGTHS", mood, model, mix }),
     }),
     [],
   );

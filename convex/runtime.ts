@@ -57,11 +57,35 @@ export const RUNTIME_DEFAULTS = {
    */
   modelStrength: 12,
   /**
-   * Apple chart feeds pulled per scheduled catalogue refresh. There are 100
-   * of them, so 10 covers the lot every ten runs. Zero stops the job — the
-   * off switch for the only thing in here that reaches outside on a timer.
+   * Apple chart feeds pulled per scheduled catalogue refresh. There are 32
+   * of them (convex/catalogRules.ts FEEDS), so 16 covers the lot every two
+   * days. Zero stops the job — the off switch for the only thing in here that
+   * reaches outside on a timer.
    */
-  chartFeedsPerRun: 10,
+  chartFeedsPerRun: 16,
+  /**
+   * Percent of the deck that is Indian music for a listener who picked no
+   * language (guests, "just the hits"). 0 turns the mix off and leaves it to
+   * the shuffle. Read by the clients' rankPool (src/data/ranking.ts).
+   */
+  indiaSharePct: 60,
+  /**
+   * Percent of the deck in a language the listener picked at onboarding. The
+   * rest is discovery, so an English-only listener meets some Hindi without
+   * being buried in it. 0 turns it off.
+   */
+  pickedLangPct: 80,
+  /** Most songs one artist may have dealable at once; curation hides the rest. */
+  artistCap: 3,
+  /** Weeks off every chart before a song stops being dealt (it stays in libraries). */
+  staleWeeks: 8,
+  /** Songs released more than this many years ago are dealt only while charting. */
+  maxAgeYears: 5,
+  /**
+   * What "while charting" means for those: a chart carried it within this
+   * many days. A full sweep of the feeds takes two nights at 16 a night.
+   */
+  oldChartDays: 14,
   /**
    * How many friends each listener's invite link may approve straight past
    * the waitlist (convex/referrals.ts). Zero switches invite links off.
@@ -90,6 +114,12 @@ const BOUNDS: Record<RuntimeKey, [number, number]> = {
   recsMinRaters: [2, 50],
   recsMinSupport: [1, 50],
   chartFeedsPerRun: [0, 100],
+  indiaSharePct: [0, 100],
+  pickedLangPct: [0, 100],
+  artistCap: [1, 50],
+  staleWeeks: [1, 520],
+  maxAgeYears: [1, 100],
+  oldChartDays: [1, 365],
   moodStrength: [0, 40],
   moodMinVotes: [1, 50],
   modelStrength: [0, 40],
@@ -141,6 +171,12 @@ export const set = mutation({
     recsMinRaters: v.optional(v.number()),
     recsMinSupport: v.optional(v.number()),
     chartFeedsPerRun: v.optional(v.number()),
+    indiaSharePct: v.optional(v.number()),
+    pickedLangPct: v.optional(v.number()),
+    artistCap: v.optional(v.number()),
+    staleWeeks: v.optional(v.number()),
+    maxAgeYears: v.optional(v.number()),
+    oldChartDays: v.optional(v.number()),
     moodStrength: v.optional(v.number()),
     moodMinVotes: v.optional(v.number()),
     modelStrength: v.optional(v.number()),

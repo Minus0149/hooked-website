@@ -82,6 +82,17 @@ describe("catalogue codec", () => {
     expect(back.hooks).toEqual(creator.hooks);
   });
 
+  it("carries a track's language at the end, where older clients never read", () => {
+    const hindi: CatalogTrack = { ...apple, lang: "hi" };
+    const row = encodeTrack(hindi);
+    expect(row[17]).toBe("hi");
+    expect(decodeTrack(row)).toEqual(hindi);
+    // an older decoder reads positions 0..16 only, so it gets exactly the old track
+    expect(decodeTrack(row.slice(0, 17))).toEqual(apple);
+    // and a track without one sends no language column at all
+    expect(encodeTrack(apple).length).toBeLessThanOrEqual(17);
+  });
+
   it("compacts Apple URLs and restores them byte for byte", () => {
     const a = packArtwork(apple.artwork);
     expect(a.startsWith("~1")).toBe(true);

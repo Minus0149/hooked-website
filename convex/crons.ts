@@ -87,15 +87,27 @@ crons.interval(
 /**
  * Keep the catalogue current.
  *
- * Nightly and deliberately partial: each run takes the next handful of Apple's
- * hundred chart feeds, so a full sweep takes about ten days and no single run
- * can be the one that fails. Anything new arrives with provisional hooks until
- * scripts/analyze-hooks.mjs measures its audio.
+ * Nightly and deliberately partial: each run takes the next handful of
+ * Apple's 32 chart feeds (convex/catalogRules.ts), so a full sweep takes a
+ * couple of days and no single run can be the one that fails. Anything new
+ * arrives with provisional hooks until its audio is analysed.
  */
 crons.daily(
   "pull new songs from the charts",
   { hourUTC: 5, minuteUTC: 23 },
   internal.charts.refresh,
+  {},
+);
+
+/**
+ * Then decide what the deck may deal: hide filler, covers, one artist's
+ * fourth song, and songs that left every chart (convex/curation.ts). Half an
+ * hour after the pull so today's chart clock is already set.
+ */
+crons.daily(
+  "curate the catalogue",
+  { hourUTC: 5, minuteUTC: 53 },
+  internal.curation.run,
   {},
 );
 

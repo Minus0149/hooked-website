@@ -19,7 +19,8 @@
  *    artwork's standard "/600x600bb.jpg" size suffix is dropped and restored
  *    (lib/art.ts resizes from it, so it must come back exactly);
  *  - hooks are [id, startMs, durationMs, label?] tuples;
- *  - markets are one comma-joined string.
+ *  - markets are one comma-joined string;
+ *  - lang (index 17) was appended later; older clients never read that far.
  */
 
 export const CATALOG_FORMAT = 1;
@@ -42,6 +43,8 @@ export type CatalogTrack = {
   audioMood?: number[];
   vocal?: number;
   audioUrl?: string | null;
+  /** the language the deck treats it as (convex/catalogRules.ts langOf); "in" = Indian, unspecific */
+  lang?: string;
   hooks: { id: string; startMs: number; durationMs: number; label?: string }[];
 };
 
@@ -113,6 +116,7 @@ export function encodeTrack(t: CatalogTrack): unknown[] {
     t.audioMood ? t.audioMood.map((x) => round(x, 3)) : null,
     typeof t.vocal === "number" ? round(t.vocal, 3) : null,
     t.audioUrl ?? null,
+    t.lang ? t.lang : null,
   ];
   // trailing empties carry no information
   while (row.length > 10 && row[row.length - 1] === null) row.pop();
@@ -151,6 +155,7 @@ export function decodeTrack(r: unknown[]): CatalogTrack {
   if (num(15) !== undefined) t.vocal = num(15);
   // tracks.list always sent audioUrl, null when the track has no uploaded audio
   t.audioUrl = typeof at(16) === "string" ? (at(16) as string) : null;
+  if (typeof at(17) === "string") t.lang = at(17) as string;
   return t;
 }
 

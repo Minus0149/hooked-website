@@ -9,6 +9,7 @@ import {
 import { planWindows } from "./hooks";
 import { cleanText, cleanTrack, requirePermission } from "./security";
 import { touchCatalog } from "./catalog";
+import { FEEDS, fillerReason, langOf, type Feed } from "./catalogRules";
 
 /**
  * Keeping the deck's catalogue alive.
@@ -21,21 +22,18 @@ import { touchCatalog } from "./catalog";
  * on a schedule, from the server, with nobody's laptop involved.
  *
  * The shape it takes is a *rolling* refresh, and that is the whole design
- * decision. There are a hundred feeds (ten storefronts, ten genres) and
- * looking up what they return is a few hundred HTTP calls; doing that in one
- * job means a long action that fails whole, retries whole, and hammers Apple
- * on a timer. Instead each run takes the next handful of feeds and stops. Ten
- * runs cover the lot, a failed run costs a tenth of a cycle, and the load is
- * a trickle rather than a spike.
+ * decision. There are 32 feeds (convex/catalogRules.ts FEEDS: India's own
+ * genre charts first, then the Western headline charts) and looking up what
+ * they return is a few dozen HTTP calls; doing that in one job means a long
+ * action that fails whole, retries whole, and hammers Apple on a timer.
+ * Instead each run takes the next handful of feeds and stops, a failed run
+ * costs a fraction of a cycle, and the load is a trickle rather than a spike.
+ *
+ * A song seen again is not skipped any more: it gets its chart clock
+ * (`chartedAt`, and `headlineAt` for a main chart) and any new storefront, so
+ * the daily curation pass (convex/curation.ts) can tell a song that is still
+ * charting from one that left every chart two months ago.
  */
-
-// Charts are per storefront, so spreading the countries is what keeps the deck
-// from being one market's top 40. India and the Gulf are deliberate — that is
-// who this is built for first. Mirrors scripts/build-catalog.mjs.
-const COUNTRIES = ["in", "us", "gb", "ae", "sa", "ca", "au", "ng", "kr", "br"];
-
-// 0 is the all-genres feed; the rest stop the charts collapsing into pop.
-const GENRES = [0, 14, 21, 18, 17, 20, 15, 6, 7, 19];
 
 const ACCENTS = [
   "#ff3d71", "#00e5a0", "#ffb627", "#7c5cff",
@@ -47,21 +45,28 @@ const PREVIEW_MS = 30_000;
 const CURSOR_KEY = "charts:cursor";
 const REPORT_KEY = "charts:lastRun";
 
-export type Feed = { country: string; url: string };
+export type { Feed };
 
 /** Every feed, in a fixed order, so a cursor into it means something. */
 export function allFeeds(): Feed[] {
-  const feeds: { country: string; url: string }[] = [];
-  for (const country of COUNTRIES) {
-    for (const genre of GENRES) {
-      const g = genre === 0 ? "" : `genre=${genre}/`;
-      feeds.push({
-        country,
-        url: `https://itunes.apple.com/${country}/rss/topsongs/limit=100/${g}json`,
-      });
-    }
+  return FEEDS;
+}
+
+/** The track ids a feed returned, whichever of Apple's two formats it is in. */
+export function feedIds(feed: Pick<Feed, "v2">, json: unknown): string[] | null {
+  const j = json as {
+    feed?: { entry?: ChartEntry[] | ChartEntry; results?: { id?: string }[] };
+  };
+  if (feed.v2) {
+    const results = j?.feed?.results;
+    if (!Array.isArray(results)) return null;
+    return results.map((r) => String(r?.id ?? "")).filter((id) => /^\d+$/.test(id));
   }
-  return feeds;
+  const raw = j?.feed?.entry;
+  // a one-song chart comes back as an object, not a list
+  const entries = Array.isArray(raw) ? raw : raw ? [raw] : null;
+  if (!entries) return null;
+  return entries.map((e) => e?.id?.attributes?.["im:id"] ?? "").filter((id) => /^\d+$/.test(id));
 }
 
 /**
@@ -86,8 +91,8 @@ const hash = (s: string): number => {
 };
 
 /**
- * Nine of the hundred feeds never answer — a genre a storefront doesn't carry.
- * Without a deadline one of them holds the run open until the action times out.
+ * A feed that never answers (a genre a storefront stops carrying) would hold
+ * the run open until the action times out without a deadline.
  */
 async function get(url: string, ms = 15_000): Promise<Response | null> {
   try {
@@ -108,140 +113,154 @@ type ItunesTrack = {
   previewUrl?: string;
   trackTimeMillis?: number;
   primaryGenreName?: string;
+  releaseDate?: string;
 };
 
 export const refresh = internalAction({
-  args: {},
-  handler: async (ctx): Promise<{ skipped?: string; feeds?: number; found?: number; added?: number }> => {
+  args: { all: v.optional(v.boolean()) },
+  handler: async (
+    ctx,
+    { all },
+  ): Promise<{ skipped?: string; feeds?: number; found?: number; seenAgain?: number; added?: number }> => {
     // An action has no database handle, so the config comes through the same
     // public query the clients read.
     const runtime = await ctx.runQuery(api.runtime.get, {});
     const perRun = runtime.chartFeedsPerRun;
     // The off switch. Zero here stops the job without a deploy — the same
     // shape as recsStrength, and for the same reason: anything that reaches
-    // outside on a timer should be stoppable from the dashboard.
-    if (perRun === 0) return { skipped: "chartFeedsPerRun is 0" };
+    // outside on a timer should be stoppable from the dashboard. A full sweep
+    // (`all`, started by hand) is the one exception.
+    if (perRun === 0 && !all) return { skipped: "chartFeedsPerRun is 0" };
 
     const feeds = allFeeds();
-    const start = await ctx.runQuery(internal.charts.cursor, {});
-    const slice = feedSlice(feeds, start, perRun);
+    const start = all ? 0 : await ctx.runQuery(internal.charts.cursor, {});
+    const slice = all ? feeds : feedSlice(feeds, start, perRun);
 
-    // Which storefronts a song charts in is the only language signal these
-    // feeds carry. Apple's genre taxonomy is mostly Western — an entire
-    // Bollywood chart comes back as "worldwide" — so charting in `in` is what
-    // tells us a track is likely Hindi, and `sa`/`ae` Arabic.
-    const seen = new Map<string, Set<string>>();
+    // Which storefronts a song charts in, and whether any of them carried it
+    // on its main chart. Apple files much of India's output as "worldwide",
+    // so the storefront is part of how langOf places a song.
+    const seen = new Map<string, { markets: Set<string>; headline: boolean }>();
     let answered = 0;
+    const failed: string[] = [];
     for (const feed of slice) {
       const res = await get(feed.url);
-      if (!res || !res.ok) continue;
-      let json: { feed?: { entry?: ChartEntry[] } };
-      try {
-        json = (await res.json()) as typeof json;
-      } catch {
+      let ids: string[] | null = null;
+      if (res && res.ok) {
+        try {
+          ids = feedIds(feed, await res.json());
+        } catch {
+          ids = null;
+        }
+      }
+      if (!ids) {
+        failed.push(feed.id);
         continue;
       }
-      const entries = json?.feed?.entry;
-      if (!Array.isArray(entries)) continue;
       answered++;
-      for (const e of entries) {
-        const id = e?.id?.attributes?.["im:id"];
-        if (!id) continue;
-        const markets = seen.get(id) ?? new Set<string>();
-        markets.add(feed.country);
-        seen.set(id, markets);
+      for (const id of ids) {
+        const entry = seen.get(id) ?? { markets: new Set<string>(), headline: false };
+        entry.markets.add(feed.country);
+        entry.headline = entry.headline || feed.headline;
+        seen.set(id, entry);
       }
     }
 
-    await ctx.runMutation(internal.charts.setCursor, {
-      next: (start + slice.length) % feeds.length,
-    });
-
-    if (seen.size === 0) {
-      await ctx.runMutation(internal.charts.report, {
-        value: { at: new Date().toISOString(), feeds: slice.length, answered, found: 0, added: 0 },
+    if (!all) {
+      await ctx.runMutation(internal.charts.setCursor, {
+        next: (start + slice.length) % feeds.length,
       });
-      return { feeds: slice.length, found: 0, added: 0 };
     }
 
-    // Ask the database what it already has before paying for the lookup. Most
-    // of a chart is last week's chart, so this is the difference between a few
-    // hundred detail rows a night and a few thousand.
+    const now = Date.now();
     const ids = [...seen.keys()];
-    const fresh = await ctx.runQuery(internal.charts.unknownIds, { ids });
-    if (fresh.length === 0) {
-      await ctx.runMutation(internal.charts.report, {
-        value: {
-          at: new Date().toISOString(),
-          feeds: slice.length,
-          answered,
-          found: ids.length,
-          added: 0,
-        },
+
+    // Songs already in the catalogue: restart their chart clock. Whatever it
+    // doesn't know comes back to be looked up.
+    let seenAgain = 0;
+    const fresh: string[] = [];
+    for (let i = 0; i < ids.length; i += 200) {
+      const r = await ctx.runMutation(internal.charts.markSeen, {
+        now,
+        rows: ids.slice(i, i + 200).map((trackId) => {
+          const e = seen.get(trackId)!;
+          return { trackId, markets: [...e.markets], headline: e.headline };
+        }),
       });
-      return { feeds: slice.length, found: ids.length, added: 0 };
+      seenAgain += r.updated;
+      fresh.push(...r.unknown);
     }
 
     // The lookup endpoint takes 100 ids at a time and is generous, not free.
     const details: ItunesTrack[] = [];
     for (let i = 0; i < fresh.length; i += 100) {
-      const batch = fresh.slice(i, i + 100);
-      const res = await get(
-        `https://itunes.apple.com/lookup?id=${batch.join(",")}&entity=song`,
-        25_000,
-      );
-      if (!res || !res.ok) continue;
-      try {
-        const json = (await res.json()) as { results?: ItunesTrack[] };
-        for (const r of json.results ?? []) {
-          if (r.wrapperType === "track" && r.previewUrl && r.artworkUrl100) details.push(r);
-        }
-      } catch {
-        /* a malformed batch is a lost batch, not a lost run */
-      }
+      details.push(...(await lookup(fresh.slice(i, i + 100))));
       if (i + 100 < fresh.length) await new Promise((r) => setTimeout(r, 1_200));
     }
 
     const rows = details.map((r) => {
-      const trackId = String(r.trackId);
-      return {
-        trackId,
-        title: r.trackName ?? "",
-        artist: r.artistName ?? "",
-        album: r.collectionName ?? "",
-        artwork: (r.artworkUrl100 ?? "").replace(/100x100bb/, "600x600bb"),
-        previewUrl: r.previewUrl ?? "",
-        durationMs: r.trackTimeMillis ?? 0,
-        genre: (r.primaryGenreName ?? "").toLowerCase(),
-        markets: [...(seen.get(trackId) ?? [])],
-      };
+      const e = seen.get(String(r.trackId));
+      return { ...rowOf(r), markets: [...(e?.markets ?? [])], headline: e?.headline ?? false };
     });
 
     // A track is four documents (itself plus three hook windows), so the
     // writes are chunked well inside one transaction's budget. A day the
     // charts turn over completely should not be the day this throws.
-    const added = { added: 0, unusable: 0 };
+    const added = { added: 0, unusable: 0, hidden: 0 };
     for (let i = 0; i < rows.length; i += 60) {
       const part = await ctx.runMutation(internal.charts.absorb, {
+        now,
         tracks: rows.slice(i, i + 60),
       });
       added.added += part.added;
       added.unusable += part.unusable;
+      added.hidden += part.hidden;
     }
 
     await ctx.runMutation(internal.charts.report, {
       value: {
-        at: new Date().toISOString(),
+        at: new Date(now).toISOString(),
         feeds: slice.length,
         answered,
+        failed,
         found: ids.length,
+        seenAgain,
         added: added.added,
+        hiddenOnArrival: added.hidden,
         unusable: added.unusable,
       },
     });
-    return { feeds: slice.length, found: ids.length, added: added.added };
+    return { feeds: slice.length, found: ids.length, seenAgain, added: added.added };
   },
 });
+
+/** Apple's details for up to 100 ids; anything without a preview or artwork is dropped. */
+export async function lookup(ids: string[]): Promise<ItunesTrack[]> {
+  const res = await get(`https://itunes.apple.com/lookup?id=${ids.join(",")}&entity=song`, 25_000);
+  if (!res || !res.ok) return [];
+  try {
+    const json = (await res.json()) as { results?: ItunesTrack[] };
+    return (json.results ?? []).filter(
+      (r) => r.wrapperType === "track" && !!r.previewUrl && !!r.artworkUrl100,
+    );
+  } catch {
+    return []; // a malformed batch is a lost batch, not a lost run
+  }
+}
+
+/** A lookup result in the shape absorb takes. */
+export function rowOf(r: ItunesTrack) {
+  return {
+    trackId: String(r.trackId),
+    title: r.trackName ?? "",
+    artist: r.artistName ?? "",
+    album: r.collectionName ?? "",
+    artwork: (r.artworkUrl100 ?? "").replace(/100x100bb/, "600x600bb"),
+    previewUrl: r.previewUrl ?? "",
+    durationMs: r.trackTimeMillis ?? 0,
+    genre: (r.primaryGenreName ?? "").toLowerCase(),
+    releaseDate: typeof r.releaseDate === "string" ? r.releaseDate.slice(0, 10) : "",
+  };
+}
 
 // ------------------------------------------------------------------ storage
 
@@ -281,24 +300,50 @@ export const report = internalMutation({
   },
 });
 
-/** Which of these the catalogue has never seen. Indexed, so it stays cheap. */
-export const unknownIds = internalQuery({
-  args: { ids: v.array(v.string()) },
-  handler: async (ctx, { ids }): Promise<string[]> => {
-    const out: string[] = [];
-    for (const id of ids.slice(0, 1_000)) {
-      const existing = await ctx.db
+/**
+ * Songs a chart carried that the catalogue already has: union the storefronts,
+ * restart the chart clock, and re-place the language now that there may be a
+ * new storefront to go on. Returns the ids it didn't know.
+ */
+export const markSeen = internalMutation({
+  args: {
+    now: v.number(),
+    rows: v.array(v.object({ trackId: v.string(), markets: v.array(v.string()), headline: v.boolean() })),
+  },
+  handler: async (ctx, { now, rows }): Promise<{ updated: number; unknown: string[] }> => {
+    let updated = 0;
+    let visible = false;
+    const unknown: string[] = [];
+    for (const r of rows) {
+      const t = await ctx.db
         .query("tracks")
-        .withIndex("by_trackId", (q) => q.eq("trackId", id))
+        .withIndex("by_trackId", (q) => q.eq("trackId", r.trackId))
         .unique();
-      if (!existing) out.push(id);
+      if (!t) {
+        unknown.push(r.trackId);
+        continue;
+      }
+      const markets = [...new Set([...(t.markets ?? []), ...r.markets])].slice(0, 12);
+      const lang = langOf({ ...t, markets });
+      const grew = markets.length !== (t.markets?.length ?? 0);
+      const moved = lang !== (t.lang ?? "");
+      await ctx.db.patch(t._id, {
+        chartedAt: now,
+        ...(r.headline ? { headlineAt: now } : {}),
+        ...(grew ? { markets } : {}),
+        ...(moved ? { lang } : {}),
+      });
+      updated++;
+      if (!t.hidden && (grew || moved)) visible = true;
     }
-    return out;
+    if (visible) await touchCatalog(ctx);
+    return { updated, unknown };
   },
 });
 
 export const absorb = internalMutation({
   args: {
+    now: v.optional(v.number()),
     tracks: v.array(
       v.object({
         trackId: v.string(),
@@ -310,12 +355,16 @@ export const absorb = internalMutation({
         durationMs: v.number(),
         genre: v.string(),
         markets: v.array(v.string()),
+        releaseDate: v.optional(v.string()),
+        headline: v.optional(v.boolean()),
       }),
     ),
   },
-  handler: async (ctx, { tracks }): Promise<{ added: number; unusable: number }> => {
+  handler: async (ctx, { tracks, now: at }): Promise<{ added: number; unusable: number; hidden: number }> => {
+    const now = at ?? Date.now();
     let added = 0;
     let unusable = 0;
+    let hidden = 0;
 
     for (const t of tracks) {
       // re-check inside the transaction: the lookup happened outside it
@@ -349,10 +398,22 @@ export const absorb = internalMutation({
       // public chart feed that produced the seeded catalogue, fetched by the
       // same code. Hiding it by default would mean the refresh does nothing
       // until somebody notices it ran, which is the problem it was built for.
+      //
+      // Filler (a karaoke version, a sped-up edit, a devotional chart's spill)
+      // arrives hidden by curation instead, the way the daily pass would hide
+      // it tomorrow — and, as with that pass, an admin can un-hide it.
+      const markets = t.markets.slice(0, 12);
+      const filler = fillerReason(clean);
+      if (filler) hidden++;
       await ctx.db.insert("tracks", {
         ...clean,
-        markets: t.markets.slice(0, 12),
+        markets,
         origin: "curated",
+        lang: langOf({ ...clean, markets }),
+        ...(t.releaseDate ? { releaseDate: t.releaseDate } : {}),
+        chartedAt: now,
+        ...(t.headline ? { headlineAt: now } : {}),
+        ...(filler ? { hidden: true, hiddenBy: "curation", hiddenReason: filler } : {}),
       });
 
       // Three windows, not one block. Nothing has measured this song's audio
@@ -374,17 +435,18 @@ export const absorb = internalMutation({
       added++;
     }
 
-    if (added > 0) await touchCatalog(ctx);
-    return { added, unusable };
+    if (added > hidden) await touchCatalog(ctx);
+    return { added, unusable, hidden };
   },
 });
 
 /** Run it now, from the dashboard, without waiting for the schedule. */
 export const refreshNow = mutation({
-  args: {},
-  handler: async (ctx): Promise<{ started: true }> => {
+  args: { all: v.optional(v.boolean()) },
+  handler: async (ctx, { all }): Promise<{ started: true }> => {
     await requirePermission(ctx, "catalog.curate");
-    await ctx.scheduler.runAfter(0, internal.charts.refresh, {});
+    // `all` sweeps every feed in one run instead of the next slice
+    await ctx.scheduler.runAfter(0, internal.charts.refresh, { all: all === true });
     return { started: true };
   },
 });

@@ -100,7 +100,14 @@ export const setHidden = mutation({
       .withIndex("by_trackId", (q) => q.eq("trackId", safeTrackId))
       .unique();
     if (track) {
-      await ctx.db.patch(track._id, { hidden });
+      // An admin's decision outranks the daily curation pass: a hide is marked
+      // as theirs, and an un-hide sets `keep` so curation never re-hides it.
+      await ctx.db.patch(
+        track._id,
+        hidden
+          ? { hidden, hiddenBy: "admin", hiddenReason: undefined, keep: undefined }
+          : { hidden, hiddenBy: undefined, hiddenReason: undefined, keep: true },
+      );
       await touchCatalog(ctx);
     }
   },

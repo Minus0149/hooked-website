@@ -113,6 +113,7 @@ type ServerTrackWithHooks = ServerTrack & {
   sound?: string;
   audioMood?: number[];
   vocal?: number;
+  lang?: string;
 };
 
 interface ServerLibrary {
@@ -131,6 +132,7 @@ const toLocal = (t: ServerTrackWithHooks): Track => ({
   sound: t.sound,
   audioMood: t.audioMood,
   vocal: t.vocal,
+  lang: t.lang,
   id: t.trackId,
   title: t.title,
   artist: t.artist,
@@ -510,7 +512,10 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
   const runtime = useQuery(api.runtime.get);
   useEffect(() => {
     if (!runtime) return;
-    setStrengths(runtime.moodStrength, runtime.modelStrength);
+    setStrengths(runtime.moodStrength, runtime.modelStrength, {
+      indiaPct: runtime.indiaSharePct,
+      pickedPct: runtime.pickedLangPct,
+    });
   }, [runtime, setStrengths]);
 
   /**

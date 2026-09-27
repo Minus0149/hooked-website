@@ -78,6 +78,8 @@ export function CatalogPanel({
                   <strong>{t.title}</strong>
                   <span>
                     {t.artist} · {t.genre}
+                    {t.lang ? ` · ${t.lang}` : ""}
+                    {t.hiddenReason ? ` · hidden by curation: ${t.hiddenReason}` : ""}
                   </span>
                 </div>
                 <div className="admin-track-stats">

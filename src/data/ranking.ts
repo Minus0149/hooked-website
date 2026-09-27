@@ -1,5 +1,13 @@
 import type { Track } from "../types";
-import { EMPTY_TASTE, genreBoostScore, tasteScore, type TastePrefs } from "./taste";
+import {
+  EMPTY_TASTE,
+  flattenGenre,
+  genreBoostScore,
+  isIndianLanguage,
+  langMatch,
+  tasteScore,
+  type TastePrefs,
+} from "./taste";
 import { moodFitFor, type CrowdMoods, type MoodId } from "./mood";
 import { likeBias, type TasteModel } from "./predict";
 import { SOUND_PLACES, soundScore, type SoundTaste } from "./sound";
@@ -46,7 +54,25 @@ export type Steer = {
   sound: SoundTaste | null;
   /** How far a sound match may pull a track, in places, at full confidence. */
   soundStrength: number;
+  /** The India/global and picked-language split (runtime config); DEFAULT_MIX when absent. */
+  mix?: RegionMix;
 };
+
+/**
+ * What the deck is made of, in percent. 0 switches a rule off.
+ *
+ *  - indiaPct: the Indian share for someone who picked no language — a guest,
+ *    or "just the hits". This is an India-first product, and before the split
+ *    existed the deck was 3% Indian because the catalogue was.
+ *  - pickedPct: for someone who did pick, the share in a language they
+ *    picked. The rest is discovery — an English-only listener meets some
+ *    Hindi, and is never buried in it.
+ *
+ * Admin-editable (indiaSharePct, pickedLangPct in runtime config).
+ */
+export type RegionMix = { indiaPct: number; pickedPct: number };
+export const DEFAULT_MIX: RegionMix = { indiaPct: 60, pickedPct: 80 };
+export const NO_MIX: RegionMix = { indiaPct: 0, pickedPct: 0 };
 
 /**
  * Client defaults for the two signals that work with no backend at all.
@@ -73,6 +99,7 @@ export const NO_STEER: Steer = {
   modelStrength: MODEL_PLACES,
   sound: null,
   soundStrength: SOUND_PLACES,
+  mix: NO_MIX,
 };
 
 export function shuffle<T>(arr: T[]): T[] {
@@ -140,7 +167,10 @@ export function rankPool(pool: Track[], steer: Steer): Track[] {
         : 0),
   }));
   scored.sort((a, b) => a.key - b.key);
-  const ordered = scored.map((s) => s.t);
+  const ordered = mixDeck(
+    scored.map((s) => s.t),
+    steer,
+  );
   if (!useMood) return spreadArtists(ordered);
   const fits: Track[] = [];
   const rest: Track[] = [];
@@ -149,6 +179,63 @@ export function rankPool(pool: Track[], steer: Steer): Track[] {
   }
   // spread each side on its own, so variety never pulls an off-mood song forward
   return [...spreadArtists(fits), ...spreadArtists(rest)];
+}
+
+/**
+ * Two ranked streams, dealt so that `pct` percent of every stretch of the deck
+ * comes from the first — each stream keeping its own order. When one runs out
+ * the other simply continues, so nothing is ever dropped.
+ */
+export function interleave<T>(ordered: T[], inFirst: (t: T) => boolean, pct: number): T[] {
+  if (pct <= 0) return ordered;
+  const a: T[] = [];
+  const b: T[] = [];
+  for (const t of ordered) (inFirst(t) ? a : b).push(t);
+  const share = Math.min(pct, 100) / 100;
+  const out: T[] = [];
+  let ia = 0;
+  let ib = 0;
+  while (ia < a.length || ib < b.length) {
+    const wantA = ia < share * (out.length + 1);
+    if ((wantA && ia < a.length) || ib >= b.length) out.push(a[ia++]);
+    else out.push(b[ib++]);
+  }
+  return out;
+}
+
+/**
+ * US country is dealt only to someone who asked for it — at onboarding, or by
+ * a right-swipe on a country song. It isn't removed, it goes to the back: a
+ * taste filter, not a deletion.
+ */
+export function unaskedCountry(
+  track: Pick<Track, "genre" | "lang">,
+  steer: Pick<Steer, "taste" | "boostGenres">,
+): boolean {
+  if (!flattenGenre(track.genre ?? "").includes("country") || isIndianLanguage(track.lang)) return false;
+  if (steer.taste.genres.includes("country")) return false;
+  return !steer.boostGenres.some((g) => flattenGenre(g).includes("country"));
+}
+
+/**
+ * The deck's shape after scoring: country to the back unless asked for, then
+ * the region/language split (RegionMix). Only once the catalogue carries
+ * language tags — the bundled one doesn't, and a split on guesses would be
+ * worse than none.
+ */
+export function mixDeck(ordered: Track[], steer: Steer): Track[] {
+  const back: Track[] = [];
+  const front: Track[] = [];
+  for (const t of ordered) (unaskedCountry(t, steer) ? back : front).push(t);
+  const mix = steer.mix ?? DEFAULT_MIX;
+  const languages = steer.taste.languages;
+  let mixed = front;
+  if (languages.length > 0) {
+    mixed = interleave(front, (t) => langMatch(t, languages) > 0, mix.pickedPct);
+  } else if (front.some((t) => t.lang)) {
+    mixed = interleave(front, (t) => isIndianLanguage(t.lang), mix.indiaPct);
+  }
+  return back.length ? [...mixed, ...back] : mixed;
 }
 
 /**

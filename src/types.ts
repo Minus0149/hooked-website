@@ -25,6 +25,12 @@ export interface Track {
   hooks?: HookWindow[];
   /** iTunes storefronts this charted in — the language signal */
   markets?: string[];
+  /**
+   * The language the server placed it in (convex/catalogRules.ts langOf):
+   * "hi", "pa", "en"… or "in" for Indian of unknown language. Absent on the
+   * bundled catalogue and older servers; taste.ts falls back to markets.
+   */
+  lang?: string;
   /** play count normalised 0..1 against the catalogue's leader (hourly job) */
   heat?: number;
   /**

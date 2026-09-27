@@ -22,6 +22,12 @@ type RuntimeConfig = {
   recsMinRaters: number;
   recsMinSupport: number;
   chartFeedsPerRun: number;
+  indiaSharePct: number;
+  pickedLangPct: number;
+  artistCap: number;
+  staleWeeks: number;
+  maxAgeYears: number;
+  oldChartDays: number;
   moodStrength: number;
   moodMinVotes: number;
   modelStrength: number;
@@ -79,9 +85,15 @@ const GROUPS: {
   },
   {
     title: "Catalogue",
-    lede: "The nightly pull from Apple's charts. Each run takes the next few of a hundred feeds, so a full sweep is about ten days — new songs arrive with provisional hooks until scripts/analyze-hooks.mjs has measured their audio.",
+    lede: "What the deck is made of. Each night pulls the next few of 32 Apple chart feeds (India's own genre charts first, then the Western headline charts), and a daily curation pass hides filler, covers, sped-up versions, one artist flooding the deck, and songs that have left every chart. Curation only hides — an admin un-hide sticks, and saved songs stay in libraries. New songs arrive with provisional hooks until their audio is analysed.",
     fields: [
-      { key: "chartFeedsPerRun", label: "chart feeds per night", hint: "0 stops the job entirely", min: 0, max: 100 },
+      { key: "chartFeedsPerRun", label: "chart feeds per night", hint: "of 32; 0 stops the job entirely", min: 0, max: 100 },
+      { key: "indiaSharePct", label: "Indian share of the deck (%)", hint: "for listeners who picked no language; 0 leaves it to the shuffle", min: 0, max: 100 },
+      { key: "pickedLangPct", label: "picked-language share (%)", hint: "for listeners who picked languages; the rest is discovery. 0 turns it off", min: 0, max: 100 },
+      { key: "artistCap", label: "songs per artist", hint: "curation keeps each artist's strongest few", min: 1, max: 50 },
+      { key: "staleWeeks", label: "off the charts for (weeks)", hint: "then it stops being dealt", min: 1, max: 520 },
+      { key: "maxAgeYears", label: "back-catalogue cutoff (years)", hint: "older songs are dealt only while charting", min: 1, max: 100 },
+      { key: "oldChartDays", label: "\"charting\" means within (days)", hint: "for those older songs; a full sweep takes two nights", min: 1, max: 365 },
     ],
   },
   {
@@ -99,6 +111,7 @@ export function ConfigPanel() {
   const refreshAnalytics = useMutation(api.admin.refreshAnalytics);
   const rebuildRecs = useMutation(api.recommend.refresh);
   const pullCharts = useMutation(api.charts.refreshNow);
+  const curateNow = useMutation(api.curation.runNow);
   const [draft, setDraft] = useState<Partial<RuntimeConfig>>({});
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -204,7 +217,7 @@ export function ConfigPanel() {
           className="aq-btn"
           disabled={saving}
           onClick={() => {
-            void pullCharts()
+            void pullCharts({})
               .then(() =>
                 setNote(
                   "Pulling the next few chart feeds — new songs appear in the catalogue as they land.",
@@ -214,6 +227,17 @@ export function ConfigPanel() {
           }}
         >
           Pull from the charts now
+        </button>
+        <button
+          className="aq-btn"
+          disabled={saving}
+          onClick={() => {
+            void curateNow()
+              .then(() => setNote("Curating — the deck's catalogue updates in a minute or two."))
+              .catch((e: Error) => setNote(e.message));
+          }}
+        >
+          Curate the catalogue now
         </button>
         {note && <span className="config-note">{note}</span>}
       </footer>

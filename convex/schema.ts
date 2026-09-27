@@ -229,6 +229,27 @@ export default defineSchema({
      * when a rights holder disagrees (36-hour takedown target).
      */
     rightsConfirmedAt: v.optional(v.string()),
+    /**
+     * The language the deck treats this song as (convex/catalogRules.ts langOf):
+     * from its script, then its genre, then where it charts. "in" is Indian with
+     * no finer signal. Absent until a chart pull or the backfill has seen it.
+     */
+    lang: v.optional(v.string()),
+    /** Apple's release date (ISO), for the "prefer the last few years" rule */
+    releaseDate: v.optional(v.string()),
+    /** last time any chart feed carried it (ms) — the freshness clock */
+    chartedAt: v.optional(v.number()),
+    /** last time a storefront's main chart carried it (ms) — keeps a classic dealable */
+    headlineAt: v.optional(v.number()),
+    /**
+     * Who hid it: "curation" (the daily pass, which may also un-hide it) or
+     * "admin". Absent on older hides, which curation treats as someone else's.
+     */
+    hiddenBy: v.optional(v.string()),
+    /** why curation hid it: filler, cover, variant, devotional, stale, old, artist-cap */
+    hiddenReason: v.optional(v.string()),
+    /** an admin un-hid it on purpose: curation never hides it again */
+    keep: v.optional(v.boolean()),
   })
     .index("by_trackId", ["trackId"])
     .index("by_owner", ["ownerUserId"])

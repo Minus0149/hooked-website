@@ -796,6 +796,9 @@ type CatalogRow = {
   genre: string;
   artwork: string;
   hidden?: boolean;
+  /** why curation hid it (filler, stale, artist-cap…); absent for a person's hide */
+  hiddenReason?: string;
+  lang?: string;
   plays: number;
   saves: number;
   nevers: number;
@@ -814,6 +817,8 @@ async function catalogRow(ctx: QueryCtx, t: Doc<"tracks">): Promise<CatalogRow> 
     genre: t.genre,
     artwork: t.artwork,
     hidden: t.hidden,
+    hiddenReason: t.hiddenBy === "curation" ? t.hiddenReason : undefined,
+    lang: t.lang,
     plays: swipes.length,
     saves: swipes.filter((s) => s.action === "save").length,
     nevers: swipes.filter((s) => s.action === "never").length,

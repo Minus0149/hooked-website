@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildQueue,
+  DEFAULT_MIX,
   fitsMood,
+  interleave,
+  NO_MIX,
+  unaskedCountry,
   moodQueue,
   NO_STEER,
   rankPool,
@@ -9,7 +13,7 @@ import {
   uniqueById,
   type Steer,
 } from "../src/data/ranking";
-import { EMPTY_TASTE } from "../src/data/taste";
+import { EMPTY_TASTE, isIndianLanguage, langMatch } from "../src/data/taste";
 import { featuresOf, trainTaste } from "../src/data/predict";
 import type { Track } from "../src/types";
 
@@ -341,5 +345,97 @@ describe("a new catalogue arriving mid-listen", () => {
     expect(keepOnScreen(onScreen, rebuilt).map((t) => t.id)).toEqual(["valerie", "humble", "dna"]);
     expect(keepOnScreen(onScreen, [{ id: "humble" }]).map((t) => t.id)).toEqual(["valerie", "humble"]);
     expect(keepOnScreen(undefined, rebuilt)).toBe(rebuilt);
+  });
+});
+
+describe("what the deck is made of", () => {
+  // deterministic shuffle: with Math.random pinned, rankPool keeps pool order
+  // apart from what the scoring moves
+  beforeEach(() => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const langs = (ts: Track[]) => ts.map((t) => t.lang);
+  const share = (ts: Track[], pred: (t: Track) => boolean) => ts.filter(pred).length / ts.length;
+  const indian = (t: Track) => isIndianLanguage(t.lang);
+
+  it("interleaves two ranked streams at the asked share, each in its own order", () => {
+    const xs = [..."aaaaaaaaaa", ..."bbbbbbbbbb"].map((c, i) => `${c}${i}`);
+    const out = interleave(xs, (x) => x.startsWith("a"), 60);
+    expect(out.slice(0, 5).filter((x) => x.startsWith("a"))).toHaveLength(3);
+    expect(out.filter((x) => x.startsWith("a"))).toEqual(xs.filter((x) => x.startsWith("a")));
+    expect(new Set(out).size).toBe(xs.length);
+  });
+
+  it("never drops a song when one stream runs out", () => {
+    const out = interleave(["a1", "b1", "b2", "b3", "b4"], (x) => x.startsWith("a"), 90);
+    expect(out).toHaveLength(5);
+    expect(interleave(["b1"], () => true, 0)).toEqual(["b1"]);
+  });
+
+  // a catalogue that is 5% Indian, the way prod's was
+  const catalogue = pool(200, (i) => ({ lang: i % 20 === 0 ? "hi" : "en", genre: "pop" }));
+
+  it("deals 60% Indian to someone who picked no language, from a mostly-English catalogue", () => {
+    const first = rankPool(catalogue, { ...NO_STEER, mix: DEFAULT_MIX }).slice(0, 10);
+    expect(share(first, indian)).toBeCloseTo(0.6, 1);
+  });
+
+  it("uses the admin's share, and 0 leaves it to the shuffle", () => {
+    const first = rankPool(catalogue, { ...NO_STEER, mix: { indiaPct: 20, pickedPct: 80 } }).slice(0, 10);
+    expect(share(first, indian)).toBeCloseTo(0.2, 1);
+    const off = rankPool(catalogue, { ...NO_STEER, mix: NO_MIX }).slice(0, 10);
+    expect(share(off, indian)).toBeLessThan(0.2);
+  });
+
+  it("doesn't bury an English-only listener in Hindi", () => {
+    const hindiHeavy = pool(200, (i) => ({ lang: i % 5 === 0 ? "en" : "hi" }));
+    const steer: Steer = { ...NO_STEER, taste: { ...EMPTY_TASTE, languages: ["en"] }, mix: DEFAULT_MIX };
+    const first = rankPool(hindiHeavy, steer).slice(0, 20);
+    expect(share(first, (t) => t.lang === "en")).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("gives a Hindi + Punjabi listener mostly Hindi and Punjabi", () => {
+    const mixed = pool(300, (i) => ({ lang: ["en", "ta", "hi", "pa", "en", "ko"][i % 6] }));
+    const steer: Steer = { ...NO_STEER, taste: { ...EMPTY_TASTE, languages: ["hi", "pa"] }, mix: DEFAULT_MIX };
+    const first = rankPool(mixed, steer).slice(0, 20);
+    expect(share(first, (t) => t.lang === "hi" || t.lang === "pa")).toBeGreaterThanOrEqual(0.8);
+    expect(langs(first)).toContain("en"); // and still some discovery
+  });
+
+  it("counts an Indian song of unknown language as close for an Indian-language pick", () => {
+    expect(langMatch({ genre: "worldwide", lang: "in" }, ["pa"])).toBe(1);
+    expect(langMatch({ genre: "worldwide", lang: "in" }, ["en"])).toBe(0);
+    expect(langMatch({ genre: "pop", lang: "en", markets: ["in"] }, ["hi"])).toBe(0);
+  });
+
+  it("falls back to genre and storefront on a catalogue without language tags", () => {
+    expect(langMatch({ genre: "bollywood" }, ["hi"])).toBe(2);
+    expect(langMatch({ genre: "pop", markets: ["in"] }, ["hi"])).toBe(1);
+    const untagged = pool(40, (i) => ({ genre: i % 2 ? "pop" : "bollywood" }));
+    // no tags anywhere: no India split is attempted on guesses
+    expect(rankPool(untagged, { ...NO_STEER, mix: DEFAULT_MIX }).map((t) => t.id)).toEqual(
+      rankPool(untagged, { ...NO_STEER, mix: NO_MIX }).map((t) => t.id),
+    );
+  });
+
+  it("sends US country to the back unless the listener asked for country", () => {
+    const withCountry = pool(30, (i) => ({ genre: i < 10 ? "country" : "pop", lang: "en" }));
+    const dealt = rankPool(withCountry, { ...NO_STEER, mix: DEFAULT_MIX });
+    expect(dealt.slice(0, 20).some((t) => t.genre === "country")).toBe(false);
+    expect(dealt).toHaveLength(30); // pushed back, never removed
+
+    const fan: Steer = { ...NO_STEER, taste: { ...EMPTY_TASTE, genres: ["country"] }, mix: DEFAULT_MIX };
+    expect(rankPool(withCountry, fan).slice(0, 10).some((t) => t.genre === "country")).toBe(true);
+    const swiped: Steer = { ...NO_STEER, boostGenres: ["country"], mix: DEFAULT_MIX };
+    expect(unaskedCountry({ genre: "country", lang: "en" }, swiped)).toBe(false);
+  });
+
+  it("doesn't mistake Indian folk for American country", () => {
+    expect(unaskedCountry({ genre: "indian folk", lang: "in" }, NO_STEER)).toBe(false);
+    expect(unaskedCountry({ genre: "country", lang: "hi" }, NO_STEER)).toBe(false);
   });
 });
