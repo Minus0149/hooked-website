@@ -71,3 +71,19 @@ describe("song search", () => {
     expect(searchSongs(songs, "a", 2)).toHaveLength(2);
   });
 });
+
+describe("song search speed", () => {
+  // a phone lagged behind typing when every keystroke re-normalized the catalogue
+  it("prepares a 6,000-song catalogue once, so later keystrokes are fast", () => {
+    const big = Array.from({ length: 6000 }, (_, i) => ({
+      id: String(i),
+      title: `Song number ${i} (From "Film ${i % 300}")`,
+      artist: `Artist ${i % 900}, Singer ${i % 77}`,
+      album: `Album ${i % 500}`,
+    }));
+    searchSongs(big, "s");
+    const start = performance.now();
+    for (const q of ["so", "son", "song", "song n", "song nu"]) searchSongs(big, q);
+    expect((performance.now() - start) / 5).toBeLessThan(40);
+  });
+});

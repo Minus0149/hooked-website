@@ -123,14 +123,16 @@ function score(p: Prepared, q: string, tokens: string[], fuzzy: boolean): number
 }
 
 /**
- * The songs that match `query`, best first, at most `limit`. Duplicates of
- * the same song (same title and artist) are shown once.
+ * The catalogue, normalized once and reused for every keystroke: normalizing
+ * 5,000+ songs per letter typed made a phone's search lag behind the typing.
+ * Keyed on the array itself, so a new catalogue is prepared afresh.
  */
-export function searchSongs<T extends Searchable>(tracks: T[], query: string, limit = 50): T[] {
-  const q = normalizeText(query);
-  if (!q) return [];
-  const tokens = words(q);
-  const prepared: (Prepared & { t: T })[] = tracks.map((t) => {
+const prepared = new WeakMap<object, Prepared[]>();
+
+function prepare<T extends Searchable>(tracks: T[]): (Prepared & { t: T })[] {
+  const hit = prepared.get(tracks);
+  if (hit) return hit as (Prepared & { t: T })[];
+  const rows = tracks.map((t) => {
     const title = normalizeText(t.title);
     return {
       t,
@@ -141,6 +143,19 @@ export function searchSongs<T extends Searchable>(tracks: T[], query: string, li
       artistNames: names(t.artist.toLowerCase()),
     };
   });
+  prepared.set(tracks, rows);
+  return rows;
+}
+
+/**
+ * The songs that match `query`, best first, at most `limit`. Duplicates of
+ * the same song (same title and artist) are shown once.
+ */
+export function searchSongs<T extends Searchable>(tracks: T[], query: string, limit = 50): T[] {
+  const q = normalizeText(query);
+  if (!q) return [];
+  const tokens = words(q);
+  const prepared = prepare(tracks);
 
   const run = (fuzzy: boolean) =>
     prepared
