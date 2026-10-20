@@ -9,11 +9,18 @@ import { readFileSync } from "node:fs";
  */
 const AS_A_WORD = /(?<![A-Za-z0-9_@./:\-])hookedcue(?![A-Za-z0-9_@\-])(?!\.[A-Za-z])(?!:[A-Za-z])/;
 
+/**
+ * Files where "hookedcue" is a lowercase @handle, not the product name: the
+ * username rules reserve it (no one may register @hookedcue), and their test
+ * checks that. This guard's own pattern is the third.
+ */
+const EXEMPT = ["tests/brand-name.test.ts", "src/lib/username.ts", "tests/username.test.ts"];
+
 describe("the product name", () => {
   it("is HookedCue wherever it is read as a word", () => {
     const files = execSync("git ls-files", { encoding: "utf8" })
       .split("\n")
-      .filter((f) => /\.(tsx?|html|json|md|txt)$/.test(f) && !/(^|\/)package(-lock)?\.json$/.test(f) && f !== "tests/brand-name.test.ts");
+      .filter((f) => /\.(tsx?|html|json|md|txt)$/.test(f) && !/(^|\/)package(-lock)?\.json$/.test(f) && !EXEMPT.includes(f));
     const offenders: string[] = [];
     for (const f of files) {
       const lines = readFileSync(f, "utf8").split("\n");
