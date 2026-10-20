@@ -18,6 +18,7 @@ import {
   validateSaveTarget,
 } from "./security";
 import { touchCatalog } from "./catalog";
+import { normalizeUsername, usernameProblem } from "../src/lib/username";
 
 export type ProfileVerdict =
   | "create"
@@ -132,6 +133,7 @@ export const getLibrary = query({
       isAdmin: profile?.isAdmin ?? false,
       permissions: profile?.permissions ?? [],
       email: profile?.email ?? user.email ?? "",
+      username: profile?.username ?? null,
     };
   },
 });
@@ -495,10 +497,60 @@ export const setTaste = mutation({
       taste: {
         // bounded: these are ids from a fixed list, not free text
         languages: args.languages.slice(0, 12).map((x) => cleanText(x, 8)),
-        genres: args.genres.slice(0, 16).map((x) => cleanText(x, 16)),
+        genres: args.genres.slice(0, 24).map((x) => cleanText(x, 16)),
         adventure: cleanText(args.adventure, 8),
       },
     });
+  },
+});
+
+/**
+ * Can this @handle be taken? Asked as someone types. The rules are checked
+ * first (no request needed for those), then whether anyone else holds it.
+ */
+export const usernameStatus = query({
+  args: { username: v.string() },
+  handler: async (ctx, { username }): Promise<{ ok: boolean; problem: string | null }> => {
+    const name = normalizeUsername(username.slice(0, 64));
+    const problem = usernameProblem(name);
+    if (problem) return { ok: false, problem };
+    const user = await authComponent.safeGetAuthUser(ctx);
+    const holder = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", name))
+      .first();
+    if (holder && holder.userId !== (user ? String(user._id) : "")) return { ok: false, problem: "That name is taken." };
+    return { ok: true, problem: null };
+  },
+});
+
+/**
+ * Take (or change, or clear with "") the signed-in listener's @handle. The
+ * rules and uniqueness are checked here whatever the app already checked;
+ * Convex runs mutations serially, so two people can't take one name at once.
+ */
+export const setUsername = mutation({
+  args: { username: v.string() },
+  handler: async (ctx, { username }) => {
+    const user = await requireUser(ctx);
+    const profile = await getProfile(ctx, user.id);
+    if (!profile) throw new Error("No profile");
+    ensureActiveProfile(profile);
+    await enforceRateLimit(ctx, `username:${user.id}`, 10, 60 * 60_000);
+    const name = normalizeUsername(username.slice(0, 64));
+    if (name === "") {
+      await ctx.db.patch(profile._id, { username: undefined });
+      return null;
+    }
+    const problem = usernameProblem(name);
+    if (problem) throw new Error(problem);
+    const holder = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", name))
+      .first();
+    if (holder && holder._id !== profile._id) throw new Error("That name is taken.");
+    await ctx.db.patch(profile._id, { username: name });
+    return name;
   },
 });
 

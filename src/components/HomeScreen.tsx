@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { useStore } from "../state/store";
 import type { Track } from "../types";
 import { art } from "../lib/art";
-import { IconHeart, IconFolder, IconPlay } from "./icons";
+import { IconHeart, IconFolder, IconPlay, IconSearch } from "./icons";
 import { useT } from "../lib/lang";
 import { Face } from "./faces";
 import { RecapCard } from "./RecapCard";
@@ -82,6 +82,7 @@ export function HomeScreen({
   onNewPlaylist,
   hookOfDay,
   onPlayHookOfDay,
+  onSearch,
   featured = null,
   onPlayFeatured,
   decks = [],
@@ -93,6 +94,8 @@ export function HomeScreen({
   /** today's pick, or null when hidden in Settings / nothing to pick */
   hookOfDay?: Track | null;
   onPlayHookOfDay?: (t: Track) => void;
+  /** opens song search (SearchScreen) */
+  onSearch?: () => void;
   featured?: FeaturedPick | null;
   onPlayFeatured?: (track: Track) => void;
   decks?: LiveDeck[];
@@ -193,6 +196,13 @@ export function HomeScreen({
       <motion.h1 className="home-title" variants={rise}>
         {t("what's your next")} <em>{t("obsession?")}</em>
       </motion.h1>
+
+      {onSearch && (
+        <motion.button type="button" className="home-search" variants={rise} onClick={onSearch}>
+          <IconSearch />
+          <span>{t("Search songs, artists, albums")}</span>
+        </motion.button>
+      )}
 
       {featured && (
         // unpaid and chosen by us, so it's labelled as a pick, never "promoted"

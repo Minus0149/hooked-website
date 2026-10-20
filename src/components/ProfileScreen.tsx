@@ -7,6 +7,7 @@ import { AccessGate } from "./AccessGate";
 import { AuthForm } from "./AuthForm";
 import { inApp } from "../lib/navigate";
 import { InviteCard } from "./InviteCard";
+import { UsernameField } from "./UsernameField";
 
 import { useT } from "../lib/lang";
 export function ProfileScreen({
@@ -62,6 +63,7 @@ export function ProfileScreen({
             {(session.data.user.email ?? "?").slice(0, 1).toUpperCase()}
           </div>
           <h2 className="profile-email">{session.data.user.email}</h2>
+          <UsernameField />
           <p className="profile-sub">
             <IconCheck size={13} /> Your swipes and library sync to the cloud
           </p>

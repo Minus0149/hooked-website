@@ -32,6 +32,7 @@ import { Onboarding } from "./components/Onboarding";
 import { SaveTargetSheet } from "./components/SaveTargetSheet";
 import { VolumeRail } from "./components/VolumeControl";
 import { ProfileScreen } from "./components/ProfileScreen";
+import { SearchScreen } from "./components/SearchScreen";
 import { AccessGate, AccessPending } from "./components/AccessGate";
 // Staff-only screens. Split out so a listener never downloads the dashboards —
 // between them they're a third of the bundle and nobody on the deck opens them.
@@ -1195,6 +1196,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
                 onNewPlaylist={() => setNewPlaylistOpen(true)}
                 hookOfDay={hookOfDayShown ? hookOfDay : null}
                 onPlayHookOfDay={(t) => goDiscover(t.id)}
+                onSearch={() => setViewWithHistory("search")}
               />
             </>
           )}
@@ -1255,6 +1257,9 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
                 )}
               </AnimatePresence>
             </>
+          )}
+          {view === "search" && (
+            <SearchScreen onBack={() => setViewWithHistory("home")} onPlay={playFeatured} />
           )}
           {view === "profile" && (
             <ProfileScreen

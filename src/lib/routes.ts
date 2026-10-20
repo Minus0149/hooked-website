@@ -11,6 +11,7 @@ export type View =
   | "home"
   | "discover"
   | "profile"
+  | "search"
   | "settings"
   | `settings:${string}`
   | `library:${string}`;
@@ -32,6 +33,7 @@ export function routeFor(pathname: string, search = ""): Route {
   if (path === "/" || path === "/home") return { kind: "app", view: "home" };
   if (path === "/discover") return { kind: "app", view: "discover" };
   if (path === "/profile") return { kind: "app", view: "profile" };
+  if (path === "/search") return { kind: "app", view: "search" };
   if (path === "/settings") return { kind: "app", view: "settings" };
   if (path === "/join")
     return { kind: "join", email: params.get("email") ?? "" };

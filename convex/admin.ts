@@ -718,6 +718,7 @@ export const users = query({
         return {
           profileId: p._id,
           email: p.email,
+          username: p.username ?? null,
           isAdmin: p.isAdmin,
           suspended: p.suspended ?? false,
           permissions: p.permissions ?? [],

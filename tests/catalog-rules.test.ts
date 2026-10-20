@@ -34,6 +34,18 @@ describe("sources", () => {
     }
   });
 
+  it("covers the genres and regions the deck was thin on (2026-10-20)", () => {
+    const ids = FEEDS.map((f) => f.id);
+    for (const id of ["in:gujarati", "in:bhojpuri", "in:urdu", "in:indian-classical", "us:jazz", "us:classical", "us:k-pop", "us:soundtrack", "ng:all", "za:all", "eg:all", "jp:all"]) {
+      expect(ids, id).toContain(id);
+    }
+    // the additions are small: a sweep shouldn't double the catalogue
+    for (const id of ids.filter((x) => /^(us:(jazz|classical|blues|k-pop|latin|soundtrack)|(ng|za|eg|jp):all|in:(indian-classical|gujarati|bhojpuri|haryanvi|odia|assamese|rajasthani|urdu))$/.test(x))) {
+      expect(FEEDS.find((f) => f.id === id)!.url, id).toContain("limit=50");
+    }
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it("leaves the devotional chart out", () => {
     expect(FEEDS.some((f) => /genre=1267\//.test(f.url))).toBe(false);
   });
@@ -53,6 +65,13 @@ describe("langOf", () => {
     genre: "pop",
     markets: [] as string[],
     ...over,
+  });
+
+  it("knows the newer regional and Japanese genre names", () => {
+    expect(langOf(t({ genre: "gujarati", markets: ["in"] }))).toBe("in");
+    expect(langOf(t({ genre: "bhojpuri", markets: ["in"] }))).toBe("in");
+    expect(langOf(t({ genre: "urdu", markets: ["in"] }))).toBe("ur");
+    expect(langOf(t({ genre: "j-pop", markets: ["jp"] }))).toBe("ja");
   });
 
   it("reads the script first", () => {

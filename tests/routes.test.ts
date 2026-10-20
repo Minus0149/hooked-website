@@ -6,6 +6,8 @@ describe("routes", () => {
   it("reads the app's screens from plain paths", () => {
     expect(routeFor("/")).toEqual({ kind: "app", view: "home" });
     expect(routeFor("/profile")).toEqual({ kind: "app", view: "profile" });
+    expect(routeFor("/search")).toEqual({ kind: "app", view: "search" });
+    expect(pathForView("search")).toBe("/search");
     expect(routeFor("/settings/data/")).toEqual({ kind: "app", view: "settings:data" });
     expect(routeFor("/library/pl:k57Ab")).toEqual({ kind: "app", view: "library:pl:k57Ab" });
     expect(routeFor("/admin")).toEqual({ kind: "admin" });

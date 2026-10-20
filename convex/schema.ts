@@ -44,6 +44,8 @@ export default defineSchema({
     userId: v.string(), // Better Auth user id
     email: v.string(),
     name: v.optional(v.string()),
+    /** the @handle, lowercase, unique (src/lib/username.ts) */
+    username: v.optional(v.string()),
     isAdmin: v.boolean(),
     permissions: v.optional(v.array(v.string())),
     suspended: v.optional(v.boolean()), // suspended users can't write swipes
@@ -101,7 +103,8 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     // invite links report which invited friends actually made an account
-    .index("by_email", ["email"]),
+    .index("by_email", ["email"])
+    .index("by_username", ["username"]),
 
   playlists: defineTable({
     userId: v.string(),

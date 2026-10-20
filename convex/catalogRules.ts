@@ -63,6 +63,16 @@ export const FEEDS: Feed[] = [
   { id: "in:indian-folk", url: legacy("in", 1279, 50), country: "in", headline: false },
   { id: "in:sufi-ghazal", url: legacy("in", 1268, 50), country: "in", headline: false },
   { id: "in:hip-hop", url: legacy("in", 18), country: "in", headline: false },
+  // added 2026-10-20, each checked to return its own music: the rest of
+  // India's regional charts and its classical chart (not Devotional, above)
+  { id: "in:indian-classical", url: legacy("in", 1269, 50), country: "in", headline: false },
+  { id: "in:gujarati", url: legacy("in", 100038, 50), country: "in", headline: false },
+  { id: "in:bhojpuri", url: legacy("in", 100040, 50), country: "in", headline: false },
+  { id: "in:haryanvi", url: legacy("in", 100041, 50), country: "in", headline: false },
+  { id: "in:odia", url: legacy("in", 100042, 50), country: "in", headline: false },
+  { id: "in:assamese", url: legacy("in", 100039, 50), country: "in", headline: false },
+  { id: "in:rajasthani", url: legacy("in", 100043, 50), country: "in", headline: false },
+  { id: "in:urdu", url: legacy("in", 100044, 50), country: "in", headline: false },
   { id: "us:most-played", url: mostPlayed("us"), country: "us", headline: true, v2: true },
   { id: "us:all", url: legacy("us", null), country: "us", headline: true },
   { id: "gb:most-played", url: mostPlayed("gb"), country: "gb", headline: true, v2: true },
@@ -75,12 +85,25 @@ export const FEEDS: Feed[] = [
   { id: "us:alternative", url: legacy("us", 20), country: "us", headline: false },
   { id: "gb:dance", url: legacy("gb", 17), country: "gb", headline: false },
   { id: "us:country", url: legacy("us", 6, 50), country: "us", headline: false },
+  // small US genre charts for the genres the deck had almost none of
+  { id: "us:jazz", url: legacy("us", 11, 50), country: "us", headline: false },
+  { id: "us:classical", url: legacy("us", 5, 50), country: "us", headline: false },
+  { id: "us:blues", url: legacy("us", 2, 50), country: "us", headline: false },
+  { id: "us:k-pop", url: legacy("us", 51, 50), country: "us", headline: false },
+  { id: "us:latin", url: legacy("us", 12, 50), country: "us", headline: false },
+  { id: "us:soundtrack", url: legacy("us", 16, 50), country: "us", headline: false },
   { id: "ae:most-played", url: mostPlayed("ae"), country: "ae", headline: true, v2: true },
   { id: "ae:all", url: legacy("ae", null), country: "ae", headline: true },
   { id: "sa:all", url: legacy("sa", null), country: "sa", headline: true },
   // Korea has no iTunes song store, so its legacy chart is empty; Apple Music's isn't
   { id: "kr:most-played", url: mostPlayed("kr"), country: "kr", headline: true, v2: true },
   { id: "br:all", url: legacy("br", null), country: "br", headline: true },
+  // Afrobeats has no genre chart of its own; Nigeria's and South Africa's
+  // top charts are mostly it. Egypt for Arabic pop, Japan for J-pop.
+  { id: "ng:all", url: legacy("ng", null, 50), country: "ng", headline: true },
+  { id: "za:all", url: legacy("za", null, 50), country: "za", headline: true },
+  { id: "eg:all", url: legacy("eg", null, 50), country: "eg", headline: true },
+  { id: "jp:all", url: legacy("jp", null, 50), country: "jp", headline: true },
 ];
 
 // ------------------------------------------------------------------ language
@@ -115,6 +138,9 @@ const GENRE_LANG: [RegExp, string][] = [
   [/marathi/, "mr"],
   [/bengali|bangla/, "bn"],
   [/regional indian|indian folk|indian classical|carnatic|hindustani|^indian$|devotional/, "in"],
+  [/urdu/, "ur"],
+  [/gujarati|bhojpuri|haryanvi|odia|oriya|assamese|rajasthani|rabindra/, "in"],
+  [/j-pop|j-rock|japanese|anime/, "ja"],
   [/k-pop|korean/, "ko"],
   [/arabic|khaleeji|egyptian|levant|middle east/, "ar"],
   [/latin|reggaeton|urbano|salsa|bachata/, "es"],

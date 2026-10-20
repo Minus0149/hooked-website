@@ -20,6 +20,13 @@ export const IconBack = ({ size = 20, strokeWidth = 2.2 }: IconProps) => (
   </svg>
 );
 
+export const IconSearch = ({ size = 18, strokeWidth = 2.2 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={strokeWidth}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m20 20-4.2-4.2" />
+  </svg>
+);
+
 export const IconPlay = ({ size = 24 }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <path d="M8 5.5v13a.6.6 0 0 0 .92.5l10.2-6.5a.6.6 0 0 0 0-1L8.92 5a.6.6 0 0 0-.92.5Z" />
