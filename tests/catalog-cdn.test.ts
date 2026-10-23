@@ -127,7 +127,7 @@ describe("uploading a part", () => {
       sent = { url, init };
       return new Response(null, { status: 200 });
     }) as unknown as typeof fetch;
-    const body = JSON.stringify({ v: 21, rows: ["é"] });
+    const body = JSON.stringify({ v: 21, rows: ["Ã©"] });
     await putObject(aws, "https://abc.r2.cloudflarestorage.com/b/catalog/v21/0.json", body, fake);
     expect(sent).not.toBeNull();
     const { init } = sent!;

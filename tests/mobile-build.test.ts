@@ -5,7 +5,7 @@ import { HAS_MOBILE } from "./mobile-sibling";
 /**
  * The release bundle was 73 MB. Play sends each device only its own native
  * code, so what matters is not shipping code no device needs: 32-bit x86 is
- * gone. x86_64 stays — an ARM-only bundle crashes at launch on x86_64 devices
+ * gone. x86_64 stays â€” an ARM-only bundle crashes at launch on x86_64 devices
  * that translate ARM (SoLoader looks for lib/x86_64 inside the ARM split),
  * seen on the emulator 2026-09-28, and Play would still offer them the app.
  */
