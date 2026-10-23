@@ -31,6 +31,7 @@ body {
 
 #root {
   height: 100%;
+  height: 100dvh;
 }
 
 .fatal-screen {
@@ -147,12 +148,21 @@ button {
 
 .phone {
   width: min(400px, 100vw);
+  /* 100vh on iOS Safari / Android Chrome is the height with the browser bars
+     hidden, so the deck and the bottom nav ran under the toolbar. dvh is the
+     height actually visible right now; 100vh stays as the fallback. */
   height: min(860px, 100vh);
+  height: min(860px, 100dvh);
   position: relative;
   background: var(--bg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+/* Full-screen on a phone (viewport-fit=cover): keep the top bar clear of the
+   notch / status bar when it is opened from the home screen. */
+@media (max-width: 479px), (max-height: 899px) {
+  .phone { padding-top: env(safe-area-inset-top); }
 }
 @media (min-width: 480px) and (min-height: 900px) {
   .phone {
