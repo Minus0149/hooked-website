@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { HAS_MOBILE } from "./mobile-sibling";
 
 /**
  * The release bundle was 73 MB. Play sends each device only its own native
@@ -8,7 +9,7 @@ import { readFileSync } from "node:fs";
  * that translate ARM (SoLoader looks for lib/x86_64 inside the ARM split),
  * seen on the emulator 2026-09-28, and Play would still offer them the app.
  */
-describe("the Android release build", () => {
+describe.skipIf(!HAS_MOBILE)("the Android release build", () => {
   it("carries native code for ARM phones and x86_64, not 32-bit x86", () => {
     const plugins = JSON.parse(readFileSync("../mobile/app.json", "utf8")).expo.plugins as unknown[];
     const props = plugins.find((p) => Array.isArray(p) && p[0] === "expo-build-properties") as [string, { android: { buildArchs: string[] } }];

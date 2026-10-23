@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { storeUpdateAction } from "../../mobile/src/lib/storeUpdate";
+import { HAS_MOBILE } from "./mobile-sibling";
+
+// Loaded only where the phone app exists (see mobile-sibling.ts).
+const MOBILE_LIB = new URL("../../mobile/src/lib/storeUpdate.ts", import.meta.url).href;
+const { storeUpdateAction } = HAS_MOBILE
+  ? ((await import(/* @vite-ignore */ MOBILE_LIB)) as typeof import("../../mobile/src/lib/storeUpdate"))
+  : { storeUpdateAction: () => "" };
 
 /**
  * Store builds carry what over-the-air updates can't (native code). A newer
  * build is offered; one below the admin's minimum is required (Minus,
  * 2026-09-28: updates "shown in app or auto update").
  */
-describe("a newer build on Google Play", () => {
+describe.skipIf(!HAS_MOBILE)("a newer build on Google Play", () => {
   it("is offered, not forced, by default", () => {
     expect(storeUpdateAction({ available: true, installed: 5, minVersionCode: 0 })).toBe("offer");
   });

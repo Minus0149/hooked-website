@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { HAS_MOBILE } from "./mobile-sibling";
 
 /**
  * On Android the + and the notch's shoulders were sliced off flat (Minus,
@@ -7,10 +8,10 @@ import { readFileSync } from "node:fs";
  * BlurTargetView, a FrameLayout that clips each child to its bounds, so
  * whatever rises above the bar must lie inside the dock's own bounds.
  */
-const src = readFileSync("../mobile/src/components/BottomNav.tsx", "utf8");
+const src = HAS_MOBILE ? readFileSync("../mobile/src/components/BottomNav.tsx", "utf8") : "";
 const num = (name: string) => Number(new RegExp(`const ${name} = ([0-9]+)`).exec(src)?.[1]);
 
-describe("the phone's bottom nav", () => {
+describe.skipIf(!HAS_MOBILE)("the phone's bottom nav", () => {
   it("keeps room above the bar for everything that rises out of it", () => {
     const extra = /export const DOCK_ROOM = RISE \+ (\d+);/.exec(src);
     expect(extra).not.toBeNull();

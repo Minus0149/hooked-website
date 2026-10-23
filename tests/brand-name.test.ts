@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { HAS_MOBILE } from "./mobile-sibling";
 
 /**
  * The product is written "HookedCue" wherever a person reads it (Minus,
@@ -31,14 +32,14 @@ describe("the product name", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("is the name under the phone's launcher icon, with the store id unchanged", () => {
+  it.skipIf(!HAS_MOBILE)("is the name under the phone's launcher icon, with the store id unchanged", () => {
     const app = JSON.parse(readFileSync("../mobile/app.json", "utf8")).expo;
     expect(app.name).toBe("HookedCue");
     expect(app.android.package).toBe("com.minus.hookedcue");
     expect(app.slug).toBe("hooked-music");
   });
 
-  it("opens on the hook mark, not Expo's template splash (the grid and circles)", async () => {
+  it.skipIf(!HAS_MOBILE)("opens on the hook mark, not Expo's template splash (the grid and circles)", async () => {
     const { createHash } = await import("node:crypto");
     const sha = createHash("sha256").update(readFileSync("../mobile/assets/splash-icon.png")).digest("hex");
     const template = "5f4c0a732b6325bf4071d9124d2ae67e037cb24fcc9c482ef82bea742109a3b8";
