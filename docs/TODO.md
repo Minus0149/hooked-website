@@ -15,6 +15,12 @@ Nothing yet records:
 
 `recommend.rebuild` runs every 6 h but publishes nothing until at least 3 people have reacted to the same songs. Production had 14 swipes from 2 listeners on 28 Oct.
 
+## Audit 28 Oct 2026 (web, local commits, nothing deployed)
+- **Deploy, in this order:** `npx convex deploy -y` (prod: ConvexError refusals, social fixes, auth rate limits; schema unchanged), then the web app (Dokploy). Until both ship, prod still redacts every refusal to "Server Error", so a new account that hasn't confirmed its email sees the app with nothing syncing instead of "check your inbox".
+- Caddyfile now sends `X-Robots-Tag: noindex` on app screens; only `/` is indexable.
+- **Phone app needs the same:** read `err.data` (ConvexError) instead of `err.message`; Home "Because you wanted more" rows must skip blocked artists, buried and kept songs; the room join must wait for auth.
+- **Open:** per-playlist share cards (a `hookedcue.com/p/<id>` page like `/s/<id>`, plus a public-playlist card query); better-auth major upgrade for the remaining npm audit items; 981 of 6,377 prod tracks still play from 0 until the hook analyser backlog finishes.
+
 ## Social + when a hook ends (built 28 Oct 2026, web)
 - **When a hook ends** (Settings → Playback): next song (the default, as before), loop the hook, or keep playing the rest of the clip. Synced to the account. `convex/socialRules.ts` `afterHookAction`, wired in `src/audio/usePlayer.ts`.
 - **People** (`/people`): find people by @username, follow and unfollow, followers and following lists, and someone's page at `/u/<username>`.
