@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { useStore } from "../state/store";
 import type { Track } from "../types";
 import { art } from "../lib/art";
+import { becauseRows as becauseRowsFor } from "../lib/homeRows";
 import { IconHeart, IconFolder, IconPlay, IconSearch } from "./icons";
 import { useT } from "../lib/lang";
 import { Face } from "./faces";
@@ -127,38 +128,24 @@ export function HomeScreen({
     return { part, moods: moodsForHour(), suggested: DAYPART_MOOD[part] };
   }, []);
 
-  const becauseRows = useMemo(() => {
-    // the same song reaching the screen twice reads as a glitch — dedupe by
-    // normalized title+artist (catches chart+import twins with different ids)
-    // and never deal a song that's already visible in the queue below
-    const norm = (t: Track) =>
-      `${t.title}·${t.artist}`.toLowerCase().replace(/\(.*?\)/g, "").trim();
-    const queueIds = new Set(queue.map((t) => t.id));
-    const genres =
-      boostGenres.length > 0
-        ? boostGenres
-        : [...new Set(liked.map((t) => t.genre))].slice(0, 2);
-    return genres
-      .map((genre) => {
-        const seen = new Set<string>();
-        const tracks = catalog
-          .filter(
-            (t) =>
-              t.genre === genre &&
-              !liked.some((l) => l.id === t.id) &&
-              !queueIds.has(t.id),
-          )
-          .filter((t) => {
-            const key = norm(t);
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          })
-          .slice(0, 8);
-        return { genre, tracks };
-      })
-      .filter((r) => r.tracks.length > 0);
-  }, [boostGenres, liked, catalog, queue]);
+  // the deck's promises hold on Home too: no blocked artist, no buried song,
+  // nothing already kept (lib/homeRows.ts)
+  const becauseRows = useMemo(
+    () =>
+      becauseRowsFor({
+        catalog,
+        boostGenres,
+        liked,
+        discoveries,
+        playlists,
+        queue,
+        neverArtists: state.neverArtists,
+        neverTracks: state.neverTracks,
+        includeBuried: state.prefs.includeBuried,
+        includeBlockedArtists: state.prefs.includeBlockedArtists,
+      }),
+    [boostGenres, liked, discoveries, playlists, catalog, queue, state.neverArtists, state.neverTracks, state.prefs.includeBuried, state.prefs.includeBlockedArtists],
+  );
 
   const fresh = useMemo(() => queue.slice(0, 10), [queue]);
 
