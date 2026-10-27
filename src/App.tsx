@@ -43,6 +43,16 @@ const CreatorDashboard = lazy(() =>
   import("./components/CreatorDashboard").then((m) => ({ default: m.CreatorDashboard })),
 );
 import { LibraryScreen } from "./components/LibraryScreen";
+import {
+  FriendsCard,
+  JoinPlaylistScreen,
+  MutualScreen,
+  PeopleScreen,
+  RoomScreen,
+  SharedPlaylistScreen,
+  UserScreen,
+  type ServerSong,
+} from "./components/SocialScreens";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { NewPlaylistSheet, type PlaylistRules } from "./components/NewPlaylistSheet";
 import { inkOn } from "./lib/contrast";
@@ -318,6 +328,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
   const unblockArtistMutation = useMutation(api.library.unblockArtist);
   const setTasteMutation = useMutation(api.library.setTaste);
   const setPrefsMutation = useMutation(api.library.setPrefs);
+  const createRoomMutation = useMutation(api.social.createRoom);
   const recordAdEvent = useMutation(api.ads.recordEvent);
 
   // the web mirror of the mobile outbox: failed cloud writes queue in
@@ -415,6 +426,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
             adFrequency: merged.adFrequency,
             adCadence: merged.adCadence ?? undefined,
             moodByTime: merged.moodByTime,
+            afterHook: merged.afterHook,
             allowRepeats: merged.allowRepeats,
             includeBuried: merged.includeBuried,
             includeBlockedArtists: merged.includeBlockedArtists,
@@ -453,6 +465,9 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
           includeBuried: p.includeBuried,
           includeBlockedArtists: p.includeBlockedArtists,
           mood: coerceMood(p.mood) ?? undefined,
+          visibility: p.visibility === "public" ? "public" : "private",
+          collaborative: p.collaborative,
+          sharedBy: p.sharedBy,
           tracks: p.songs.map(toLocal),
         })),
         neverArtists: library.neverArtists,
@@ -811,6 +826,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
       console.warn(`[audio] source failed: ${src}`);
       showToast("That track's audio is gone — skipped", "⚠");
     },
+    state.prefs.afterHook,
   );
 
   // a promoted card counts as heard after 3 s of actual playing (paused time
@@ -1075,6 +1091,41 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     [jumpTo],
   );
 
+  // ----- Social (components/SocialScreens.tsx) -----
+  // a song from the feed, a profile or a shared playlist: the catalogue's copy
+  // when there is one (it carries the hook windows), else the stored fields
+  // the deck can hold songs that aren't in the catalogue (a hook of the day, a
+  // shared link, a library session), so those count as playable too
+  const catalogById = useMemo(() => {
+    const m = new Map(state.catalog.map((t) => [t.id, t]));
+    for (const t of [...state.queue, ...state.liked, ...state.discoveries, ...state.playlists.flatMap((p) => p.tracks)]) {
+      if (!m.has(t.id)) m.set(t.id, t);
+    }
+    return m;
+  }, [state.catalog, state.queue, state.liked, state.discoveries, state.playlists]);
+  const resolveTrack = useCallback((id: string) => catalogById.get(id) ?? null, [catalogById]);
+  const playSongs = useCallback(
+    (title: string, songs: ServerSong[], startId?: string) => {
+      const tracks: Track[] = songs.map(
+        (s) =>
+          catalogById.get(s.trackId) ?? {
+            id: s.trackId, title: s.title, artist: s.artist, album: s.album, artwork: s.artwork,
+            previewUrl: s.previewUrl, durationMs: s.durationMs, genre: s.genre, accent: s.accent,
+          },
+      );
+      if (tracks.length === 0) return;
+      startSession({ container: "social", title, tracks, shuffle: false, startId });
+      setViewWithHistory("discover");
+    },
+    [catalogById, startSession, setViewWithHistory],
+  );
+  const startRoom = useCallback(async () => {
+    // the room plays the host's own next songs, in deck order
+    const ids = [onDeck?.id, ...state.queue.map((t) => t.id)].filter((x): x is string => Boolean(x) && catalogById.has(x!));
+    const { code } = await createRoomMutation({ trackIds: [...new Set(ids)].slice(0, 40) });
+    setViewWithHistory(`room:${code}`);
+  }, [createRoomMutation, onDeck?.id, state.queue, catalogById, setViewWithHistory]);
+
   // A shared song link ("Open in HookedCue" on hookedcue.com/s/<id>) arrives as
   // ?track=<id>: put that song on top of the deck as soon as the catalogue that
   // holds it has loaded, once, and tidy the address.
@@ -1197,6 +1248,11 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
                 hookOfDay={hookOfDayShown ? hookOfDay : null}
                 onPlayHookOfDay={(t) => goDiscover(t.id)}
                 onSearch={() => setViewWithHistory("search")}
+                friends={
+                  signedIn ? (
+                    <FriendsCard onOpenPeople={() => setViewWithHistory("people")} onPlaySongs={playSongs} />
+                  ) : null
+                }
               />
             </>
           )}
@@ -1294,6 +1350,61 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
                 localStorage.removeItem(ONBOARD_KEY);
                 setOnboarded(false);
               }}
+            />
+          )}
+          {view === "people" && (
+            <PeopleScreen
+              onBack={() => setViewWithHistory("home")}
+              onOpenUser={(u) => setViewWithHistory(`user:${u}`)}
+              onStartRoom={startRoom}
+              onJoinRoom={(c) => setViewWithHistory(`room:${c}`)}
+              onPlaySongs={playSongs}
+            />
+          )}
+          {view.startsWith("user:") && (
+            <UserScreen
+              key={view}
+              username={view.slice(5)}
+              onBack={() => setViewWithHistory("people")}
+              onOpenUser={(u) => setViewWithHistory(`user:${u}`)}
+              onOpenMutual={(u) => setViewWithHistory(`mutual:${u}`)}
+              onOpenPlaylist={(id) =>
+                setViewWithHistory(
+                  state.playlists.some((p) => p.id === id && !p.sharedBy) ? `library:pl:${id}` : `playlist:${id}`,
+                )
+              }
+              onPlaySongs={playSongs}
+            />
+          )}
+          {view.startsWith("mutual:") && (
+            <MutualScreen
+              username={view.slice(7)}
+              onBack={() => setViewWithHistory(`user:${view.slice(7)}`)}
+              onPlaySongs={playSongs}
+            />
+          )}
+          {view.startsWith("playlist:") && (
+            <SharedPlaylistScreen
+              playlistId={view.slice(9)}
+              onBack={() => setViewWithHistory("home")}
+              onOpenUser={(u) => setViewWithHistory(`user:${u}`)}
+              onPlaySongs={playSongs}
+              onOpenOwn={(id) => setViewWithHistory(`library:pl:${id}`)}
+            />
+          )}
+          {view.startsWith("invite:") && (
+            <JoinPlaylistScreen
+              code={view.slice(7)}
+              onBack={() => setViewWithHistory("home")}
+              onJoined={(id) => setViewWithHistory(`playlist:${id}`)}
+            />
+          )}
+          {view.startsWith("room:") && (
+            <RoomScreen
+              code={view.slice(5)}
+              onBack={() => setViewWithHistory("people")}
+              resolveTrack={resolveTrack}
+              afterHook={state.prefs.afterHook}
             />
           )}
           {view.startsWith("library:") && (

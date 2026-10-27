@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useStore } from "../state/store";
 import type { LibraryContainer, Track } from "../types";
@@ -11,6 +11,7 @@ import { useT } from "../lib/lang";
 import { useDialogs } from "./ui/Dialogs";
 import { Face } from "./faces";
 import { moodById, type MoodId } from "../data/mood";
+import { PlaylistSharingPanel } from "./SocialScreens";
 
 const stagger = {
   hidden: {},
@@ -65,6 +66,8 @@ export function LibraryScreen({
   let playlistId: string | null = null;
   let icon = <IconFolder size={15} />;
   let mood: MoodId | null = null;
+  let sharedBy: string | null = null;
+  let shared = false;
   let rules: {
     allowRepeats: boolean;
     includeBuried: boolean;
@@ -86,13 +89,28 @@ export function LibraryScreen({
     title = pl?.name ?? "Playlist";
     tracks = pl?.tracks ?? [];
     accent = pl?.accent ?? accent;
+    shared = Boolean(pl && (pl.collaborative || pl.sharedBy));
     mood = pl?.mood ?? null;
+    sharedBy = pl?.sharedBy ?? null;
     if (mood) icon = <Face mood={mood} size={15} />;
     rules = {
       allowRepeats: pl?.allowRepeats ?? false,
       includeBuried: pl?.includeBuried ?? false,
       includeBlockedArtists: pl?.includeBlockedArtists ?? false,
     };
+  }
+
+  // someone else may add to a shared playlist at any time: read its songs live
+  const live = useQuery(api.social.playlist, playlistId && shared ? { playlistId } : "skip");
+  if (live) {
+    const local = new Map(tracks.map((t) => [t.id, t]));
+    tracks = live.songs.map(
+      ({ track: s }) =>
+        local.get(s.trackId) ?? {
+          id: s.trackId, title: s.title, artist: s.artist, album: s.album, artwork: s.artwork,
+          previewUrl: s.previewUrl, durationMs: s.durationMs, genre: s.genre, accent: s.accent,
+        },
+    );
   }
 
   const collage = tracks.slice(0, 4);
@@ -159,6 +177,7 @@ export function LibraryScreen({
                   : tx("playlist")
                 : tx("collection")}
               {isSaveTarget && <em>· {tx("saving here")}</em>}
+              {sharedBy && <em>· {tx("shared by {name}", { name: sharedBy })}</em>}
             </span>
             <h2 className="library-title">{title}</h2>
             <p className="library-sub">
@@ -198,6 +217,12 @@ export function LibraryScreen({
             <IconShare size={15} /> {tx("Export")}
           </button>
         </motion.div>
+
+        {playlistId && !sharedBy && (
+          <motion.div variants={rise}>
+            <PlaylistSharingPanel playlistId={playlistId} name={title} />
+          </motion.div>
+        )}
 
         {playlistId && rules && (
           <motion.div variants={rise}>

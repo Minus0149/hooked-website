@@ -8,6 +8,9 @@
  */
 
 import { coerceMoodByTime, type MoodByTime } from "./mood";
+import { coerceAfterHook, type AfterHook } from "../../convex/socialRules";
+
+export { AFTER_HOOK, type AfterHook } from "../../convex/socialRules";
 
 export type MotionLevel = "full" | "reduced" | "off";
 export type HapticsLevel = "off" | "subtle" | "full";
@@ -45,6 +48,12 @@ export interface UserPrefs {
    * quietly rearranges itself by the clock reads as broken rather than clever.
    */
   moodByTime: MoodByTime;
+  /**
+   * When the last hook of a song runs out: move on ("next", how the deck has
+   * always behaved), play the hook again ("loop"), or let the rest of the
+   * preview play ("continue").
+   */
+  afterHook: AfterHook;
   /** Global discovery rules — the default strictness of the deck. Per-playlist
    * rules relax these further while that playlist is the save target. */
   allowRepeats: boolean;
@@ -98,6 +107,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   adFrequency: "normal",
   adCadence: null,
   moodByTime: "suggest",
+  afterHook: "next",
   allowRepeats: false,
   includeBuried: false,
   includeBlockedArtists: false,
@@ -158,6 +168,7 @@ export function coercePrefs(raw: unknown): Partial<UserPrefs> {
       : DEFAULT_PREFS.adFrequency;
   out.adCadence = coerceAdCadence(r.adCadence);
   out.moodByTime = coerceMoodByTime(r.moodByTime);
+  out.afterHook = coerceAfterHook(r.afterHook);
   out.allowRepeats = r.allowRepeats === true;
   out.includeBuried = r.includeBuried === true;
   out.includeBlockedArtists = r.includeBlockedArtists === true;

@@ -17,6 +17,8 @@ import {
   type AccentMode,
   type HapticsLevel,
   type MotionLevel,
+  AFTER_HOOK,
+  type AfterHook,
 } from "../data/prefs";
 import { ADVENTURE, availableTasteOptions, type Adventure, type TastePrefs } from "../data/taste";
 import {
@@ -326,6 +328,17 @@ export function SettingsScreen({
           <span className="toggle-knob" />
         </span>
       </button>
+      <div className="prefs-block">
+        <span className="prefs-label">{tt("When a hook ends")}</span>
+        <Segmented<AfterHook>
+          options={AFTER_HOOK}
+          value={state.prefs.afterHook}
+          onChange={(afterHook) => onSetPrefs({ afterHook })}
+        />
+        <span className="prefs-hint">
+          {tt(AFTER_HOOK.find((o) => o.id === state.prefs.afterHook)?.hint ?? "")}
+        </span>
+      </div>
       <div className="settings-row" style={{ cursor: "default" }}>
         <span className="settings-row-icon">♪</span>
         <span className="settings-row-label">

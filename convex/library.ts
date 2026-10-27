@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { authComponent } from "./auth";
 import { isMood } from "./moods";
@@ -19,6 +20,7 @@ import {
 } from "./security";
 import { touchCatalog } from "./catalog";
 import { normalizeUsername, usernameProblem } from "../src/lib/username";
+import { coerceAfterHook } from "./socialRules";
 
 export type ProfileVerdict =
   | "create"
@@ -107,14 +109,34 @@ export const getLibrary = query({
       .query("neverTracks")
       .withIndex("by_user_track", (q) => q.eq("userId", userId))
       .collect();
-    const playlists = await ctx.db
+    const owned = await ctx.db
       .query("playlists")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
+    // playlists other people shared with this listener through an invite link
+    const memberships = await ctx.db
+      .query("playlistMembers")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const joined = (await Promise.all(memberships.map((m) => ctx.db.get(m.playlistId)))).filter(
+      (p): p is NonNullable<typeof p> => p !== null && p.userId !== userId,
+    );
+    // a shared playlist holds everyone's additions, not just this listener's
+    const playlistSongs = await Promise.all(
+      [...owned, ...joined].map((p) =>
+        ctx.db.query("librarySongs").withIndex("by_playlist", (q) => q.eq("playlistId", p._id)).collect(),
+      ),
+    );
+    const ownerNames = new Map<string, string>();
+    for (const p of joined) {
+      if (ownerNames.has(p.userId)) continue;
+      const o = await getProfile(ctx, p.userId);
+      ownerNames.set(p.userId, o?.name?.trim() || (o?.username ? `@${o.username}` : "Someone"));
+    }
     return {
       liked: songs.filter((s) => s.kind === "liked"),
       discoveries: songs.filter((s) => s.kind === "discoveries"),
-      playlists: playlists.map((p) => ({
+      playlists: [...owned, ...joined].map((p, i) => ({
         id: p._id,
         name: p.name,
         accent: p.accent,
@@ -122,7 +144,11 @@ export const getLibrary = query({
         includeBuried: p.includeBuried ?? false,
         includeBlockedArtists: p.includeBlockedArtists ?? false,
         mood: p.mood && isMood(p.mood) ? p.mood : null,
-        songs: songs.filter((s) => s.playlistId === p._id),
+        visibility: p.visibility === "public" ? "public" : "private",
+        collaborative: p.collaborative ?? false,
+        /** whose playlist it is, when it isn't this listener's own */
+        sharedBy: p.userId === userId ? null : ownerNames.get(p.userId) ?? "Someone",
+        songs: playlistSongs[i],
       })),
       neverArtists: never.map((n) => n.artist),
       neverTracks: buried.map((n) => n.trackId),
@@ -208,6 +234,12 @@ export const deletePlaylist = mutation({
       .withIndex("by_playlist", (q) => q.eq("playlistId", playlistId))
       .collect();
     for (const s of songs) await ctx.db.delete(s._id);
+    // the people who joined it through the invite link lose it too
+    const members = await ctx.db
+      .query("playlistMembers")
+      .withIndex("by_playlist", (q) => q.eq("playlistId", playlistId))
+      .collect();
+    for (const m of members) await ctx.db.delete(m._id);
     await ctx.db.delete(playlistId);
     if (profile?.saveTarget === `pl:${playlistId}`) {
       await ctx.db.patch(profile._id, { saveTarget: "liked" });
@@ -233,6 +265,17 @@ export const removeSong = mutation({
   },
 });
 
+/** The owner, or a member while the playlist is collaborative (convex/socialRules.ts). */
+async function mayAddTo(ctx: MutationCtx, playlist: Doc<"playlists">, userId: string) {
+  if (playlist.userId === userId) return true;
+  if (playlist.collaborative !== true) return false;
+  const member = await ctx.db
+    .query("playlistMembers")
+    .withIndex("by_pair", (q) => q.eq("playlistId", playlist._id).eq("userId", userId))
+    .first();
+  return member !== null;
+}
+
 async function saveToTarget(
   ctx: MutationCtx,
   userId: string,
@@ -248,7 +291,12 @@ async function saveToTarget(
     const playlistId = ctx.db.normalizeId("playlists", target.slice(3));
     if (!playlistId) return;
     const playlist = await ctx.db.get(playlistId);
-    if (!playlist || playlist.userId !== userId) return;
+    if (!playlist || !(await mayAddTo(ctx, playlist, userId))) return;
+    // a collaborative playlist may already have it from someone else
+    const inPlaylist = (
+      await ctx.db.query("librarySongs").withIndex("by_playlist", (q) => q.eq("playlistId", playlistId)).collect()
+    ).some((s) => s.trackId === track.trackId);
+    if (inPlaylist) return;
     await ctx.db.insert("librarySongs", {
       userId,
       kind: "playlist",
@@ -588,6 +636,7 @@ export const setPrefs = mutation({
       v.object({ unit: v.string(), value: v.number() }),
     ),
     moodByTime: v.optional(v.string()),
+    afterHook: v.optional(v.string()),
     allowRepeats: v.boolean(),
     includeBuried: v.boolean(),
     includeBlockedArtists: v.boolean(),
@@ -652,6 +701,7 @@ export const setPrefs = mutation({
         moodByTime: ["off", "suggest", "always"].includes(args.moodByTime ?? "")
           ? (args.moodByTime as string)
           : "suggest",
+        afterHook: coerceAfterHook(args.afterHook),
         allowRepeats: args.allowRepeats === true,
         includeBuried: args.includeBuried === true,
         includeBlockedArtists: args.includeBlockedArtists === true,
@@ -699,6 +749,12 @@ export const ACCOUNT_DELETION = {
     "promotionRequests",
     "referralCodes",
     "insightListeners",
+    "follows",
+    "posts",
+    "playlistMembers",
+    "rooms",
+    "roomMembers",
+    "roomReactions",
     // and in the auth component: the user (email, name, password), sessions and linked accounts
   ],
   kept: {
@@ -767,6 +823,39 @@ export const deleteMyAccount = mutation({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
     for (const d of [...campaigns, ...views, ...requests, ...heard, ...(rate ? [rate] : [])]) await ctx.db.delete(d._id);
+
+    // the social side: follows both ways, shared songs, playlist memberships
+    // (theirs in other people's playlists, and other people's in theirs, with
+    // the songs those people added), rooms they hosted and what they did in rooms
+    const [following, followers, posts, memberOf, hosted, inRooms, reactions] = await Promise.all([
+      ctx.db.query("follows").withIndex("by_follower", (q) => q.eq("followerId", userId)).collect(),
+      ctx.db.query("follows").withIndex("by_followee", (q) => q.eq("followeeId", userId)).collect(),
+      ctx.db.query("posts").withIndex("by_user_at", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("playlistMembers").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("rooms").withIndex("by_host", (q) => q.eq("hostId", userId)).collect(),
+      ctx.db.query("roomMembers").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("roomReactions").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+    ]);
+    const othersInMine = (
+      await Promise.all(
+        playlists.map((pl) => ctx.db.query("playlistMembers").withIndex("by_playlist", (q) => q.eq("playlistId", pl._id)).collect()),
+      )
+    ).flat();
+    const songsInMine = (
+      await Promise.all(
+        playlists.map((pl) => ctx.db.query("librarySongs").withIndex("by_playlist", (q) => q.eq("playlistId", pl._id)).collect()),
+      )
+    ).flat();
+    for (const d of [...following, ...followers, ...posts, ...memberOf, ...inRooms, ...reactions, ...othersInMine]) await ctx.db.delete(d._id);
+    for (const d of songsInMine) if ((await ctx.db.get(d._id)) !== null) await ctx.db.delete(d._id);
+    for (const r of hosted) {
+      const [members, roomReactions] = await Promise.all([
+        ctx.db.query("roomMembers").withIndex("by_room", (q) => q.eq("roomId", r._id)).collect(),
+        ctx.db.query("roomReactions").withIndex("by_room", (q) => q.eq("roomId", r._id)).collect(),
+      ]);
+      for (const d of [...members, ...roomReactions]) if ((await ctx.db.get(d._id)) !== null) await ctx.db.delete(d._id);
+      await ctx.db.delete(r._id);
+    }
 
     // a creator's uploads leave with them: tracks, their hooks and
     // fingerprints, and the audio files themselves

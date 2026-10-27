@@ -4305,3 +4305,94 @@ html:lang(hi) body * { letter-spacing: 0 !important; }
 .username-actions { display: flex; gap: 10px; align-items: center; }
 .username-cancel { padding: 14px 16px; color: var(--muted); font-weight: 600; }
 .username-save { flex: 1; padding: 14px; }
+
+/* ---------------------------------------------------------------------------
+   Social: people, the feed, shared playlists, rooms (components/SocialScreens.tsx)
+   --------------------------------------------------------------------------- */
+.social-title { font-size: 15px; letter-spacing: 0; }
+.social-avatar {
+  flex: none; display: inline-grid; place-items: center; border-radius: 50%;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 70%, #000), color-mix(in srgb, var(--accent) 30%, var(--surface-2)));
+  color: #fff; font-family: var(--font-display); font-weight: 700;
+}
+.social-card {
+  margin: 4px 0 18px; padding: 14px; border-radius: 20px;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.social-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.social-kicker { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.social-link { background: none; border: 0; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; }
+.social-empty { width: 100%; text-align: left; background: none; border: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; cursor: pointer; }
+.social-mini {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 7px 4px; border: 0; border-radius: 12px;
+  background: none; color: var(--text); text-align: left; cursor: pointer;
+}
+.social-mini:hover { background: var(--surface-2); }
+.social-mini img { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; }
+.social-mini-text { flex: 1; min-width: 0; display: grid; }
+.social-mini-text b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.social-mini-text span { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.social-mini-play { color: var(--accent); font-size: 12px; }
+.social-row-sub { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.social-row-sub a { color: var(--accent); text-decoration: none; }
+
+.social-me { margin: 6px 0 4px; }
+.social-me-btn {
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--line); color: var(--text); text-align: left; cursor: pointer;
+}
+.social-me-btn span { display: grid; }
+.social-me-btn small { color: var(--muted); font-size: 12px; }
+.social-room-start { display: grid; gap: 10px; }
+.social-code-form { display: flex; gap: 8px; align-items: stretch; }
+.social-input {
+  flex: 1; min-width: 0; height: 44px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text); font: inherit; font-size: 15px; outline: none;
+}
+.social-input:focus { border-color: var(--accent); }
+.social-search {
+  display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; margin-bottom: 10px;
+  border-radius: 16px; background: var(--surface); border: 1px solid var(--line); color: var(--muted);
+}
+.social-search input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text); font: inherit; font-size: 15px; }
+.social-person { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.social-person-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; background: none; border: 0; color: var(--text); text-align: left; cursor: pointer; }
+.social-person-main span { display: grid; min-width: 0; }
+.social-person-main b { font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.social-person-main small { color: var(--muted); font-size: 12.5px; }
+.social-follow {
+  flex: none; height: 34px; padding: 0 16px; border-radius: 999px; border: 0; cursor: pointer;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: 13px; transition: transform 0.15s ease, background 0.2s ease;
+}
+.social-follow.on { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.social-follow:active { transform: scale(0.96); }
+.social-follow:disabled { opacity: 0.6; }
+
+.social-hero { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 0 10px; text-align: center; }
+.social-badge { margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: var(--surface-2); color: var(--muted); }
+.social-counts { display: flex; gap: 18px; margin: 4px 0 6px; }
+.social-counts button { background: none; border: 0; color: var(--muted); font-size: 13.5px; cursor: pointer; }
+.social-counts b { color: var(--text); font-size: 16px; font-weight: 700; }
+
+.social-share-panel { margin: 4px 0 6px; }
+.social-share-form { display: grid; gap: 8px; margin: 12px 0 4px; padding: 12px; border-radius: 16px; background: var(--surface-2); }
+.social-share-label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text); }
+.social-center { display: grid; place-items: center; gap: 10px; text-align: center; padding-top: 30px; }
+.social-invite { display: grid; gap: 10px; justify-items: center; padding: 26px 22px; border-radius: 24px; border: 1px solid var(--line); background: var(--surface); width: 100%; }
+
+/* rooms */
+.room-people { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 8px 0 14px; }
+.room-person { display: grid; justify-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); }
+.room-person.host .social-avatar { box-shadow: 0 0 0 2px var(--accent); }
+.room-card { display: grid; justify-items: center; gap: 6px; text-align: center; }
+.room-art { position: relative; width: min(78vw, 320px); aspect-ratio: 1; border-radius: 26px; overflow: hidden; border: 0; padding: 0; cursor: pointer; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55); }
+.room-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.room-art-play { position: absolute; inset: 0; display: grid; place-items: center; font-size: 46px; color: #fff; background: rgba(0, 0, 0, 0.35); }
+.room-progress { width: min(78vw, 320px); height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; margin: 8px 0 6px; }
+.room-progress i { display: block; height: 100%; background: var(--pl-accent, var(--accent)); transform-origin: 0 50%; }
+.room-actions { display: flex; gap: 10px; margin: 8px 0 4px; }
+.room-actions .on { box-shadow: inset 0 0 0 2px var(--save); }
+.room-reactions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; min-height: 28px; margin-top: 4px; }
+.room-reaction { padding: 4px 10px; border-radius: 999px; font-size: 12.5px; background: var(--surface-2); }
+.room-reaction.save { color: var(--save); }
+.room-reaction.skip { color: var(--muted); }

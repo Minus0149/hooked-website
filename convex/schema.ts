@@ -94,6 +94,8 @@ export default defineSchema({
         ),
         /** how much say the clock gets: "off" | "suggest" | "always" */
         moodByTime: v.optional(v.string()),
+        /** when the last hook of a song ends: "next" | "loop" | "continue" (convex/socialRules.ts) */
+        afterHook: v.optional(v.string()),
         /** global discovery rules (per-playlist rules layer on top) */
         allowRepeats: v.boolean(),
         includeBuried: v.boolean(),
@@ -127,7 +129,15 @@ export default defineSchema({
      * songs that fit.
      */
     mood: v.optional(v.string()),
-  }).index("by_user", ["userId"]),
+    /** "private" (default) or "public": public ones show on the owner's profile and open for anyone with the link */
+    visibility: v.optional(v.string()),
+    /** members who joined with the invite code may add songs */
+    collaborative: v.optional(v.boolean()),
+    /** the code in the invite link (/join-playlist/<code>); absent until the owner shares it */
+    inviteCode: v.optional(v.string()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_inviteCode", ["inviteCode"]),
 
   swipes: defineTable({
     userId: v.string(),
@@ -868,4 +878,75 @@ export default defineSchema({
     by: v.string(),
     at: v.number(),
   }).index("by_trackId", ["trackId"]),
+
+  // ---------------------------------------------------------------------------
+  // Social (convex/social.ts, rules in convex/socialRules.ts)
+  // ---------------------------------------------------------------------------
+
+  /** One person following another. */
+  follows: defineTable({
+    followerId: v.string(),
+    followeeId: v.string(),
+    at: v.number(),
+  })
+    .index("by_follower", ["followerId"])
+    .index("by_followee", ["followeeId"])
+    .index("by_pair", ["followerId", "followeeId"]),
+
+  /** A song someone shared to their followers, with an optional note. */
+  posts: defineTable({
+    userId: v.string(),
+    ...trackFields,
+    note: v.optional(v.string()),
+    at: v.number(),
+  }).index("by_user_at", ["userId", "at"]),
+
+  /** People who joined someone's playlist through its invite link. */
+  playlistMembers: defineTable({
+    playlistId: v.id("playlists"),
+    userId: v.string(),
+    at: v.number(),
+  })
+    .index("by_playlist", ["playlistId"])
+    .index("by_user", ["userId"])
+    .index("by_pair", ["playlistId", "userId"]),
+
+  /** A listening room: everyone hears the host's song and sees each other's saves. */
+  rooms: defineTable({
+    code: v.string(),
+    hostId: v.string(),
+    hostName: v.string(),
+    /** the songs, in order, fixed when the room opens */
+    trackIds: v.array(v.string()),
+    index: v.number(),
+    /** when the current song started for the room, so late joiners can catch up */
+    songStartedAt: v.number(),
+    updatedAt: v.number(),
+    endedAt: v.optional(v.number()),
+  })
+    .index("by_code", ["code"])
+    .index("by_host", ["hostId"]),
+
+  roomMembers: defineTable({
+    roomId: v.id("rooms"),
+    userId: v.string(),
+    name: v.string(),
+    joinedAt: v.number(),
+    lastSeen: v.number(),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_user", ["userId"])
+    .index("by_room_user", ["roomId", "userId"]),
+
+  /** What people in a room did with each song (save / skip), shown live to the others. */
+  roomReactions: defineTable({
+    roomId: v.id("rooms"),
+    userId: v.string(),
+    name: v.string(),
+    trackId: v.string(),
+    action: v.string(),
+    at: v.number(),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_user", ["userId"]),
 });

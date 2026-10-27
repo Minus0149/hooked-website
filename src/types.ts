@@ -72,6 +72,11 @@ export interface Playlist {
   includeBlockedArtists?: boolean;
   /** the mood it was made for — discovering into it puts that lens back on */
   mood?: MoodId;
+  /** sharing (convex/social.ts): public on the owner's profile, open to collaborators */
+  visibility?: "private" | "public";
+  collaborative?: boolean;
+  /** set when this is someone else's playlist the listener joined */
+  sharedBy?: string | null;
 }
 
 export type LibraryContainer = "liked" | "discoveries" | `pl:${string}`;

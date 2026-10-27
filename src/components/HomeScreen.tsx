@@ -87,6 +87,7 @@ export function HomeScreen({
   onPlayFeatured,
   decks = [],
   onOpenDeck,
+  friends,
 }: {
   onDiscover: (trackId?: string) => void;
   onOpenLibrary: (container: string) => void;
@@ -100,6 +101,8 @@ export function HomeScreen({
   onPlayFeatured?: (track: Track) => void;
   decks?: LiveDeck[];
   onOpenDeck?: (deck: LiveDeck) => void;
+  /** the friends card (SocialScreens.FriendsCard), shown under search when signed in */
+  friends?: React.ReactNode;
 }) {
   const tt = useT();
   const t = useT();
@@ -203,6 +206,8 @@ export function HomeScreen({
           <span>{t("Search songs, artists, albums")}</span>
         </motion.button>
       )}
+
+      {friends && <motion.div variants={rise}>{friends}</motion.div>}
 
       {featured && (
         // unpaid and chosen by us, so it's labelled as a pick, never "promoted"

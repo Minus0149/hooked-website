@@ -14,7 +14,13 @@ export type View =
   | "search"
   | "settings"
   | `settings:${string}`
-  | `library:${string}`;
+  | `library:${string}`
+  | "people"
+  | `user:${string}`
+  | `mutual:${string}`
+  | `playlist:${string}`
+  | `invite:${string}`
+  | `room:${string}`;
 
 export type Route =
   | { kind: "app"; view: View }
@@ -35,6 +41,16 @@ export function routeFor(pathname: string, search = ""): Route {
   if (path === "/profile") return { kind: "app", view: "profile" };
   if (path === "/search") return { kind: "app", view: "search" };
   if (path === "/settings") return { kind: "app", view: "settings" };
+  if (path === "/people") return { kind: "app", view: "people" };
+  const user = /^\/u\/([a-z0-9_.]+)(\/mutual)?$/.exec(path);
+  if (user) return { kind: "app", view: user[2] ? `mutual:${user[1]}` : `user:${user[1]}` };
+  // ids and codes are case-sensitive / upper-case, so read them from the raw path
+  const shared = /^\/playlist\/([^/]+)$/i.exec(raw);
+  if (shared) return { kind: "app", view: `playlist:${decodeURIComponent(shared[1])}` };
+  const invite = /^\/join-playlist\/([a-z0-9]+)$/i.exec(raw);
+  if (invite) return { kind: "app", view: `invite:${invite[1].toUpperCase()}` };
+  const room = /^\/together\/([a-z0-9]+)$/i.exec(raw);
+  if (room) return { kind: "app", view: `room:${room[1].toUpperCase()}` };
   if (path === "/join")
     return { kind: "join", email: params.get("email") ?? "" };
   if (path === "/reset-password")
@@ -61,6 +77,11 @@ export function pathForView(view: View): string {
     return `/settings/${view.slice("settings:".length)}`;
   if (view.startsWith("library:"))
     return `/library/${encodeURIComponent(view.slice("library:".length))}`;
+  if (view.startsWith("user:")) return `/u/${view.slice(5)}`;
+  if (view.startsWith("mutual:")) return `/u/${view.slice(7)}/mutual`;
+  if (view.startsWith("playlist:")) return `/playlist/${encodeURIComponent(view.slice(9))}`;
+  if (view.startsWith("invite:")) return `/join-playlist/${view.slice(7)}`;
+  if (view.startsWith("room:")) return `/together/${view.slice(5)}`;
   return `/${view}`;
 }
 

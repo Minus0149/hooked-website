@@ -170,6 +170,16 @@ export async function validateSaveTarget(
   if (!playlistId) throw new Error("Invalid playlist");
 
   const playlist = await ctx.db.get(playlistId);
-  if (!playlist || playlist.userId !== userId) throw new Error("Invalid playlist");
+  if (!playlist) throw new Error("Invalid playlist");
+  if (playlist.userId !== userId) {
+    // a member may save into someone's playlist while it's collaborative
+    const member = playlist.collaborative === true
+      ? await ctx.db
+          .query("playlistMembers")
+          .withIndex("by_pair", (q) => q.eq("playlistId", playlistId).eq("userId", userId))
+          .first()
+      : null;
+    if (!member) throw new Error("Invalid playlist");
+  }
   return `pl:${playlistId}` as const;
 }

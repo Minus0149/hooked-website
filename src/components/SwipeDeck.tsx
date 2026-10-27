@@ -2,6 +2,7 @@
 import { createPortal } from "react-dom";
 import { ReportSong } from "./ReportSong";
 import { shareText, songShareUrl, songStoryUrl } from "../lib/growth";
+import { ShareToFollowers } from "./SocialScreens";
 import { REPORT_COPY } from "../lib/contentReport";
 import {
   AnimatePresence,
@@ -259,6 +260,13 @@ function FullSongSheet({ track, onClose }: { track: Track; onClose: () => void }
           {tx("story image for Instagram")}
         </a>
         {shareNote && <p className="sheet-share-note" role="status">{shareNote}</p>}
+        <ShareToFollowers
+          song={{
+            trackId: track.id, title: track.title, artist: track.artist, album: track.album ?? "",
+            artwork: track.artwork, previewUrl: track.previewUrl, durationMs: track.durationMs ?? 30_000,
+            genre: track.genre ?? "", accent: track.accent ?? "#FF3D71",
+          }}
+        />
         <h3 className="sheet-title">{tx("Hear the whole thing")}</h3>
         <p className="sheet-sub">
           "{track.title}" — {track.artist}.{" "}

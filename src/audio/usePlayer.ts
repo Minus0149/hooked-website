@@ -1,5 +1,6 @@
 import { storedVolume } from "../lib/volume";
 import { distinctHooks, hookGain, hookTiming } from "../lib/hookPlayback";
+import { afterHookAction, type AfterHook } from "../../convex/socialRules";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HookWindow, Track } from "../types";
 
@@ -33,7 +34,17 @@ export function usePlayer(
   onEnded: () => void,
   /** called with the source that failed, so a broken track can be reported */
   onAudioError?: (src: string) => void,
+  /** what happens when the last hook runs out (Settings → Playback) */
+  afterHook: AfterHook = "next",
 ) {
+  const afterHookRef = useRef(afterHook);
+  afterHookRef.current = afterHook;
+  /**
+   * "Keep playing": the last hook has run out and the rest of the preview is
+   * playing on. The hook window no longer cuts it, and nothing fades it out
+   * early; the file's own end moves the deck on.
+   */
+  const playingOnRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const preloadRef = useRef<HTMLAudioElement | null>(null);
   const onEndedRef = useRef(onEnded);
@@ -71,6 +82,7 @@ export function usePlayer(
     setRemaining(Infinity);
     setHookIndex(0);
     hookIndexRef.current = 0;
+    playingOnRef.current = false;
     audio.src = sourceOf(track);
     const first = hooksRef.current[0];
     if (first.startMs > 0) {
@@ -113,13 +125,28 @@ export function usePlayer(
       const list = hooksRef.current;
       const hook = list[hookIndexRef.current] ?? list[0];
       // cut at the end of the file, shared with the phone (lib/hookPlayback.ts)
+      if (playingOnRef.current) {
+        // past the hook: show progress through the rest of the clip instead
+        const d = audio.duration > 0 ? audio.duration : 30;
+        setProgress(Math.min(audio.currentTime / d, 1));
+        setRemaining(Math.max(d - audio.currentTime, 0));
+        return;
+      }
       const t = hookTiming(hook, audio.currentTime, audio.duration);
       setProgress(t.progress);
       setRemaining(t.remaining);
 
       if (t.done) advanceRef.current(true);
     };
-    const onDone = () => advanceRef.current(true);
+    const onDone = () => {
+      // the file itself ended: whatever the setting, the song is over
+      if (playingOnRef.current) {
+        playingOnRef.current = false;
+        onEndedRef.current();
+        return;
+      }
+      advanceRef.current(true);
+    };
     /**
      * Dead audio must not park the deck.
      *
@@ -164,7 +191,9 @@ export function usePlayer(
     const tick = () => {
       const list = hooksRef.current;
       const hook = list[hookIndexRef.current] ?? list[0];
-      if (hook) {
+      if (playingOnRef.current) {
+        audio.volume = volumeRef.current;
+      } else if (hook) {
         const t = hookTiming(hook, audio.currentTime, audio.duration);
         audio.volume = volumeRef.current * hookGain(t.into, t.lengthS);
       }
@@ -189,8 +218,17 @@ export function usePlayer(
     const next = hookIndexRef.current + 1;
     if (next >= list.length) {
       if (auto) {
-        onEndedRef.current();
-        return;
+        const action = afterHookAction(afterHookRef.current, 0);
+        if (action === "playOn") {
+          // the window is done; let the preview carry on to its own end
+          playingOnRef.current = true;
+          return;
+        }
+        if (action === "nextSong") {
+          onEndedRef.current();
+          return;
+        }
+        // "loop": round again from the first hook
       }
       hookIndexRef.current = 0;
       setHookIndex(0);
@@ -207,7 +245,10 @@ export function usePlayer(
   };
 
   /** Tap the card to jump ahead to the next hook. */
-  const nextHook = useCallback(() => advanceRef.current(false), []);
+  const nextHook = useCallback(() => {
+    playingOnRef.current = false;
+    advanceRef.current(false);
+  }, []);
 
   const toggle = useCallback(() => {
     const audio = audioRef.current;
