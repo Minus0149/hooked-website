@@ -23,7 +23,7 @@ Notes:
 - Sharing a hook link must respect the iTunes preview terms (`docs/ITUNES-ATTRIBUTION.md`).
 
 ## Hook coverage (shipped 27 Oct 2026, commit d7432ee)
-- Rule: auto falls back to the heuristic (never 0). The window opens 1.5–3.5 s before the hook and ends on the last whole 2-bar line in the clip, at least 12 s. Web fades out over the last 1.5 s.
+- Rule: auto falls back to the heuristic (never 0). The window opens 1.5–3.5 s before the hook and ends on the last whole 2-bar line in the clip, at least 12 s. Web fades out over the last 0.5 s (Minus, 27 Oct).
 - Deployed to Convex prod. The 4,292 analysed tracks are re-planned. The analyser backlog (8,932) is running from this PC.
 - **Phone app:** `hookGain` is mirrored in `mobile/src/lib/hookPlayback.ts` but the phone player doesn't call it yet. Add the volume ramp to the expo-audio player and ship a Play build. Until then, phones stop at the line's end without the fade.
 - Limit to remember: Apple's preview is 30 s. If the hook line isn't inside it (e.g. "Gehra Hua"), no rule can reach it. Deezer returns nothing from India.

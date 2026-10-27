@@ -12,7 +12,7 @@
  *                   whole 2-bar line that fits in the clip, so it never stops
  *                   mid-line where Apple cut the preview. At least MIN_HOOK_MS;
  *                   a hook too late for that opens earlier. The players fade
- *                   the last 1.5 s (src/lib/hookPlayback.ts). Tested by ear on
+ *                   the last 0.5 s (src/lib/hookPlayback.ts). Tested by ear on
  *                   20 Hindi/Punjabi songs on 27 Oct 2026: 17 good.
  *   longer audio  → a creator's full upload: up to three DISTINCT sections,
  *                   never overlapping, each at least MIN_HOOK_MS.

@@ -151,7 +151,7 @@ export function usePlayer(
   }, []);
 
   /**
-   * Fades: a hook fades in over 0.12 s and out over its last 1.5 s
+   * Fades: a hook fades in over 0.12 s and out over its last 0.5 s
    * (hookGain), so it never stops dead where Apple cut the preview. Driven by
    * animation frames while playing — timeupdate fires only ~4 times a second,
    * too coarse for a smooth fade. The listener's volume stays the ceiling.

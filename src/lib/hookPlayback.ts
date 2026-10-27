@@ -53,7 +53,7 @@ export function hookTiming(hook: PlayWindow, currentTime: number, duration: numb
 }
 
 /** Seconds a hook fades out over at the end of its window, and fades in over at its start. */
-export const FADE_OUT_S = 1.5;
+export const FADE_OUT_S = 0.5;
 export const FADE_IN_S = 0.12;
 
 /**

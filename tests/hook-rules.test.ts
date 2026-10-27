@@ -278,7 +278,7 @@ describe("catalogue hook health", () => {
 });
 
 describe("hook playback (shared by web and mobile)", () => {
-  it("fades a hook out over its last 1.5 s instead of stopping dead", () => {
+  it("fades a hook out over its last half second instead of stopping dead", () => {
     expect(hookGain(5, 20)).toBe(1);
     expect(hookGain(20 - FADE_OUT_S, 20)).toBe(1);
     expect(hookGain(20 - FADE_OUT_S / 2, 20)).toBeCloseTo(0.5);
