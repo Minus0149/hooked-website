@@ -183,3 +183,19 @@ export function mergeFeed<T extends { id: string; at: number }>(lists: readonly 
     .sort((a, b) => b.at - a.at)
     .slice(0, limit);
 }
+
+/**
+ * The name other people see. A sign-up fills `name` with the email's local
+ * part ("subhash2004ka" for subhash2004ka@gmail.com), and that was shown on
+ * profiles, playlists and in rooms to anyone signed in — half an email address.
+ * A name that is just the email's local part is treated as no name: people see
+ * the @username instead, or "Someone".
+ */
+export function publicName(p: { name?: string | null; email?: string | null; username?: string | null } | null): string {
+  if (!p) return "Someone";
+  const name = (p.name ?? "").trim();
+  const local = (p.email ?? "").split("@")[0].trim().toLowerCase();
+  const fromEmail = !name || (local !== "" && name.toLowerCase() === local);
+  if (!fromEmail) return name;
+  return p.username ? `@${p.username}` : "Someone";
+}

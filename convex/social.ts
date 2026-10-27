@@ -25,6 +25,7 @@ import {
   mutualMix,
   nextRoomIndex,
   normalizeCode,
+  publicName,
   roomIsOpen,
 } from "./socialRules";
 import { secureRandom } from "./secureRandom";
@@ -56,7 +57,8 @@ async function byUsername(ctx: Ctx, username: string) {
     .unique();
 }
 
-const displayName = (p: Doc<"profiles"> | null) => (p ? p.name?.trim() || (p.username ? `@${p.username}` : "Someone") : "Someone");
+// never the email-derived default name (socialRules.publicName)
+const displayName = (p: Doc<"profiles"> | null) => publicName(p);
 const person = (p: Doc<"profiles">) => ({ username: p.username ?? null, name: displayName(p) });
 
 async function follows(ctx: Ctx, followerId: string, followeeId: string) {
