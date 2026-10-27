@@ -3,6 +3,7 @@ import { action, internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { runtimeFor } from "./runtime";
+import { secureToken } from "./secureRandom";
 import { planWindows } from "./hooks";
 import {
   MIN_CONFIDENCE,
@@ -107,9 +108,8 @@ export const beginImport = mutation({
     if (args.total < 1) throw new Error("Nothing to import");
     await enforceRateLimit(ctx, `import:run:${user.id}`, 6, 60 * 60_000);
 
-    const token = [Math.random(), Math.random(), Date.now()]
-      .map((n) => n.toString(36).replace("0.", ""))
-      .join("");
+    // the token is the only key to this run's writes: CSPRNG, 144 bits
+    const token = secureToken(18);
 
     const importId = await ctx.db.insert("imports", {
       userId: user.id,

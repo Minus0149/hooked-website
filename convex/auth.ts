@@ -9,6 +9,7 @@ import { smtpSettings } from "./emailConfig";
 import { resetEmail, verifyEmail } from "./emailTemplate";
 import { APIError } from "better-auth/api";
 import { NOT_APPROVED_MESSAGE, signupAllowed } from "./access";
+import { AUTH_RATE_LIMIT } from "./authLimits";
 
 const siteUrl = process.env.SITE_URL ?? "https://app.hookedcue.com";
 // falls back to the deployment's own HTTP URL, which Convex provides to every function
@@ -73,18 +74,8 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
         ipAddressHeaders: ["cf-connecting-ip", "x-real-ip", "x-forwarded-for"],
       },
     },
-    rateLimit: {
-      enabled: true,
-      storage: "database",
-      window: 60,
-      max: 120,
-      customRules: {
-        "/sign-in/*": { window: 60, max: 5 },
-        "/sign-up/*": { window: 60 * 60, max: 10 },
-        "/convex/token": { window: 60, max: 60 },
-        "/get-session": { window: 60, max: 120 },
-      },
-    },
+    // per IP and path; the email-sending routes are held to a few an hour
+    rateLimit: AUTH_RATE_LIMIT,
     database: authComponent.adapter(ctx),
     emailAndPassword: {
       enabled: true,

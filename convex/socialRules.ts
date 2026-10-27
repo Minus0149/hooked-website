@@ -101,9 +101,37 @@ export function mutualMix<T extends SongRef>(mine: readonly T[], theirs: readonl
 /**
  * Codes for invite links and listening rooms: no 0/O or 1/I/L, so a code read
  * out loud or off a screen can't be mistyped. `rand` is injected so tests are
- * deterministic; the server passes Math.random.
+ * deterministic; the server passes secureRandom (convex/secureRandom.ts), never
+ * Math.random — a code is the only thing standing between a stranger and the
+ * playlist or room it opens.
  */
-const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+export const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+/** 31^8 ≈ 8.5 × 10^11 codes each: far beyond guessing at any rate a client can reach. */
+export const PLAYLIST_CODE_LENGTH = 8;
+export const ROOM_CODE_LENGTH = 8;
+
+/**
+ * An invite link only works while the owner is sharing the playlist (public or
+ * collaborative). Turning both off takes the link down with it.
+ */
+export function inviteOpen(p: { visibility?: string | null; collaborative?: boolean | null }): boolean {
+  return p.visibility === "public" || p.collaborative === true;
+}
+
+/**
+ * What a sharing change does to the invite link: the first share issues one,
+ * un-sharing revokes it (so sharing again later hands out a new link, and an
+ * old one forwarded around stops working), anything else leaves it alone.
+ */
+export function inviteCodeChange(
+  next: { visibility?: string | null; collaborative?: boolean | null },
+  hasCode: boolean,
+): "issue" | "revoke" | "keep" {
+  const open = inviteOpen(next);
+  if (open && !hasCode) return "issue";
+  if (!open && hasCode) return "revoke";
+  return "keep";
+}
 export function makeCode(length: number, rand: () => number): string {
   let out = "";
   for (let i = 0; i < length; i++) out += CODE_ALPHABET[Math.floor(rand() * CODE_ALPHABET.length) % CODE_ALPHABET.length];

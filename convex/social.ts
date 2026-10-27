@@ -16,6 +16,10 @@ import {
   coerceVisibility,
   followProblem,
   isMutual,
+  PLAYLIST_CODE_LENGTH,
+  ROOM_CODE_LENGTH,
+  inviteCodeChange,
+  inviteOpen,
   makeCode,
   mergeFeed,
   mutualMix,
@@ -23,6 +27,7 @@ import {
   normalizeCode,
   roomIsOpen,
 } from "./socialRules";
+import { secureRandom } from "./secureRandom";
 
 /**
  * The social side of HookedCue: follows, songs shared to followers, shared and
@@ -371,12 +376,16 @@ export const setPlaylistSharing = mutation({
     const patch: Partial<Doc<"playlists">> = {};
     if (visibility !== undefined) patch.visibility = coerceVisibility(visibility);
     if (collaborative !== undefined) patch.collaborative = collaborative;
-    // an invite link exists from the first time the owner shares
-    if (!pl.inviteCode && (patch.visibility === "public" || patch.collaborative === true)) {
-      patch.inviteCode = await freshCode(ctx, 8, "playlist");
-    }
+    // an invite link exists while the owner shares; un-sharing takes it down
+    const next = {
+      visibility: patch.visibility ?? pl.visibility,
+      collaborative: patch.collaborative ?? pl.collaborative,
+    };
+    const change = inviteCodeChange(next, !!pl.inviteCode);
+    if (change === "issue") patch.inviteCode = await freshCode(ctx, PLAYLIST_CODE_LENGTH, "playlist");
+    if (change === "revoke") patch.inviteCode = undefined;
     await ctx.db.patch(playlistId, patch);
-    return { inviteCode: patch.inviteCode ?? pl.inviteCode ?? null };
+    return { inviteCode: change === "keep" ? pl.inviteCode ?? null : patch.inviteCode ?? null };
   },
 });
 
@@ -388,7 +397,8 @@ export const joinPlaylist = mutation({
     await enforceRateLimit(ctx, `playlist:join:${user.id}`, 30, 10 * 60_000);
     const clean = normalizeCode(code);
     const pl = clean ? await ctx.db.query("playlists").withIndex("by_inviteCode", (q) => q.eq("inviteCode", clean)).unique() : null;
-    if (!pl) throw new Error("That invite link doesn't work any more");
+    // a link to a playlist the owner has stopped sharing opens nothing
+    if (!pl || !inviteOpen(pl)) throw new Error("That invite link doesn't work any more");
     if (pl.userId === user.id) return { playlistId: pl._id };
     const already = await ctx.db
       .query("playlistMembers")
@@ -456,7 +466,7 @@ export const invite = query({
     const clean = normalizeCode(code);
     if (!clean) return null;
     const pl = await ctx.db.query("playlists").withIndex("by_inviteCode", (q) => q.eq("inviteCode", clean)).unique();
-    if (!pl) return null;
+    if (!pl || !inviteOpen(pl)) return null;
     const owner = await getProfile(ctx, pl.userId);
     const count = (await ctx.db.query("librarySongs").withIndex("by_playlist", (q) => q.eq("playlistId", pl._id)).collect()).length;
     return { playlistId: pl._id, name: pl.name, accent: pl.accent, collaborative: pl.collaborative ?? false, owner: owner ? person(owner) : null, count };
@@ -465,7 +475,7 @@ export const invite = query({
 
 async function freshCode(ctx: MutationCtx, length: number, kind: "playlist" | "room") {
   for (let i = 0; i < 8; i++) {
-    const code = makeCode(length, Math.random);
+    const code = makeCode(length, secureRandom);
     const taken =
       kind === "playlist"
         ? await ctx.db.query("playlists").withIndex("by_inviteCode", (q) => q.eq("inviteCode", code)).first()
@@ -485,14 +495,15 @@ export const createRoom = mutation({
   handler: async (ctx, { trackIds }) => {
     const { user, profile } = await requireGatedUser(ctx);
     await enforceRateLimit(ctx, `room:create:${user.id}`, 10, 60 * 60_000);
-    const ids = [...new Set(trackIds.map((t) => cleanText(t, 120)).filter(Boolean))].slice(0, ROOM_MAX_TRACKS);
+    // bounded before any work: the array arrives straight from the client
+    const ids = [...new Set(trackIds.slice(0, ROOM_MAX_TRACKS * 4).map((t) => cleanText(t, 120)).filter(Boolean))].slice(0, ROOM_MAX_TRACKS);
     if (ids.length < 2) throw new Error("A room needs a few songs to start");
     // one open room per host: opening a new one closes the last
     const now = Date.now();
     for (const old of await ctx.db.query("rooms").withIndex("by_host", (q) => q.eq("hostId", user.id)).collect()) {
       if (!old.endedAt) await ctx.db.patch(old._id, { endedAt: now });
     }
-    const code = await freshCode(ctx, 6, "room");
+    const code = await freshCode(ctx, ROOM_CODE_LENGTH, "room");
     const roomId = await ctx.db.insert("rooms", {
       code,
       hostId: user.id,
@@ -591,7 +602,13 @@ export const reactInRoom = mutation({
     if (!room) return;
     const id = cleanText(trackId, 120);
     if (!room.trackIds.includes(id)) return;
-    const prior = (await ctx.db.query("roomReactions").withIndex("by_room", (q) => q.eq("roomId", room._id)).collect()).filter(
+    // only people in the room speak in it: knowing the code isn't joining
+    const member = await ctx.db
+      .query("roomMembers")
+      .withIndex("by_room_user", (q) => q.eq("roomId", room._id).eq("userId", user.id))
+      .first();
+    if (!member) throw new Error("Join the room first");
+    const prior =(await ctx.db.query("roomReactions").withIndex("by_room", (q) => q.eq("roomId", room._id)).collect()).filter(
       (r) => r.userId === user.id && r.trackId === id,
     );
     for (const r of prior) await ctx.db.delete(r._id);

@@ -2,6 +2,7 @@ import { mutation, query, type QueryCtx } from "./_generated/server";
 import { runtimeFor } from "./runtime";
 import { getProfile, requirePermission, requireUser } from "./security";
 import { inviteLink, isFoundingListener, makeCode } from "./referralRules";
+import { secureRandom } from "./secureRandom";
 
 /**
  * Invite a friend — see referralRules.ts for the rules and access.ts
@@ -79,7 +80,7 @@ export const ensureCode = mutation({
     const existing = await codeFor(ctx, user.id);
     if (existing) return existing.code;
     for (let attempt = 0; attempt < 8; attempt++) {
-      const code = makeCode(Math.random);
+      const code = makeCode(secureRandom);
       const clash = await ctx.db
         .query("referralCodes")
         .withIndex("by_code", (q) => q.eq("code", code))
