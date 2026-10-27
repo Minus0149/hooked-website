@@ -1,5 +1,5 @@
 import { storedVolume } from "../lib/volume";
-import { distinctHooks, hookTiming } from "../lib/hookPlayback";
+import { distinctHooks, hookGain, hookTiming } from "../lib/hookPlayback";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HookWindow, Track } from "../types";
 
@@ -54,6 +54,8 @@ export function usePlayer(
   const hookIndexRef = useRef(0);
   hookIndexRef.current = hookIndex;
   const [volume, setVolumeState] = useState(() => storedVolume(localStorage.getItem("hooked.volume")));
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
 
   if (audioRef.current === null && typeof Audio !== "undefined") {
     audioRef.current = new Audio();
@@ -149,6 +151,33 @@ export function usePlayer(
   }, []);
 
   /**
+   * Fades: a hook fades in over 0.12 s and out over its last 1.5 s
+   * (hookGain), so it never stops dead where Apple cut the preview. Driven by
+   * animation frames while playing — timeupdate fires only ~4 times a second,
+   * too coarse for a smooth fade. The listener's volume stays the ceiling.
+   * (iOS Safari ignores element volume, so there it simply stops at the line.)
+   */
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !playing) return;
+    let frame = 0;
+    const tick = () => {
+      const list = hooksRef.current;
+      const hook = list[hookIndexRef.current] ?? list[0];
+      if (hook) {
+        const t = hookTiming(hook, audio.currentTime, audio.duration);
+        audio.volume = volumeRef.current * hookGain(t.into, t.lengthS);
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+      audio.volume = volumeRef.current;
+    };
+  }, [playing]);
+
+  /**
    * Move to the next hook. auto=true means the window simply ran out, so when
    * there are none left the card is finished; a tap on the last hook wraps to
    * the first instead of skipping the song out from under someone.
@@ -201,6 +230,7 @@ export function usePlayer(
 
   const setVolume = useCallback((v: number) => {
     const clamped = Math.min(Math.max(v, 0), 1);
+    volumeRef.current = clamped;
     if (audioRef.current) audioRef.current.volume = clamped;
     setVolumeState(clamped);
     localStorage.setItem("hooked.volume", String(clamped));

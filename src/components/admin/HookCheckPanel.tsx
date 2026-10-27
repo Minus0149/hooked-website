@@ -25,7 +25,7 @@ const POLICIES = [
 ];
 const POLICY_NUM: Record<string, number> = { preview: 0, heuristic: 1, auto: 2 };
 const METHOD_LABEL = {
-  auto: "Auto — model when confident, else 0",
+  auto: "Auto — model when confident, else heuristic",
   model: "Model, always",
   modelWhenConfident: "Model, confident songs only",
   heuristic: "Heuristic",

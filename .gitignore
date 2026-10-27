@@ -35,3 +35,7 @@ catalog-out/
 
 # python
 __pycache__/
+
+# hook analyser venv (docs/HOOKS.md)
+.venv-hooks/
+.tmp/

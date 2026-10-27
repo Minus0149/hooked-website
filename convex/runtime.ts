@@ -108,7 +108,7 @@ export const RUNTIME_DEFAULTS = {
   /**
    * Which hook start the players get (convex/hookRules.ts): 0 = the whole
    * preview from 0, 1 = the no-model loudness heuristic, 2 = auto (the
-   * structure model when confident, otherwise the whole preview). Changing it
+   * structure model when confident, otherwise the heuristic; never 0). Changing it
    * takes effect on "Apply to all songs" in the Hook check tab.
    */
   hookPolicy: 2,

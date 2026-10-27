@@ -8,13 +8,15 @@ import {
   MIN_LABELS,
   planHooksV3,
   policyOf,
+  previewWindow,
   provisionalWindows,
   recommendPolicy,
   scoreMethods,
   singleWindow,
+  withBuildup,
   type HookAnalysis,
 } from "../convex/hookRules";
-import { distinctHooks, hookTiming } from "../src/lib/hookPlayback";
+import { distinctHooks, FADE_OUT_S, hookGain, hookTiming } from "../src/lib/hookPlayback";
 
 /**
  * Hook recognition v3. The complaint that started it: hooks were ~10 s, three
@@ -40,49 +42,64 @@ function preview(over: Partial<HookAnalysis> = {}): HookAnalysis {
 }
 
 describe("planHooksV3 on a preview", () => {
-  it("gives exactly one hook that runs from the chorus to the end of the audio", () => {
+  it("gives exactly one hook: from the bar before the chorus to the end of a line", () => {
     const { method, windows } = planHooksV3(preview(), "auto");
     expect(method).toBe("model");
-    expect(windows).toEqual([{ startMs: 12_000, durationMs: 18_000 }]);
+    // chorus at 12 s: opens on the 10 s bar (build-up), closes on the 28 s bar,
+    // the last 2-bar line that fits before Apple's clip ends at 30 s
+    expect(windows).toEqual([{ startMs: 10_000, durationMs: 18_000 }]);
   });
 
-  it("never plays a fixed 10 s slice: every window is at least 15 s", () => {
+  it("never plays a fixed 10 s slice, and never runs past the clip", () => {
     for (const policy of ["auto", "heuristic", "preview"] as const) {
       for (const start of [0, 5_000, 14_000, 20_000, 28_000]) {
         const { windows } = planHooksV3(preview({ modelStartMs: start, heuristicStartMs: start }), policy);
         expect(windows).toHaveLength(1);
         expect(windows[0].durationMs).toBeGreaterThanOrEqual(MIN_HOOK_MS);
-        expect(windows[0].startMs + windows[0].durationMs).toBe(30_000);
+        expect(windows[0].startMs + windows[0].durationMs).toBeLessThanOrEqual(30_000);
       }
     }
   });
 
-  it("pulls a late hook back to the last bar that still leaves 15 s", () => {
+  it("opens a late hook earlier, on the last bar that still leaves the minimum", () => {
+    // hook at 24 s: one more line wouldn't make 12 s, so it plays out to the end from 18 s
     const { windows } = planHooksV3(preview({ modelStartMs: 24_000 }), "auto");
-    expect(windows[0].startMs).toBe(14_000);
-    expect(windows[0].durationMs).toBe(16_000);
+    expect(windows).toEqual([{ startMs: 18_000, durationMs: 12_000 }]);
   });
 
-  it("falls back to the whole preview when the model isn't confident", () => {
+  it("uses the heuristic's hook when the model isn't confident, never the whole preview", () => {
     const { method, windows } = planHooksV3(preview({ confidence: CONFIDENT - 0.01 }), "auto");
-    expect(method).toBe("preview");
-    expect(windows).toEqual([{ startMs: 0, durationMs: 30_000 }]);
+    expect(method).toBe("heuristic");
+    // heuristic hook at 10 s: opened on the 8 s bar, closed on the 26 s line
+    expect(windows).toEqual([{ startMs: 8_000, durationMs: 18_000 }]);
   });
 
-  it("falls back to the whole preview when the model found no structure", () => {
-    const { method } = planHooksV3(preview({ modelStartMs: undefined, sections: [] }), "auto");
-    expect(method).toBe("preview");
+  it("uses the heuristic's hook when the model found no structure", () => {
+    const { method, windows } = planHooksV3(preview({ modelStartMs: undefined, sections: [] }), "auto");
+    expect(method).toBe("heuristic");
+    expect(windows[0].startMs).toBe(8_000);
+  });
+
+  it("under auto, every heard song starts at a hook, not at 0", () => {
+    for (const confidence of [0, 0.05, 0.1, CONFIDENT - 0.01, CONFIDENT, 0.6]) {
+      for (const hook of [4_000, 9_000, 13_000]) {
+        const { windows } = planHooksV3(preview({ confidence, modelStartMs: hook, heuristicStartMs: hook }), "auto");
+        expect(windows[0].startMs).toBeGreaterThan(0);
+        expect(windows[0].startMs).toBeLessThan(hook);
+        expect(hook - windows[0].startMs).toBeLessThanOrEqual(3_500);
+      }
+    }
   });
 
   it("follows the admin's policy", () => {
     expect(planHooksV3(preview(), "heuristic")).toEqual({
       method: "heuristic",
-      windows: [{ startMs: 10_000, durationMs: 20_000 }],
+      windows: [{ startMs: 8_000, durationMs: 18_000 }],
     });
     expect(planHooksV3(preview(), "preview").windows).toEqual([{ startMs: 0, durationMs: 30_000 }]);
   });
 
-  it("plays a clip shorter than 15 s whole", () => {
+  it("plays a clip no longer than the minimum whole", () => {
     expect(planHooksV3(preview({ durationMs: 12_000 }), "auto").windows).toEqual([{ startMs: 0, durationMs: 12_000 }]);
   });
 });
@@ -124,14 +141,64 @@ describe("planHooksV3 on a full song", () => {
     // 50 s and 100 s are both label 2 but 50 s apart, so both may stay;
     // what must never happen is two picks inside one section
     expect(new Set(starts).size).toBe(starts.length);
-    expect(starts[0]).toBe(50_000);
+    // the 50 s chorus, opened on the 48 s bar
+    expect(starts[0]).toBe(48_000);
   });
 
-  it("gives one capped window from 0 when it isn't confident", () => {
+  it("gives one capped window at the heuristic's hook when it isn't confident", () => {
     expect(planHooksV3({ ...full, confidence: 0 }, "auto")).toEqual({
-      method: "preview",
-      windows: [{ startMs: 0, durationMs: 30_000 }],
+      method: "heuristic",
+      windows: [{ startMs: 48_000, durationMs: 30_000 }],
     });
+  });
+});
+
+describe("the preview window (ends on a line, not where Apple cut the clip)", () => {
+  const bars2 = bars(30_000);
+
+  it("ends on the last whole 2-bar line that fits", () => {
+    // hook bar 8 s; lines end at 12, 16, 20, 24, 28; 28 is the last before 29.75 s
+    expect(previewWindow(8_000, 30_000, bars2)).toEqual({ startMs: 6_000, durationMs: 22_000 });
+  });
+
+  it("counts lines from the hook's own bar, not from the start of the clip", () => {
+    const odd = Array.from({ length: 15 }, (_, i) => 1_000 + i * 2_000); // bars at 1, 3, 5 … 29 s
+    // hook bar 9 s; lines end at 13, 17, 21, 25, 29 (29 ≤ 29.75)
+    expect(previewWindow(9_000, 30_000, odd)).toEqual({ startMs: 7_000, durationMs: 22_000 });
+  });
+
+  it("plays out to the clip's end when a whole line would leave it too short", () => {
+    // hook 18 s: lines end at 22, 26 → 16..26 is only 10 s, so it runs to 30 s
+    expect(previewWindow(18_000, 30_000, bars2)).toEqual({ startMs: 16_000, durationMs: 14_000 });
+  });
+
+  it("a hook in the last seconds opens earlier rather than playing 5 s", () => {
+    expect(previewWindow(27_000, 30_000, bars2)).toEqual({ startMs: 18_000, durationMs: 12_000 });
+  });
+
+  it("works without any detected bars", () => {
+    expect(previewWindow(10_000, 30_000, [])).toEqual({ startMs: 7_500, durationMs: 22_500 });
+    expect(previewWindow(25_000, 30_000, [])).toEqual({ startMs: 18_000, durationMs: 12_000 });
+  });
+
+  it("a preview that opens on its hook starts at 0", () => {
+    expect(previewWindow(0, 30_000, bars2)).toEqual({ startMs: 0, durationMs: 28_000 });
+  });
+});
+
+describe("the build-up before a hook", () => {
+  it("opens on the latest bar 1.5-3.5 s before the hook", () => {
+    expect(withBuildup(12_000, bars(30_000))).toBe(10_000);
+    expect(withBuildup(12_700, bars(30_000))).toBe(10_000);
+  });
+
+  it("opens 2.5 s early when no bar falls in that range", () => {
+    expect(withBuildup(12_000, [])).toBe(9_500);
+  });
+
+  it("never goes below 0, and a hook at 0 stays at 0", () => {
+    expect(withBuildup(0, bars(30_000))).toBe(0);
+    expect(withBuildup(1_000, [])).toBe(0);
   });
 });
 
@@ -175,8 +242,8 @@ describe("the Hook check evaluation", () => {
     expect(s.preview).toEqual({ n: 3, meanAbsErrorS: 10.7, within2s: 33 });
     expect(s.heuristic.within2s).toBe(67);
     expect(s.modelWhenConfident.n).toBe(1);
-    // auto = model when confident (row 1), else 0 (rows 2, 3)
-    expect(s.auto.meanAbsErrorS).toBe(6.8);
+    // auto = model when confident (row 1), else the heuristic (rows 2, 3)
+    expect(s.auto.meanAbsErrorS).toBe(0.5);
   });
 
   it("recommends nothing until there are enough marks", () => {
@@ -211,6 +278,23 @@ describe("catalogue hook health", () => {
 });
 
 describe("hook playback (shared by web and mobile)", () => {
+  it("fades a hook out over its last 1.5 s instead of stopping dead", () => {
+    expect(hookGain(5, 20)).toBe(1);
+    expect(hookGain(20 - FADE_OUT_S, 20)).toBe(1);
+    expect(hookGain(20 - FADE_OUT_S / 2, 20)).toBeCloseTo(0.5);
+    expect(hookGain(20, 20)).toBe(0);
+  });
+
+  it("fades in over a moment so a mid-song start doesn't click, and is silent before the window", () => {
+    expect(hookGain(0, 20)).toBe(0);
+    expect(hookGain(0.06, 20)).toBeCloseTo(0.5);
+    expect(hookGain(-3, 20)).toBe(0);
+  });
+
+  it("an open-ended window only fades in", () => {
+    expect(hookGain(10, Number.POSITIVE_INFINITY)).toBe(1);
+  });
+
   it("drops a window that would replay seconds already heard", () => {
     const kept = distinctHooks([
       { startMs: 0, durationMs: 10_000 },

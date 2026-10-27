@@ -51,3 +51,19 @@ export function hookTiming(hook: PlayWindow, currentTime: number, duration: numb
     done: into >= lengthS,
   };
 }
+
+/** Seconds a hook fades out over at the end of its window, and fades in over at its start. */
+export const FADE_OUT_S = 1.5;
+export const FADE_IN_S = 0.12;
+
+/**
+ * Volume multiplier (0..1) at `into` seconds through a window `lengthS` long:
+ * a short fade-in so a mid-song start doesn't click, and a fade over the last
+ * FADE_OUT_S so a hook ends gently instead of stopping dead. An open-ended
+ * window (length not known yet) only fades in.
+ */
+export function hookGain(into: number, lengthS: number): number {
+  const fadeIn = Math.min(1, Math.max(0, into / FADE_IN_S));
+  const fadeOut = Number.isFinite(lengthS) ? Math.min(1, Math.max(0, (lengthS - into) / FADE_OUT_S)) : 1;
+  return fadeIn * fadeOut;
+}

@@ -17,10 +17,10 @@ What it does, in MIR terms (librosa; no GPU needed):
      the audio barely has structure (one section, or everything the same).
 
 plan() turns that into hook windows:
-  - audio <= 35 s (an Apple preview): exactly ONE hook. Confident → from the
-    chosen section's downbeat to the end of the audio, pulled earlier to a bar
-    if that would leave under MIN_HOOK_S. Not confident → the whole preview
-    from 0 (Apple's own excerpt). Never a fixed 10 s slice.
+  - audio <= 35 s (an Apple preview): exactly ONE hook (preview_window). It
+    starts on the bar 1.5-3.5 s before the hook (the model's pick when
+    confident, else the heuristic's; never 0 by default) and ends on the last
+    whole 2-bar line that fits, at least MIN_HOOK_S. Never a fixed 10 s slice.
   - longer audio (a creator's full upload): up to 3 hooks, each a DISTINCT
     section (different label or far apart), no overlap, each >= MIN_HOOK_S.
 
@@ -36,7 +36,9 @@ import numpy as np
 
 SR = 22050
 HOP = 512
-MIN_HOOK_S = 15.0
+MIN_HOOK_S = 12.0
+LINE_BARS = 2  # a preview hook ends on a line: every LINE_BARS bars from the hook's bar
+TAIL_MARGIN_S = 0.25
 PREVIEW_MAX_S = 35.0
 MAX_HOOKS_LONG = 3
 CONFIDENT = 0.18  # confidence at or above which the model's pick is used
@@ -229,32 +231,69 @@ def single_window(start: float, duration: float, downbeats: list[float]) -> tupl
     return float(start), float(duration - start)
 
 
+BUILDUP_S, BUILDUP_MIN_S, BUILDUP_MAX_S = 2.5, 1.5, 3.5
+
+
+def with_buildup(hook: float, downbeats: list[float]) -> float:
+    """Open on the latest bar 1.5-3.5 s before the hook, else 2.5 s before it (mirrors convex/hookRules.ts)."""
+    if hook <= 0:
+        return 0.0
+    near = [d for d in downbeats if hook - BUILDUP_MAX_S <= d <= hook - BUILDUP_MIN_S]
+    return max(0.0, max(near) if near else hook - BUILDUP_S)
+
+
+def preview_window(hook: float, duration: float, downbeats: list[float]) -> tuple[float, float]:
+    """(start, length) for a preview. Mirrors previewWindow in convex/hookRules.ts."""
+    if duration <= MIN_HOOK_S:
+        return 0.0, duration
+    bars = sorted(d for d in downbeats if 0 <= d < duration)
+    after = [i for i, d in enumerate(bars) if d >= hook - 0.15]
+    i0 = after[0] if after else None
+    hook_bar = bars[i0] if i0 is not None else max(0.0, hook)
+    start = with_buildup(hook_bar, bars)
+    end = None
+    if i0 is not None:
+        k = LINE_BARS
+        while i0 + k < len(bars) and bars[i0 + k] <= duration - TAIL_MARGIN_S:
+            end = bars[i0 + k]
+            k += LINE_BARS
+    if end is None or end - start < MIN_HOOK_S:
+        end = duration
+    if end - start < MIN_HOOK_S:
+        earlier = [d for d in bars if d <= duration - MIN_HOOK_S]
+        start = max(earlier) if earlier else duration - MIN_HOOK_S
+    start = max(0.0, start)
+    return float(start), float(end - start)
+
+
 def plan(a: Analysis, policy: str = "auto") -> dict:
-    """Hook windows for one track. policy: auto | heuristic | preview."""
+    """Hook windows for one track. policy: auto | heuristic | preview. Mirrors convex/hookRules.ts."""
     d = a.duration
+    confident = a.model_start is not None and a.confidence >= CONFIDENT
     if d <= PREVIEW_MAX_S:
         if policy == "preview":
-            method, start = "preview", 0.0
-        elif policy == "heuristic":
-            method, start = "heuristic", a.heuristic_start
-        elif a.model_start is not None and a.confidence >= CONFIDENT:
-            method, start = "model", a.model_start
-        else:
-            method, start = "preview", 0.0
-        s, ln = single_window(start, d, a.downbeats)
-        return {"method": method, "windows": [(s, ln)]}
+            s, ln = single_window(0.0, d, a.downbeats)
+            return {"method": "preview", "windows": [(s, ln)]}
+        use_model = policy == "auto" and confident
+        hook = a.model_start if use_model else a.heuristic_start
+        s, ln = preview_window(hook, d, a.downbeats)
+        return {"method": "model" if use_model else "heuristic", "windows": [(s, ln)], "hook": hook}
 
     # long audio: up to 3 distinct sections, no overlap
-    if policy == "preview" or not a.sections or a.confidence < CONFIDENT:
-        s, ln = single_window(a.heuristic_start if policy == "heuristic" else 0.0, d, a.downbeats)
-        return {"method": "heuristic" if policy == "heuristic" else "preview", "windows": [(s, min(ln, 30.0))]}
+    if policy == "preview":
+        s, ln = single_window(0.0, d, a.downbeats)
+        return {"method": "preview", "windows": [(s, min(ln, 30.0))]}
+    if policy == "heuristic" or not a.sections or not confident:
+        s, ln = single_window(with_buildup(a.heuristic_start, a.downbeats), d, a.downbeats)
+        return {"method": "heuristic", "windows": [(s, min(ln, 30.0))]}
     picked: list[tuple[float, float]] = []
     used_labels: set[int] = set()
     for sec in sorted(a.sections, key=lambda s: s.score, reverse=True):
         if len(picked) >= MAX_HOOKS_LONG:
             break
         length = min(max(sec.dur, MIN_HOOK_S), 30.0)
-        start, end = sec.start, min(sec.start + length, d)
+        start = with_buildup(sec.start, a.downbeats)
+        end = min(start + length, d)
         if end - start < MIN_HOOK_S:
             continue
         far = all(start >= pe + 5.0 or end <= ps - 5.0 for ps, pe in picked)
@@ -265,6 +304,6 @@ def plan(a: Analysis, policy: str = "auto") -> dict:
         picked.append((start, end))
         used_labels.add(sec.label)
     if not picked:
-        s, ln = single_window(0.0, d, a.downbeats)
-        return {"method": "preview", "windows": [(s, min(ln, 30.0))]}
+        s, ln = single_window(with_buildup(a.heuristic_start, a.downbeats), d, a.downbeats)
+        return {"method": "heuristic", "windows": [(s, min(ln, 30.0))]}
     return {"method": "model", "windows": [(s, e - s) for s, e in picked]}

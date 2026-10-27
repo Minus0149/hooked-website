@@ -51,9 +51,14 @@ The admin picks the policy. It is stored as `runtime.hookPolicy` and shown in
 
 | value | policy | start of the hook |
 |---|---|---|
-| 2 (default) | **auto** | the structure model's pick when its confidence is ≥ 0.18, otherwise **0** (the whole preview, which is Apple's own excerpt) |
+| 2 (default) | **auto** | the structure model's pick when its confidence is ≥ 0.18, otherwise the **heuristic's** pick. Every heard song gets a real hook start; nothing falls back to 0 (changed 27 Oct 2026: most songs were playing the whole 30 s clip) |
 | 1 | heuristic | the biggest loudness lift, snapped to a bar |
 | 0 | preview | always 0 |
+
+**Build-up.** Whatever the start, the window opens on the last bar 1.5–3.5 s
+before the hook (2.5 s before it when no bar falls there), so the listener hears
+the lead-in rather than a cold cut (`withBuildup` in `convex/hookRules.ts`,
+`with_buildup` in `scripts/lib/hookstructure.py`).
 
 Each hook stores the method that made it, in
 `createdBy = analyzer:v3:<model|heuristic|preview|unheard>`.
