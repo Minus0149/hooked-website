@@ -1120,6 +1120,34 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     },
     [catalogById, startSession, setViewWithHistory],
   );
+  /**
+   * A collaborator's "Add songs by swiping". A playlist joined in this session
+   * isn't in the local library yet (that is hydrated once per sign-in), and a
+   * save aimed at a playlist the store doesn't know falls back to Liked — so
+   * the store learns it first, then the deck aims at it.
+   */
+  const saveIntoShared = useCallback(
+    (pl: { id: string; name: string; accent: string; songs: ServerSong[]; ownerName: string }) => {
+      if (!stateRef.current.playlists.some((p) => p.id === pl.id)) {
+        createPlaylist({
+          id: pl.id,
+          name: pl.name,
+          accent: pl.accent,
+          collaborative: true,
+          sharedBy: pl.ownerName,
+          tracks: pl.songs.map(
+            (s) =>
+              catalogById.get(s.trackId) ?? {
+                id: s.trackId, title: s.title, artist: s.artist, album: s.album, artwork: s.artwork,
+                previewUrl: s.previewUrl, durationMs: s.durationMs, genre: s.genre, accent: s.accent,
+              },
+          ),
+        });
+      }
+      handleDiscoverInto(`pl:${pl.id}` as LibraryContainer);
+    },
+    [catalogById, createPlaylist, handleDiscoverInto],
+  );
   const startRoom = useCallback(async () => {
     // the room plays the host's own next songs, in deck order
     const ids = [onDeck?.id, ...state.queue.map((t) => t.id)].filter((x): x is string => Boolean(x) && catalogById.has(x!));
@@ -1391,6 +1419,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
               onOpenUser={(u) => setViewWithHistory(`user:${u}`)}
               onPlaySongs={playSongs}
               onOpenOwn={(id) => setViewWithHistory(`library:pl:${id}`)}
+              onSaveHere={saveIntoShared}
             />
           )}
           {view.startsWith("invite:") && (

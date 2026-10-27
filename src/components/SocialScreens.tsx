@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Track } from "../types";
 import { art } from "../lib/art";
@@ -602,6 +602,7 @@ export function SharedPlaylistScreen({
   onOpenUser,
   onPlaySongs,
   onOpenOwn,
+  onSaveHere,
 }: {
   playlistId: string;
   onBack: () => void;
@@ -609,6 +610,8 @@ export function SharedPlaylistScreen({
   onPlaySongs: PlaySongs;
   /** the owner is sent to their own library screen, which has the editing tools */
   onOpenOwn: (playlistId: string) => void;
+  /** a collaborator's "add songs": make it the swipe-down target and go swipe */
+  onSaveHere?: (pl: { id: string; name: string; accent: string; songs: ServerSong[]; ownerName: string }) => void;
 }) {
   const tx = useT();
   const { confirm } = useDialogs();
@@ -681,7 +684,27 @@ export function SharedPlaylistScreen({
           )}
         </motion.div>
         {pl.canAdd && !pl.isOwner && (
-          <p className="settings-hint">{tx("Pick it as your swipe-down target and your saves land here for everyone.")}</p>
+          <>
+            {onSaveHere && (
+              <motion.div className="library-actions" variants={rise}>
+                <button
+                  className="library-cta"
+                  onClick={() =>
+                    onSaveHere({
+                      id: String(pl.id),
+                      name: pl.name,
+                      accent: pl.accent,
+                      songs,
+                      ownerName: pl.owner.username ? `@${pl.owner.username}` : pl.owner.name,
+                    })
+                  }
+                >
+                  <IconPlay size={16} /> {tx("Add songs by swiping")}
+                </button>
+              </motion.div>
+            )}
+            <p className="settings-hint">{tx("Your swipe-down saves then land here, for everyone in it.")}</p>
+          </>
         )}
         {pl.songs.map((s) => (
           <SongRow
@@ -776,16 +799,21 @@ export function RoomScreen({
   const [joinError, setJoinError] = useState<string | null>(null);
   const [linkNote, setLinkNote] = useState<string | null>(null);
 
-  // join once, then say "still here" every 20 s
+  // join once the backend knows who this is (a cold load of /together/<code>
+  // ran the join before the auth token landed: "Unauthenticated", never in
+  // the room, and every Save refused), then say "still here" every 20 s
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   useEffect(() => {
+    if (!isAuthenticated) return;
     let alive = true;
+    setJoinError(null);
     join({ code }).catch((e) => alive && setJoinError(serverMessage(e)));
     const t = window.setInterval(() => void heartbeat({ code }).catch(() => undefined), 20_000);
     return () => {
       alive = false;
       window.clearInterval(t);
     };
-  }, [code, join, heartbeat]);
+  }, [code, join, heartbeat, isAuthenticated]);
 
   const local = useMemo(() => (room?.open && room.currentTrackId ? resolveTrack(room.currentTrackId) : null), [room?.open, room?.currentTrackId, resolveTrack]);
   // a song this listener's app doesn't have: fetch it the way a shared link does
@@ -852,11 +880,15 @@ export function RoomScreen({
       />
       <div className="library-body">
         {joinError && <p className="settings-hint" role="alert">{joinError}</p>}
-        {room === null && <p className="settings-hint">{tx("No room with that code.")}</p>}
+        {!authLoading && !isAuthenticated ? (
+          <p className="settings-hint">{tx("Sign in to join this room.")}</p>
+        ) : (
+          room === null && <p className="settings-hint">{tx("No room with that code.")}</p>
+        )}
         {room && !room.open && (
           <div className="social-center">
             <p className="library-title">{tx("This room has ended")}</p>
-            <p className="settings-hint">{tx("{n} saves were made in it.", { n: room.saves })}</p>
+            <p className="settings-hint">{tx(room.saves === 1 ? "1 save was made in it." : "{n} saves were made in it.", { n: room.saves })}</p>
           </div>
         )}
         {room && room.open && (
