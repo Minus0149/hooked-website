@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { enforceRateLimit, requireGatedUser, requirePermission } from "./security";
 import { runtimeFor } from "./runtime";
@@ -75,7 +75,7 @@ export const vote = mutation({
   args: { trackId: v.string(), mood: v.string() },
   handler: async (ctx, { trackId, mood }) => {
     const { user } = await requireGatedUser(ctx);
-    if (!isMood(mood)) throw new Error("Unknown mood");
+    if (!isMood(mood)) throw new ConvexError("Unknown mood");
     await enforceRateLimit(ctx, `mood:${user.id}`, 240, 60_000);
 
     const userId = String(user.id);

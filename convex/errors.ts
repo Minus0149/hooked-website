@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { authComponent } from "./auth";
 import { cleanText, enforceRateLimit, requirePermission } from "./security";
@@ -41,7 +41,7 @@ export const report = mutation({
   handler: async (ctx, args) => {
     const user = await authComponent.safeGetAuthUser(ctx);
     const anonKey = args.anonKey ? cleanText(args.anonKey, 64) : undefined;
-    if (!user && !anonKey) throw new Error("No identity");
+    if (!user && !anonKey) throw new ConvexError("No identity");
 
     const identity = user ? String(user._id) : `anon:${anonKey}`;
     await enforceRateLimit(ctx, `err-report:${identity}`, 10, 60 * 60_000);
@@ -52,7 +52,7 @@ export const report = mutation({
     const recent = await ctx.db.query("errorReports").order("desc").take(300);
     const hourAgo = Date.now() - 60 * 60_000;
     if (recent.filter((r) => r.at >= hourAgo).length >= 300) {
-      throw new Error("Report queue is full right now — please try again later");
+      throw new ConvexError("Report queue is full right now — please try again later");
     }
 
     let userEmail: string | undefined;

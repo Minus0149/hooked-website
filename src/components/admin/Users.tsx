@@ -15,6 +15,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { art } from "../../lib/art";
 import { ACTION_COLOR, PERM_LABEL, timeAgo } from "./shared";
 import { useDialogs } from "../ui/Dialogs";
+import { serverMessage } from "../../lib/serverError";
 
 type UsersData = NonNullable<ReturnType<typeof useUsersType>>;
 function useUsersType() {
@@ -224,7 +225,7 @@ function UserDetailPanel({
             style={detail.suspended ? undefined : { color: "var(--more)" }}
             onClick={() =>
               void setSuspended({ profileId, suspended: !detail.suspended }).catch(
-                (e: Error) => notify(e.message, "error"),
+                (e: Error) => notify(serverMessage(e), "error"),
               )
             }
           >
@@ -248,7 +249,7 @@ function UserDetailPanel({
                   notify(`Deleted ${detail.email}'s data`, "success");
                   onClose();
                 })
-                .catch((e: Error) => notify(e.message, "error"));
+                .catch((e: Error) => notify(serverMessage(e), "error"));
             }}
           >
             delete data

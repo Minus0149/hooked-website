@@ -9,6 +9,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { parsePlaylist } from "../../lib/playlist-parse";
 import type { ImportReport } from "../../../convex/imports";
+import { serverMessage } from "../../lib/serverError";
 
 const MAX_IMPORT = 40;
 /** Roughly what one song costs to look up, so the wait can be predicted. */
@@ -66,7 +67,7 @@ export function ImportPanel() {
       setReport(result);
       if (result.added > 0) setText("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "That import didn't go through");
+      setError(serverMessage(err, "That import didn't go through"));
     } finally {
       setBusy(false);
     }

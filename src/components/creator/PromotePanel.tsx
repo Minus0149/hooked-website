@@ -6,6 +6,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { MOODS } from "../../data/mood";
 import { Select, useDialogs } from "../ui/Dialogs";
 import type { Track } from "./types";
+import { serverMessage } from "../../lib/serverError";
 
 /**
  * Promote a song — as a request (convex/promotions.ts, docs/PROMOTIONS.md).
@@ -48,8 +49,7 @@ function loadCheckout(): Promise<RazorpayCtor> {
   });
 }
 
-const errorText = (err: unknown) =>
-  err instanceof Error ? err.message.replace(/^[\s\S]*Uncaught Error: /, "").split("\n")[0] : "Something went wrong";
+const errorText = (err: unknown) => serverMessage(err, "Something went wrong");
 
 const STATUS_LABEL: Record<string, string> = {
   requested: "waiting for review",

@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { components } from "./_generated/api";
@@ -73,7 +73,7 @@ export const ensureProfile = mutation({
       : null;
     const verdict = profileGate(request?.status ?? null, user.emailVerified);
     // the client turns these into the pending / rejected / apply / inbox screens
-    if (verdict !== "create") throw new Error(verdict);
+    if (verdict !== "create") throw new ConvexError(verdict);
 
     const id = await ctx.db.insert("profiles", {
       userId: user.id,
@@ -179,7 +179,7 @@ export const createPlaylist = mutation({
     ensureActiveProfile(profile);
     await enforceRateLimit(ctx, `playlist:create:${user.id}`, 20, 10 * 60_000);
     const trimmed = cleanText(name, 40);
-    if (!trimmed) throw new Error("Playlist needs a name");
+    if (!trimmed) throw new ConvexError("Playlist needs a name");
     const id = await ctx.db.insert("playlists", {
       userId: user.id,
       name: trimmed,
@@ -211,7 +211,7 @@ export const updatePlaylistRules = mutation({
     ensureActiveProfile(profile);
     await enforceRateLimit(ctx, `playlist:rules:${user.id}`, 60, 60_000);
     const playlist = await ctx.db.get(playlistId);
-    if (!playlist || playlist.userId !== user.id) throw new Error("Not your playlist");
+    if (!playlist || playlist.userId !== user.id) throw new ConvexError("Not your playlist");
     const patch: Record<string, boolean> = {};
     for (const key of ["allowRepeats", "includeBuried", "includeBlockedArtists"] as const) {
       if (rules[key] !== undefined) patch[key] = rules[key] === true;
@@ -228,7 +228,7 @@ export const deletePlaylist = mutation({
     ensureActiveProfile(profile);
     await enforceRateLimit(ctx, `playlist:delete:${user.id}`, 30, 10 * 60_000);
     const playlist = await ctx.db.get(playlistId);
-    if (!playlist || playlist.userId !== user.id) throw new Error("Not your playlist");
+    if (!playlist || playlist.userId !== user.id) throw new ConvexError("Not your playlist");
     const songs = await ctx.db
       .query("librarySongs")
       .withIndex("by_playlist", (q) => q.eq("playlistId", playlistId))
@@ -480,7 +480,7 @@ export const setReplayContainer = mutation({
   handler: async (ctx, { container, allow }) => {
     const user = await requireUser(ctx);
     const profile = await getProfile(ctx, user.id);
-    if (!profile) throw new Error("No profile");
+    if (!profile) throw new ConvexError("No profile");
     ensureActiveProfile(profile);
     await enforceRateLimit(ctx, `replay:${user.id}`, 120, 60_000);
 
@@ -538,7 +538,7 @@ export const setTaste = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const profile = await getProfile(ctx, user.id);
-    if (!profile) throw new Error("No profile");
+    if (!profile) throw new ConvexError("No profile");
     ensureActiveProfile(profile);
     await enforceRateLimit(ctx, `taste:${user.id}`, 30, 60_000);
     await ctx.db.patch(profile._id, {
@@ -582,7 +582,7 @@ export const setUsername = mutation({
   handler: async (ctx, { username }) => {
     const user = await requireUser(ctx);
     const profile = await getProfile(ctx, user.id);
-    if (!profile) throw new Error("No profile");
+    if (!profile) throw new ConvexError("No profile");
     ensureActiveProfile(profile);
     await enforceRateLimit(ctx, `username:${user.id}`, 10, 60 * 60_000);
     const name = normalizeUsername(username.slice(0, 64));
@@ -591,12 +591,12 @@ export const setUsername = mutation({
       return null;
     }
     const problem = usernameProblem(name);
-    if (problem) throw new Error(problem);
+    if (problem) throw new ConvexError(problem);
     const holder = await ctx.db
       .query("profiles")
       .withIndex("by_username", (q) => q.eq("username", name))
       .first();
-    if (holder && holder._id !== profile._id) throw new Error("That name is taken.");
+    if (holder && holder._id !== profile._id) throw new ConvexError("That name is taken.");
     await ctx.db.patch(profile._id, { username: name });
     return name;
   },
@@ -644,7 +644,7 @@ export const setPrefs = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const profile = await getProfile(ctx, user.id);
-    if (!profile) throw new Error("No profile");
+    if (!profile) throw new ConvexError("No profile");
     ensureActiveProfile(profile);
     await enforceRateLimit(ctx, `prefs:${user.id}`, 60, 60_000);
 
@@ -773,9 +773,9 @@ export const deleteMyAccount = mutation({
     const user = await requireUser(ctx);
     await enforceRateLimit(ctx, `delete-account:${user.id}`, 3, 60 * 60_000);
     const profile = await getProfile(ctx, user.id);
-    if (!profile) throw new Error("No account to delete");
+    if (!profile) throw new ConvexError("No account to delete");
     if (profile.isAdmin) {
-      throw new Error("Admins can't delete themselves — hand the role over first");
+      throw new ConvexError("Admins can't delete themselves — hand the role over first");
     }
 
     const userId = profile.userId;
@@ -803,7 +803,7 @@ export const deleteMyAccount = mutation({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
     if (campaigns.some((c) => c.status === "active")) {
-      throw new Error("You have a promotion running — cancel it first (unused listens are refunded).");
+      throw new ConvexError("You have a promotion running — cancel it first (unused listens are refunded).");
     }
     const rate = await ctx.db
       .query("promotionRates")

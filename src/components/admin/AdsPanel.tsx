@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useDialogs, Select } from "../ui/Dialogs";
+import { serverMessage } from "../../lib/serverError";
 
 /**
  * The ads studio: pacing rules on the left, campaigns on the right.
@@ -78,7 +79,7 @@ function CadenceCard({ config }: { config: AdsConfig }) {
       await setConfig({ ...draft });
       setDirty(false);
     } catch (e) {
-      notify(e instanceof Error ? e.message : "Could not save", "error");
+      notify(serverMessage(e, "Could not save"), "error");
     } finally {
       setSaving(false);
     }
@@ -224,7 +225,7 @@ function CampaignEditor({
       });
       onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save");
+      setError(serverMessage(e, "Could not save"));
     } finally {
       setBusy(false);
     }

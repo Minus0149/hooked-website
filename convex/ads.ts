@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import {
   internalMutation,
   mutation,
@@ -143,7 +143,7 @@ export const generateAdUploadUrl = mutation({
 
 function cleanAdUrl(raw: string): string {
   const url = cleanText(raw, 400);
-  if (!/^https:\/\//i.test(url)) throw new Error("The link must be https");
+  if (!/^https:\/\//i.test(url)) throw new ConvexError("The link must be https");
   return url;
 }
 
@@ -201,7 +201,7 @@ export const saveAd = mutation({
       null;
     if (args.id) {
       previous = await ctx.db.get(args.id);
-      if (!previous) throw new Error("No such ad");
+      if (!previous) throw new ConvexError("No such ad");
     }
 
     if (args.id && previous) {
@@ -345,7 +345,7 @@ export const recordEvent = mutation({
   handler: async (ctx, { adId, kind, anonKey }) => {
     const user = await authComponent.safeGetAuthUser(ctx);
     const cleanAnon = anonKey ? cleanText(anonKey, 64) : undefined;
-    if (!user && !cleanAnon) throw new Error("No identity");
+    if (!user && !cleanAnon) throw new ConvexError("No identity");
 
     // anonymous identities are free to mint, so per-key limits alone can't
     // bound total writes — a global hourly dam for anon-originated events.
@@ -365,7 +365,7 @@ export const recordEvent = mutation({
     await enforceRateLimit(ctx, capKey, 120, 60 * 60_000);
 
     const ad = await ctx.db.get(adId);
-    if (!ad) throw new Error("No such ad");
+    if (!ad) throw new ConvexError("No such ad");
 
     await ctx.db.insert("adEvents", {
       userId: user ? String(user._id) : undefined,

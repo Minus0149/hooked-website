@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -124,7 +124,7 @@ async function upsertRequest(
   input: Incoming,
 ): Promise<{ status: "pending" | "approved" | "rejected"; duplicate: boolean }> {
   const email = cleanText(input.email, MAX.email).toLowerCase();
-  if (!EMAIL_RE.test(email)) throw new Error("A real email address is required");
+  if (!EMAIL_RE.test(email)) throw new ConvexError("A real email address is required");
   const name = nameFor(input.name, email);
   const details = detailFields(input);
 
@@ -280,7 +280,7 @@ export const remove = mutation({
       (p) => p.email.toLowerCase() === row.email.toLowerCase(),
     );
     if (existing) {
-      throw new Error(
+      throw new ConvexError(
         "That email already has an account — reject it instead, or delete the user from Users.",
       );
     }

@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent } from "./auth";
@@ -54,7 +54,7 @@ export const submit = mutation({
   handler: async (ctx, args) => {
     const user = await authComponent.safeGetAuthUser(ctx);
     const reporter = reporterKey(user ? String(user._id) : null, args.anonKey);
-    if (!reporter) throw new Error("Couldn't send that report. Try again?");
+    if (!reporter) throw new ConvexError("Couldn't send that report. Try again?");
     await enforceRateLimit(ctx, `report:${reporter}`, reportLimit(reporter), 60 * 60_000);
     await enforceRateLimit(ctx, "report:global", 300, 60 * 60_000);
 

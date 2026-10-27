@@ -68,6 +68,7 @@ import {
   type SwipeDir,
   type Track,
 } from "./types";
+import { serverMessage } from "./lib/serverError";
 
 const ONBOARD_KEY = "hooked.onboarded.v1";
 // taste-first gate: anonymous visitors get a few free swipes, then the wall.
@@ -275,7 +276,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     void ensureProfile({})
       .then(() => setAccessBlock(null))
       .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = serverMessage(err);
         if (msg.includes("ACCESS_REJECTED")) setAccessBlock("rejected");
         else if (msg.includes("ACCESS_PENDING")) setAccessBlock("pending");
         else if (msg.includes("ACCESS_NOT_REQUESTED")) setAccessBlock("none");

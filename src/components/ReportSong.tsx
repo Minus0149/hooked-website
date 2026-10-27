@@ -11,6 +11,7 @@ import {
 } from "../lib/contentReport";
 
 import { useT } from "../lib/lang";
+import { serverMessage } from "../lib/serverError";
 /**
  * "Report this song", inside the full-song sheet (Google Play's UGC policy).
  * Works signed out: the device's anonymous key holds guests to a rate limit.
@@ -50,7 +51,7 @@ export function ReportSong({ track, onBack, onDone }: { track: Track; onBack: ()
       });
       setSent(true);
     } catch (err) {
-      const m = err instanceof Error ? err.message : "";
+      const m = serverMessage(err, "");
       setError(/rate|too many|slow down/i.test(m) ? "That's a lot of reports — try again in a while." : "Couldn't send that report. Try again?");
     } finally {
       setBusy(false);

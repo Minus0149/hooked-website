@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Select, useDialogs } from "../ui/Dialogs";
 import { PromotionRequests } from "./PromotionRequests";
+import { serverMessage } from "../../lib/serverError";
 
 /**
  * Paid promotion, run from here (convex/promotions.ts, docs/PROMOTIONS.md):
@@ -74,7 +75,7 @@ function ConfigCard({ config }: { config: Config }) {
       await setConfig({ value: draft });
       notify("Promotion settings saved", "success");
     } catch (e) {
-      notify(e instanceof Error ? e.message : "Couldn't save", "error");
+      notify(serverMessage(e, "Couldn't save"), "error");
     } finally {
       setSaving(false);
     }
@@ -193,7 +194,7 @@ function RatesCard({ artists, rates }: { artists: Artist[]; rates: Overview["rat
       setPer1000("");
       setNote("");
     } catch (e) {
-      notify(e instanceof Error ? e.message : "Couldn't save", "error");
+      notify(serverMessage(e, "Couldn't save"), "error");
     }
   };
 
@@ -286,7 +287,7 @@ function CodesCard({ artists, codes }: { artists: Artist[]; codes: Overview["cod
       notify(`Code ${f.code.toUpperCase()} created`, "success");
       setF({ code: "", kind: "percent", value: "", expires: "", maxUses: "", creator: "" });
     } catch (e) {
-      notify(e instanceof Error ? e.message.split("\n")[0] : "Couldn't create", "error");
+      notify(serverMessage(e, "Couldn't create"), "error");
     }
   };
 

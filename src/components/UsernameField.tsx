@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { normalizeUsername, usernameProblem, USERNAME_MAX } from "../lib/username";
 import { useT } from "../lib/lang";
+import { serverMessage } from "../lib/serverError";
 
 /**
  * The listener's @handle on their profile: shown when set, edited in place.
@@ -62,9 +63,8 @@ export function UsernameField() {
       await save({ username: name });
       setEditing(false);
     } catch (e) {
-      // Convex wraps thrown messages; show only ours
-      const raw = e instanceof Error ? e.message : String(e);
-      setError(/Uncaught Error: (.+?)(\n|$)/.exec(raw)?.[1] ?? tt("Couldn't save that. Try again."));
+      // Convex wraps thrown messages (and prod redacts all but ConvexError); show only ours
+      setError(serverMessage(e, tt("Couldn't save that. Try again.")));
     } finally {
       setBusy(false);
     }

@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -866,8 +866,8 @@ export const setSuspended = mutation({
     const { user } = await requirePermission(ctx, "users.manage");
     await enforceRateLimit(ctx, `admin:suspend:${user.id}`, 60, 60_000);
     const target = await ctx.db.get(profileId);
-    if (!target) throw new Error("No such user");
-    if (target.isAdmin) throw new Error("Admins can't be suspended");
+    if (!target) throw new ConvexError("No such user");
+    if (target.isAdmin) throw new ConvexError("Admins can't be suspended");
     await ctx.db.patch(profileId, { suspended });
   },
 });
@@ -879,8 +879,8 @@ export const deleteUserData = mutation({
     const { user } = await requireAdmin(ctx);
     await enforceRateLimit(ctx, `admin:delete-user:${user.id}`, 10, 10 * 60_000);
     const target = await ctx.db.get(profileId);
-    if (!target) throw new Error("No such user");
-    if (target.isAdmin) throw new Error("Demote the admin first");
+    if (!target) throw new ConvexError("No such user");
+    if (target.isAdmin) throw new ConvexError("Demote the admin first");
     const userId = target.userId;
     const [swipes, songs, never, buried, playlists] = await Promise.all([
       ctx.db.query("swipes").withIndex("by_userId", (q) => q.eq("userId", userId)).collect(),
@@ -905,7 +905,7 @@ export const setAdmin = mutation({
     if (!isAdmin) {
       const admins = (await ctx.db.query("profiles").collect()).filter((p) => p.isAdmin);
       if (admins.length === 1 && admins[0]._id === profileId) {
-        throw new Error("Can't demote the last admin");
+        throw new ConvexError("Can't demote the last admin");
       }
     }
     await ctx.db.patch(profileId, { isAdmin });
@@ -923,10 +923,10 @@ export const setPermission = mutation({
     const { user } = await requireAdmin(ctx);
     await enforceRateLimit(ctx, `admin:set-permission:${user.id}`, 60, 60_000);
     if (!(PERMISSIONS as readonly string[]).includes(permission)) {
-      throw new Error("Unknown permission");
+      throw new ConvexError("Unknown permission");
     }
     const target = await ctx.db.get(profileId);
-    if (!target) throw new Error("No such user");
+    if (!target) throw new ConvexError("No such user");
     const current = new Set(target.permissions ?? []);
     if (granted) current.add(permission);
     else current.delete(permission);
@@ -955,7 +955,7 @@ export const grantAdmin = internalMutation({
       model: "user",
       where: [{ field: "email", value: target }],
     })) as { _id: string; email: string; name?: string } | null;
-    if (!user) throw new Error(`No account for ${target} — sign up first, then run this.`);
+    if (!user) throw new ConvexError(`No account for ${target} — sign up first, then run this.`);
     const userId = String(user._id);
     const profile = await ctx.db
       .query("profiles")

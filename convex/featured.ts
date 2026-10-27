@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { featuredEmail } from "./emailTemplate";
@@ -75,15 +75,15 @@ export const setPick = mutation({
     await requirePermission(ctx, "catalog.curate");
     const admin = await requireUser(ctx);
     const week = args.week ?? weekOf(Date.now());
-    if (!isWeekKey(week)) throw new Error("The week must be a Monday, as YYYY-MM-DD.");
+    if (!isWeekKey(week)) throw new ConvexError("The week must be a Monday, as YYYY-MM-DD.");
     const blurb = cleanText(args.blurb, BLURB_MAX);
-    if (blurb.length < 10) throw new Error("Write a short blurb — it's what listeners read.");
+    if (blurb.length < 10) throw new ConvexError("Write a short blurb — it's what listeners read.");
     const track = await ctx.db
       .query("tracks")
       .withIndex("by_trackId", (q) => q.eq("trackId", cleanText(args.trackId, 120)))
       .unique();
-    if (!track || track.hidden) throw new Error("Pick a published song.");
-    if (!track.ownerUserId) throw new Error("The indie hook is for artists' own uploads, not chart songs.");
+    if (!track || track.hidden) throw new ConvexError("Pick a published song.");
+    if (!track.ownerUserId) throw new ConvexError("The indie hook is for artists' own uploads, not chart songs.");
     const existing = await pickFor(ctx, week);
     const row = { trackId: track.trackId, week, blurb, createdAt: Date.now(), createdBy: admin.id };
     if (existing) await ctx.db.replace(existing._id, row);

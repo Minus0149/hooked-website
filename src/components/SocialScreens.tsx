@@ -9,6 +9,7 @@ import { useDialogs } from "./ui/Dialogs";
 import { usePlayer } from "../audio/usePlayer";
 import { IconBack, IconHeart, IconPlay, IconSearch, IconShare, IconUser, IconX } from "./icons";
 import { normalizeCode, ROOM_PRESENCE_MS } from "../../convex/socialRules";
+import { serverMessage } from "../lib/serverError";
 
 /**
  * The social side of the app: people, follows, the feed of songs friends
@@ -76,7 +77,7 @@ function FollowButton({ username, following }: { username: string; following: bo
         try {
           await (following ? unfollow({ username }) : follow({ username }));
         } catch (e) {
-          notify(`${tx("Couldn't do that")}: ${e instanceof Error ? e.message : String(e)}`);
+          notify(`${tx("Couldn't do that")}: ${serverMessage(e)}`);
         } finally {
           setBusy(false);
         }
@@ -233,7 +234,7 @@ export function PeopleScreen({
               try {
                 await onStartRoom();
               } catch (e) {
-                notify(`${tx("Couldn't start a room")}: ${e instanceof Error ? e.message : String(e)}`);
+                notify(`${tx("Couldn't start a room")}: ${serverMessage(e)}`);
               } finally {
                 setStarting(false);
               }
@@ -729,7 +730,7 @@ export function JoinPlaylistScreen({ code, onBack, onJoined }: { code: string; o
                   const r = await join({ code });
                   onJoined(String(r.playlistId));
                 } catch (e) {
-                  setErr(e instanceof Error ? e.message : String(e));
+                  setErr(serverMessage(e));
                 }
               }}
             >
@@ -778,7 +779,7 @@ export function RoomScreen({
   // join once, then say "still here" every 20 s
   useEffect(() => {
     let alive = true;
-    join({ code }).catch((e) => alive && setJoinError(e instanceof Error ? e.message : String(e)));
+    join({ code }).catch((e) => alive && setJoinError(serverMessage(e)));
     const t = window.setInterval(() => void heartbeat({ code }).catch(() => undefined), 20_000);
     return () => {
       alive = false;
@@ -825,7 +826,7 @@ export function RoomScreen({
         action: "save",
       });
     } catch (e) {
-      notify(`${tx("Couldn't save")}: ${e instanceof Error ? e.message : String(e)}`);
+      notify(`${tx("Couldn't save")}: ${serverMessage(e)}`);
     }
   };
   const skip = async () => {
@@ -940,7 +941,7 @@ export function ShareToFollowers({ song }: { song: ServerSong }) {
           await share({ track: song, note: note.trim() || undefined });
           setState("done");
         } catch (err) {
-          setState(err instanceof Error ? err.message : String(err));
+          setState(serverMessage(err));
         }
       }}
     >

@@ -17,6 +17,7 @@ import { MS, clock, secs } from "./types";
 import { HookEditor } from "./HookEditor";
 import { computeFingerprint } from "../../lib/audio-fp";
 import { useDialogs } from "../ui/Dialogs";
+import { serverMessage } from "../../lib/serverError";
 
 /** Overlap at/above this is a re-encoded copy, not a coincidence. */
 const DUPLICATE_BLOCK_SCORE = 0.35;
@@ -140,7 +141,7 @@ export function TrackCard({ track }: { track: Track }) {
         setFpNote("fingerprint indexed ✓");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(serverMessage(err, "Upload failed"));
       setFpNote(null);
     } finally {
       setUploading(false);
@@ -160,7 +161,7 @@ export function TrackCard({ track }: { track: Track }) {
       setNewStart("");
       setNewLabel("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add that hook");
+      setError(serverMessage(err, "Could not add that hook"));
     }
   };
 
@@ -169,7 +170,7 @@ export function TrackCard({ track }: { track: Track }) {
     try {
       await setHidden({ trackId: track.trackId, hidden });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not change that");
+      setError(serverMessage(err, "Could not change that"));
     }
   };
 
@@ -277,7 +278,7 @@ export function TrackCard({ track }: { track: Track }) {
                   onClick={() => void upsertHook({
                     trackId: track.trackId, hookId: hook._id,
                     startMs: hook.startMs, durationMs: hook.durationMs, active: !hook.active,
-                  }).catch((e: Error) => setError(e.message))}
+                  }).catch((e: Error) => setError(serverMessage(e)))}
                 >
                   {hook.active ? "mute" : "unmute"}
                 </button>
@@ -305,7 +306,7 @@ export function TrackCard({ track }: { track: Track }) {
                   await upsertHook({ trackId: track.trackId, startMs, durationMs });
                   setNewLabel("");
                 } catch (err) {
-                  setError(err instanceof Error ? err.message : "Could not add that hook");
+                  setError(serverMessage(err, "Could not add that hook"));
                 }
               }}
             />

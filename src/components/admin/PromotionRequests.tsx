@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Select, useDialogs } from "../ui/Dialogs";
+import { serverMessage } from "../../lib/serverError";
 
 /**
  * Promotion requests waiting for a decision (convex/promotions.ts). Listen to
@@ -13,8 +14,7 @@ import { Select, useDialogs } from "../ui/Dialogs";
 
 const rupees = (paise: number) =>
   `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
-const errorText = (e: unknown) =>
-  e instanceof Error ? e.message.replace(/^[\s\S]*Uncaught Error: /, "").split("\n")[0] : "Something went wrong";
+const errorText = (e: unknown) => serverMessage(e, "Something went wrong");
 
 type Row = NonNullable<ReturnType<typeof useQuery<typeof api.promotions.adminRequests>>>[number];
 

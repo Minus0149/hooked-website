@@ -24,6 +24,7 @@ import { MoodsPanel } from "./admin/MoodsPanel";
 import { SongReportsPanel } from "./admin/SongReports";
 import { HookCheckPanel } from "./admin/HookCheckPanel";
 import { useDialogs } from "./ui/Dialogs";
+import { serverMessage } from "../lib/serverError";
 
 /**
  * The admin shell: which tabs this account may see, and the data each needs.
@@ -221,7 +222,7 @@ export function AdminDashboard() {
             data={creatorData}
             onDecide={(id, status) =>
               void decideCreator({ id: id as never, status }).catch((e: Error) =>
-                notify(e.message, "error"),
+                notify(serverMessage(e), "error"),
               )
             }
           />
@@ -231,11 +232,11 @@ export function AdminDashboard() {
           <RequestsPanel
             data={requests}
             onDecide={(id, status) =>
-              void decide({ id: id as never, status }).catch((e: Error) => notify(e.message, "error"))
+              void decide({ id: id as never, status }).catch((e: Error) => notify(serverMessage(e), "error"))
             }
             onInvited={(id, invited) =>
               void markInvited({ id: id as never, invited }).catch((e: Error) =>
-                notify(e.message, "error"),
+                notify(serverMessage(e), "error"),
               )
             }
             onRemove={async (id, email) => {
@@ -246,7 +247,7 @@ export function AdminDashboard() {
                 danger: true,
               });
               if (!ok) return;
-              void removeRequest({ id: id as never }).catch((e: Error) => notify(e.message, "error"));
+              void removeRequest({ id: id as never }).catch((e: Error) => notify(serverMessage(e), "error"));
             }}
           />
         )}
@@ -257,7 +258,7 @@ export function AdminDashboard() {
             isAdmin={access?.isAdmin ?? false}
             onSetAdmin={(profileId, isAdmin) =>
               void setAdmin({ profileId: profileId as never, isAdmin }).catch((e: Error) =>
-                notify(e.message, "error"),
+                notify(serverMessage(e), "error"),
               )
             }
             onSetPermission={(profileId, permission, granted) =>
@@ -282,7 +283,7 @@ export function AdminDashboard() {
                     "success",
                   ),
                 )
-                .catch((e: Error) => notify(e.message, "error"))
+                .catch((e: Error) => notify(serverMessage(e), "error"))
             }
           />
         )}
@@ -304,7 +305,7 @@ export function AdminDashboard() {
               }
               void resolveReport({ trackId, action })
                 .then(() => notify(action === "hide" ? `Hid “${title}”` : "Report dismissed", "success"))
-                .catch((e: Error) => notify(e.message, "error"));
+                .catch((e: Error) => notify(serverMessage(e), "error"));
             }}
           />
         )}

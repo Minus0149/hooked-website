@@ -1,3 +1,4 @@
+import { ConvexError } from "convex/values";
 /**
  * The rules behind the social side of HookedCue: following, sharing a song to
  * followers, shared and collaborative playlists, the mutual playlist two people
@@ -169,7 +170,7 @@ export function cleanNote(raw: string | undefined | null): string | undefined {
   if (!raw) return undefined;
   const text = raw.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
   if (!text) return undefined;
-  if (/https?:\/\/|www\./i.test(text)) throw new Error("Notes can't contain links");
+  if (/https?:\/\/|www\./i.test(text)) throw new ConvexError("Notes can't contain links");
   return text;
 }
 

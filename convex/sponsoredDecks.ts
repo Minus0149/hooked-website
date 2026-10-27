@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { deckLive } from "./featureRules";
 import { isMood } from "./moods";
@@ -113,15 +113,15 @@ function cleanDeck(a: {
 }) {
   const brand = cleanText(a.brand, 60);
   const title = cleanText(a.title, 60);
-  if (brand.length < 2 || title.length < 2) throw new Error("A deck needs a brand and a title.");
+  if (brand.length < 2 || title.length < 2) throw new ConvexError("A deck needs a brand and a title.");
   const mood = a.mood ? cleanText(a.mood, 20) : undefined;
-  if (mood && !isMood(mood)) throw new Error("Unknown mood.");
+  if (mood && !isMood(mood)) throw new ConvexError("Unknown mood.");
   const genre = a.genre ? cleanText(a.genre, 40) || undefined : undefined;
   const trackIds = [...new Set(a.trackIds.map((t) => cleanText(t, 120)).filter(Boolean))].slice(0, 50);
-  if (!mood && !genre && trackIds.length === 0) throw new Error("Give the deck a mood, a genre or some songs.");
+  if (!mood && !genre && trackIds.length === 0) throw new ConvexError("Give the deck a mood, a genre or some songs.");
   const logo = a.logoUrl ? cleanText(a.logoUrl, 500) : undefined;
-  if (logo && !/^https:\/\//.test(logo)) throw new Error("The logo must be an https URL.");
-  if (!(a.endsAt > a.startsAt)) throw new Error("The deck must end after it starts.");
+  if (logo && !/^https:\/\//.test(logo)) throw new ConvexError("The logo must be an https URL.");
+  if (!(a.endsAt > a.startsAt)) throw new ConvexError("The deck must end after it starts.");
   return { brand, title, mood, genre, trackIds, logoUrl: logo, startsAt: a.startsAt, endsAt: a.endsAt, active: a.active };
 }
 

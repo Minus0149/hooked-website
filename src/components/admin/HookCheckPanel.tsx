@@ -5,6 +5,7 @@ import type { FunctionReturnType } from "convex/server";
 import { art } from "../../lib/art";
 import { Empty, Panel, StatCard, Stats } from "../ui";
 import { Select, useDialogs } from "../ui/Dialogs";
+import { serverMessage } from "../../lib/serverError";
 
 /**
  * Admin → Hook check: does hook recognition find the hook a person hears?
@@ -33,8 +34,7 @@ const METHOD_LABEL = {
   current: "What the app plays now",
 } as const;
 
-const errorText = (e: unknown) =>
-  e instanceof Error ? e.message.replace(/^[\s\S]*Uncaught Error: /, "").split("\n")[0] : "Something went wrong";
+const errorText = (e: unknown) => serverMessage(e, "Something went wrong");
 const secs = (ms: number | null | undefined) => (ms == null ? "—" : `${(ms / 1000).toFixed(1)} s`);
 
 function Scrubber({ song, total, now, reveal, onSeek }: {

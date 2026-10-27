@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { authComponent } from "./auth";
@@ -217,7 +217,7 @@ export const follow = mutation({
     await enforceRateLimit(ctx, `follow:${user.id}`, 60, 10 * 60_000);
     const target = await byUsername(ctx, username);
     const problem = followProblem(user.id, target && !target.suspended ? target.userId : null);
-    if (problem) throw new Error(problem);
+    if (problem) throw new ConvexError(problem);
     if (await follows(ctx, user.id, target!.userId)) return;
     await ctx.db.insert("follows", { followerId: user.id, followeeId: target!.userId, at: Date.now() });
   },
@@ -372,7 +372,7 @@ export const setPlaylistSharing = mutation({
     const { user } = await requireGatedUser(ctx);
     await enforceRateLimit(ctx, `playlist:share:${user.id}`, 60, 10 * 60_000);
     const pl = await ctx.db.get(playlistId);
-    if (!pl || pl.userId !== user.id) throw new Error("Only the owner can change this");
+    if (!pl || pl.userId !== user.id) throw new ConvexError("Only the owner can change this");
     const patch: Partial<Doc<"playlists">> = {};
     if (visibility !== undefined) patch.visibility = coerceVisibility(visibility);
     if (collaborative !== undefined) patch.collaborative = collaborative;
@@ -398,7 +398,7 @@ export const joinPlaylist = mutation({
     const clean = normalizeCode(code);
     const pl = clean ? await ctx.db.query("playlists").withIndex("by_inviteCode", (q) => q.eq("inviteCode", clean)).unique() : null;
     // a link to a playlist the owner has stopped sharing opens nothing
-    if (!pl || !inviteOpen(pl)) throw new Error("That invite link doesn't work any more");
+    if (!pl || !inviteOpen(pl)) throw new ConvexError("That invite link doesn't work any more");
     if (pl.userId === user.id) return { playlistId: pl._id };
     const already = await ctx.db
       .query("playlistMembers")
@@ -430,9 +430,9 @@ export const addToPlaylist = mutation({
     const { user } = await requireGatedUser(ctx);
     await enforceRateLimit(ctx, `playlist:add:${user.id}`, 120, 60_000);
     const pl = await ctx.db.get(playlistId);
-    if (!pl) throw new Error("Playlist not found");
+    if (!pl) throw new ConvexError("Playlist not found");
     const { access } = await playlistAccess(ctx, pl);
-    if (!canAddToPlaylist(access, user.id)) throw new Error("You can't add songs to this playlist");
+    if (!canAddToPlaylist(access, user.id)) throw new ConvexError("You can't add songs to this playlist");
     const safe = cleanTrack(track);
     const dup = (await ctx.db.query("librarySongs").withIndex("by_playlist", (q) => q.eq("playlistId", playlistId)).collect()).some(
       (s) => s.trackId === safe.trackId,
@@ -453,7 +453,7 @@ export const removeFromPlaylist = mutation({
       (s) => s.trackId === cleanText(trackId, 120),
     );
     for (const r of rows) {
-      if (!canRemoveFromPlaylist(access, user.id, r.userId)) throw new Error("Only the owner or whoever added it can remove a song");
+      if (!canRemoveFromPlaylist(access, user.id, r.userId)) throw new ConvexError("Only the owner or whoever added it can remove a song");
       await ctx.db.delete(r._id);
     }
   },
@@ -482,7 +482,7 @@ async function freshCode(ctx: MutationCtx, length: number, kind: "playlist" | "r
         : await ctx.db.query("rooms").withIndex("by_code", (q) => q.eq("code", code)).first();
     if (!taken) return code;
   }
-  throw new Error("Couldn't make a code, try again");
+  throw new ConvexError("Couldn't make a code, try again");
 }
 
 // ---------------------------------------------------------------------------
@@ -497,7 +497,7 @@ export const createRoom = mutation({
     await enforceRateLimit(ctx, `room:create:${user.id}`, 10, 60 * 60_000);
     // bounded before any work: the array arrives straight from the client
     const ids = [...new Set(trackIds.slice(0, ROOM_MAX_TRACKS * 4).map((t) => cleanText(t, 120)).filter(Boolean))].slice(0, ROOM_MAX_TRACKS);
-    if (ids.length < 2) throw new Error("A room needs a few songs to start");
+    if (ids.length < 2) throw new ConvexError("A room needs a few songs to start");
     // one open room per host: opening a new one closes the last
     const now = Date.now();
     for (const old of await ctx.db.query("rooms").withIndex("by_host", (q) => q.eq("hostId", user.id)).collect()) {
@@ -531,7 +531,7 @@ export const joinRoom = mutation({
     const { user, profile } = await requireGatedUser(ctx);
     await enforceRateLimit(ctx, `room:join:${user.id}`, 30, 10 * 60_000);
     const room = await openRoom(ctx, code);
-    if (!room) throw new Error("That room has closed");
+    if (!room) throw new ConvexError("That room has closed");
     const now = Date.now();
     const members = await ctx.db.query("roomMembers").withIndex("by_room", (q) => q.eq("roomId", room._id)).collect();
     const mine = members.find((m) => m.userId === user.id);
@@ -539,7 +539,7 @@ export const joinRoom = mutation({
       await ctx.db.patch(mine._id, { lastSeen: now });
     } else {
       const here = members.filter((m) => now - m.lastSeen < ROOM_PRESENCE_MS).length;
-      if (here >= ROOM_MAX_MEMBERS) throw new Error("This room is full");
+      if (here >= ROOM_MAX_MEMBERS) throw new ConvexError("This room is full");
       await ctx.db.insert("roomMembers", { roomId: room._id, userId: user.id, name: displayName(profile), joinedAt: now, lastSeen: now });
     }
     return { code: room.code };
@@ -568,7 +568,7 @@ export const advanceRoom = mutation({
     const { user } = await requireGatedUser(ctx);
     const room = await openRoom(ctx, code);
     if (!room) return { ended: true };
-    if (room.hostId !== user.id) throw new Error("Only the host moves the room on");
+    if (room.hostId !== user.id) throw new ConvexError("Only the host moves the room on");
     const next = nextRoomIndex(room.index, expected, room.trackIds.length);
     const now = Date.now();
     if (next === null) {
@@ -607,7 +607,7 @@ export const reactInRoom = mutation({
       .query("roomMembers")
       .withIndex("by_room_user", (q) => q.eq("roomId", room._id).eq("userId", user.id))
       .first();
-    if (!member) throw new Error("Join the room first");
+    if (!member) throw new ConvexError("Join the room first");
     const prior =(await ctx.db.query("roomReactions").withIndex("by_room", (q) => q.eq("roomId", room._id)).collect()).filter(
       (r) => r.userId === user.id && r.trackId === id,
     );

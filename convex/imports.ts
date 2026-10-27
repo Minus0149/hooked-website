@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { action, internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -102,10 +102,10 @@ export const beginImport = mutation({
         .withIndex("by_userId", (q) => q.eq("userId", user.id))
         .unique();
       if (creator?.status !== "approved") {
-        throw new Error("Your creator account isn't approved yet");
+        throw new ConvexError("Your creator account isn't approved yet");
       }
     }
-    if (args.total < 1) throw new Error("Nothing to import");
+    if (args.total < 1) throw new ConvexError("Nothing to import");
     await enforceRateLimit(ctx, `import:run:${user.id}`, 6, 60 * 60_000);
 
     // the token is the only key to this run's writes: CSPRNG, 144 bits
@@ -160,7 +160,7 @@ export const finishImport = internalMutation({
   },
   handler: async (ctx, { importId, token, genre, matches }) => {
     const run = await openRun(ctx, importId, token);
-    if (!run) throw new Error("That import is no longer open");
+    if (!run) throw new ConvexError("That import is no longer open");
     // whoever opened the run — re-read rather than trusting an argument
     const profile = await getProfile(ctx, run.userId);
     const curator = hasPermission(profile, "catalog.curate");
@@ -291,7 +291,7 @@ export const importPlaylist = action({
       .filter((r) => r.title && r.artist)
       .slice(0, MAX_ROWS);
 
-    if (rows.length === 0) throw new Error("Nothing to import");
+    if (rows.length === 0) throw new ConvexError("Nothing to import");
 
     try {
       const matches: Match[] = [];

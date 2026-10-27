@@ -1,4 +1,4 @@
-import { v, type Infer } from "convex/values";
+import { v, type Infer, ConvexError } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authComponent } from "./auth";
@@ -22,7 +22,7 @@ type Profile = {
 
 export async function requireUser(ctx: QueryCtx | MutationCtx) {
   const user = await authComponent.getAuthUser(ctx);
-  if (!user) throw new Error("Not signed in");
+  if (!user) throw new ConvexError("Not signed in");
   return {
     id: String(user._id),
     email: user.email,
@@ -49,14 +49,14 @@ export async function requirePermission(
 ) {
   const user = await requireUser(ctx);
   const profile = await getProfile(ctx, user.id);
-  if (!hasPermission(profile, permission)) throw new Error(`Requires ${permission}`);
+  if (!hasPermission(profile, permission)) throw new ConvexError(`Requires ${permission}`);
   return { user, profile };
 }
 
 export async function requireAdmin(ctx: QueryCtx | MutationCtx) {
   const user = await requireUser(ctx);
   const profile = await getProfile(ctx, user.id);
-  if (!profile?.isAdmin) throw new Error("Admin only");
+  if (!profile?.isAdmin) throw new ConvexError("Admin only");
   return { user, profile };
 }
 
@@ -72,8 +72,8 @@ export async function requireAdmin(ctx: QueryCtx | MutationCtx) {
 export function ensureActiveProfile(
   profile: { suspended?: boolean } | null,
 ): asserts profile is NonNullable<typeof profile> {
-  if (!profile) throw new Error("No approved account yet");
-  if (profile.suspended) throw new Error("Account suspended");
+  if (!profile) throw new ConvexError("No approved account yet");
+  if (profile.suspended) throw new ConvexError("Account suspended");
 }
 
 /** requireUser + gate in one step, for mutations that skipped the profile. */
@@ -111,7 +111,7 @@ export async function enforceRateLimit(
   }
 
   if (existing.count >= limit) {
-    throw new Error("Too many requests. Try again in a moment.");
+    throw new ConvexError("Too many requests. Try again in a moment.");
   }
 
   await ctx.db.patch(existing._id, { count: existing.count + 1 });
@@ -128,21 +128,21 @@ export function cleanAccent(value: string) {
 
 function cleanHttpsUrl(value: string, maxLength: number, field: string) {
   const trimmed = value.trim();
-  if (trimmed.length > maxLength) throw new Error(`${field} is too long`);
+  if (trimmed.length > maxLength) throw new ConvexError(`${field} is too long`);
   let url: URL;
   try {
     url = new URL(trimmed);
   } catch {
-    throw new Error(`${field} must be a valid URL`);
+    throw new ConvexError(`${field} must be a valid URL`);
   }
-  if (url.protocol !== "https:") throw new Error(`${field} must use HTTPS`);
+  if (url.protocol !== "https:") throw new ConvexError(`${field} must use HTTPS`);
   return url.toString();
 }
 
 export function cleanTrack(track: TrackInput): TrackInput {
   const durationMs = Math.floor(track.durationMs);
   if (!Number.isFinite(durationMs) || durationMs < 0 || durationMs > 30 * 60 * 1000) {
-    throw new Error("Invalid track duration");
+    throw new ConvexError("Invalid track duration");
   }
 
   return {
@@ -164,13 +164,13 @@ export async function validateSaveTarget(
   target: string,
 ) {
   if (target === "liked" || target === "discoveries") return target;
-  if (!target.startsWith("pl:")) throw new Error("Invalid save target");
+  if (!target.startsWith("pl:")) throw new ConvexError("Invalid save target");
 
   const playlistId = ctx.db.normalizeId("playlists", target.slice(3));
-  if (!playlistId) throw new Error("Invalid playlist");
+  if (!playlistId) throw new ConvexError("Invalid playlist");
 
   const playlist = await ctx.db.get(playlistId);
-  if (!playlist) throw new Error("Invalid playlist");
+  if (!playlist) throw new ConvexError("Invalid playlist");
   if (playlist.userId !== userId) {
     // a member may save into someone's playlist while it's collaborative
     const member = playlist.collaborative === true
@@ -179,7 +179,7 @@ export async function validateSaveTarget(
           .withIndex("by_pair", (q) => q.eq("playlistId", playlistId).eq("userId", userId))
           .first()
       : null;
-    if (!member) throw new Error("Invalid playlist");
+    if (!member) throw new ConvexError("Invalid playlist");
   }
   return `pl:${playlistId}` as const;
 }

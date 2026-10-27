@@ -6,6 +6,7 @@ import { deckCsv, weekOf } from "../../../convex/featureRules";
 import { MOODS } from "../../data/mood";
 import { deckLabel } from "../../lib/features";
 import { Select, useDialogs } from "../ui/Dialogs";
+import { serverMessage } from "../../lib/serverError";
 
 /**
  * Admin → Features: the indie hook of the week (convex/featured.ts) and
@@ -13,8 +14,7 @@ import { Select, useDialogs } from "../ui/Dialogs";
  * labelled as a pick; a deck is paid and is labelled "Sponsored" everywhere.
  */
 
-const errorText = (e: unknown) =>
-  e instanceof Error ? e.message.replace(/^[\s\S]*Uncaught Error: /, "").split("\n")[0] : "Something went wrong";
+const errorText = (e: unknown) => serverMessage(e, "Something went wrong");
 
 const SHARE_URL = "https://hookedcue.com/indie-hook";
 

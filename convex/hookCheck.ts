@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { requirePermission } from "./security";
 import { methodOf, recommendPolicy, scoreMethods } from "./hookRules";
@@ -113,7 +113,7 @@ export const label = mutation({
   },
   handler: async (ctx, { trackId, markedStartMs, verdict }) => {
     const { user } = await requirePermission(ctx, "catalog.curate");
-    if (!(await sampleIds(ctx)).includes(trackId)) throw new Error("Not in the hook check sample");
+    if (!(await sampleIds(ctx)).includes(trackId)) throw new ConvexError("Not in the hook check sample");
     const first = (
       await ctx.db
         .query("hooks")

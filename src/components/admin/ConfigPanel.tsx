@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { serverMessage } from "../../lib/serverError";
 
 /**
  * Live runtime config.
@@ -147,7 +148,7 @@ export function ConfigPanel() {
       setDraft({});
       setNote("Pushed live — every open client picks it up on its next render.");
     } catch (e) {
-      setNote(e instanceof Error ? e.message : "Could not save");
+      setNote(serverMessage(e, "Could not save"));
     } finally {
       setSaving(false);
     }
@@ -201,7 +202,7 @@ export function ConfigPanel() {
           onClick={() => {
             void refreshAnalytics()
               .then(() => setNote("Analytics snapshot recomputed."))
-              .catch((e: Error) => setNote(e.message));
+              .catch((e: Error) => setNote(serverMessage(e)));
           }}
         >
           Recompute analytics now
@@ -218,7 +219,7 @@ export function ConfigPanel() {
                     : "Not permitted.",
                 ),
               )
-              .catch((e: Error) => setNote(e.message));
+              .catch((e: Error) => setNote(serverMessage(e)));
           }}
         >
           Rebuild recommendations now
@@ -233,7 +234,7 @@ export function ConfigPanel() {
                   "Pulling the next few chart feeds — new songs appear in the catalogue as they land.",
                 ),
               )
-              .catch((e: Error) => setNote(e.message));
+              .catch((e: Error) => setNote(serverMessage(e)));
           }}
         >
           Pull from the charts now
@@ -244,7 +245,7 @@ export function ConfigPanel() {
           onClick={() => {
             void curateNow()
               .then(() => setNote("Curating — the deck's catalogue updates in a minute or two."))
-              .catch((e: Error) => setNote(e.message));
+              .catch((e: Error) => setNote(serverMessage(e)));
           }}
         >
           Curate the catalogue now

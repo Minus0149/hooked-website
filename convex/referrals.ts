@@ -1,3 +1,4 @@
+import { ConvexError } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { runtimeFor } from "./runtime";
 import { getProfile, requirePermission, requireUser } from "./security";
@@ -76,7 +77,7 @@ export const ensureCode = mutation({
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     const profile = await getProfile(ctx, user.id);
-    if (!profile) throw new Error("Only listeners with an account get an invite link");
+    if (!profile) throw new ConvexError("Only listeners with an account get an invite link");
     const existing = await codeFor(ctx, user.id);
     if (existing) return existing.code;
     for (let attempt = 0; attempt < 8; attempt++) {
@@ -89,7 +90,7 @@ export const ensureCode = mutation({
       await ctx.db.insert("referralCodes", { code, userId: user.id, createdAt: Date.now() });
       return code;
     }
-    throw new Error("Couldn't make an invite code — try again");
+    throw new ConvexError("Couldn't make an invite code — try again");
   },
 });
 

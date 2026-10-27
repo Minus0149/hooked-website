@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { runtimeFor } from "./runtime";
 import { publishable } from "./moods";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
@@ -47,7 +47,7 @@ async function requireCreator(ctx: MutationCtx) {
   if (hasPermission(profile, "catalog.curate")) return { user, profile, curator: true };
   const creator = await getCreator(ctx, user.id);
   if (creator?.status !== "approved") {
-    throw new Error("Your creator account isn't approved yet");
+    throw new ConvexError("Your creator account isn't approved yet");
   }
   return { user, profile, curator: false };
 }
@@ -58,8 +58,8 @@ async function requireOwnedTrack(ctx: MutationCtx, trackId: string, curator: boo
     .query("tracks")
     .withIndex("by_trackId", (q) => q.eq("trackId", cleanText(trackId, 120)))
     .unique();
-  if (!track) throw new Error("No such track");
-  if (!curator && track.ownerUserId !== userId) throw new Error("Not your track");
+  if (!track) throw new ConvexError("No such track");
+  if (!curator && track.ownerUserId !== userId) throw new ConvexError("Not your track");
   return track;
 }
 
@@ -78,7 +78,7 @@ export const apply = mutation({
     await enforceRateLimit(ctx, `creator:apply:${user.id}`, 5, 60 * 60_000);
 
     const artistName = cleanText(args.artistName, MAX.artistName);
-    if (artistName.length < 2) throw new Error("What name do you release under?");
+    if (artistName.length < 2) throw new ConvexError("What name do you release under?");
 
     const existing = await getCreator(ctx, user.id);
     // a re-application never resets a decision
@@ -209,10 +209,10 @@ export const attachAudio = mutation({
     const { user, curator } = await requireCreator(ctx);
     const track = await requireOwnedTrack(ctx, trackId, curator, user.id);
     if (audioDurationMs < 1000 || audioDurationMs > 20 * 60_000) {
-      throw new Error("That doesn't look like a track length");
+      throw new ConvexError("That doesn't look like a track length");
     }
     if (!rightsConfirmed) {
-      throw new Error("Confirm you hold the rights to this recording first");
+      throw new ConvexError("Confirm you hold the rights to this recording first");
     }
     // replacing audio drops the old file rather than leaking it
     if (track.audioStorageId && track.audioStorageId !== storageId) {
@@ -260,7 +260,7 @@ export const submitFingerprint = mutation({
       ),
     ];
     if (clean.length < 20) {
-      throw new Error("Not enough audio to fingerprint");
+      throw new ConvexError("Not enough audio to fingerprint");
     }
 
     const old = await ctx.db
@@ -364,14 +364,14 @@ export const createTrack = mutation({
     const { user, curator } = await requireCreator(ctx);
     await enforceRateLimit(ctx, `creator:track:${user.id}`, 60, 60 * 60_000);
     if (!args.rightsConfirmed) {
-      throw new Error(
+      throw new ConvexError(
         "Confirm you own or are licensed for this recording before creating it",
       );
     }
 
     const title = cleanText(args.title, MAX.title);
     const artist = cleanText(args.artist, MAX.artistName);
-    if (!title || !artist) throw new Error("A title and an artist, at minimum");
+    if (!title || !artist) throw new ConvexError("A title and an artist, at minimum");
 
     const https = (url: string) => (/^https:\/\//i.test(url) ? cleanText(url, 500) : "");
     const trackId = `own:${user.id}:${Date.now().toString(36)}`;
@@ -402,7 +402,7 @@ export const setTrackHidden = mutation({
     const track = await requireOwnedTrack(ctx, trackId, curator, user.id);
     if (!hidden) {
       if (track.origin === "artist" && !track.rightsConfirmedAt) {
-        throw new Error(
+        throw new ConvexError(
           "Confirm you hold the rights to this recording before publishing",
         );
       }
@@ -411,10 +411,10 @@ export const setTrackHidden = mutation({
         .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))
         .collect();
       if (!hooks.some((h) => h.active)) {
-        throw new Error("Mark at least one hook before publishing this");
+        throw new ConvexError("Mark at least one hook before publishing this");
       }
       if (!track.previewUrl && !track.audioStorageId) {
-        throw new Error("There's no audio on this track yet");
+        throw new ConvexError("There's no audio on this track yet");
       }
     }
     await ctx.db.patch(track._id, { hidden });
@@ -441,7 +441,7 @@ export const upsertHook = mutation({
     const startMs = Math.max(0, Math.round(args.startMs));
     const durationMs = Math.round(args.durationMs);
     if (durationMs < MIN_HOOK_MS || durationMs > MAX_HOOK_MS) {
-      throw new Error("A hook runs between 5 and 45 seconds");
+      throw new ConvexError("A hook runs between 5 and 45 seconds");
     }
 
     // A preview is one fixed ~30s window — the song's own length is the wrong
@@ -450,7 +450,7 @@ export const upsertHook = mutation({
       ? (track.audioDurationMs ?? track.durationMs ?? PREVIEW_MS)
       : PREVIEW_MS;
     if (ceiling > 0 && startMs + durationMs > ceiling + 1_000) {
-      throw new Error("That hook runs past the end of the audio");
+      throw new ConvexError("That hook runs past the end of the audio");
     }
 
     const existing = await ctx.db
@@ -460,7 +460,7 @@ export const upsertHook = mutation({
 
     if (args.hookId) {
       const hook = await ctx.db.get(args.hookId);
-      if (!hook || hook.trackId !== track.trackId) throw new Error("No such hook");
+      if (!hook || hook.trackId !== track.trackId) throw new ConvexError("No such hook");
       await ctx.db.patch(args.hookId, {
         startMs,
         durationMs,
@@ -473,7 +473,7 @@ export const upsertHook = mutation({
     }
 
     if (existing.length >= MAX_HOOKS_PER_TRACK) {
-      throw new Error(`${MAX_HOOKS_PER_TRACK} hooks is plenty for one song`);
+      throw new ConvexError(`${MAX_HOOKS_PER_TRACK} hooks is plenty for one song`);
     }
     // A preview used to be treated as one indivisible window. It isn't: 30
     // seconds holds three distinct 10-second parts, which is what the deck now
@@ -574,7 +574,7 @@ export const grant = internalMutation({
       model: "user",
       where: [{ field: "email", value: target }],
     })) as { _id: string; email: string } | null;
-    if (!user) throw new Error(`No account for ${target} — sign up first, then run this.`);
+    if (!user) throw new ConvexError(`No account for ${target} — sign up first, then run this.`);
     const userId = String(user._id);
     const now = new Date().toISOString();
     const existing = await getCreator(ctx, userId);

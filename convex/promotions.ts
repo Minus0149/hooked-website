@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import {
   action,
   httpAction,
@@ -122,7 +122,7 @@ async function requireSeller(ctx: QueryCtx | MutationCtx) {
     .query("creators")
     .withIndex("by_userId", (q) => q.eq("userId", user.id))
     .unique();
-  if (creator?.status !== "approved") throw new Error("Promotion is for approved artists.");
+  if (creator?.status !== "approved") throw new ConvexError("Promotion is for approved artists.");
   return user;
 }
 
@@ -149,10 +149,10 @@ async function promotableTrack(ctx: QueryCtx, trackId: string, userId: string, c
     .query("tracks")
     .withIndex("by_trackId", (q) => q.eq("trackId", cleanText(trackId, 120)))
     .unique();
-  if (!track) throw new Error("No such song.");
-  if (!curator && track.ownerUserId !== userId) throw new Error("You can only promote your own songs.");
-  if (track.hidden) throw new Error("Publish the song before promoting it.");
-  if (!track.previewUrl && !track.audioStorageId) throw new Error("The song has no audio yet.");
+  if (!track) throw new ConvexError("No such song.");
+  if (!curator && track.ownerUserId !== userId) throw new ConvexError("You can only promote your own songs.");
+  if (track.hidden) throw new ConvexError("Publish the song before promoting it.");
+  if (!track.previewUrl && !track.audioStorageId) throw new ConvexError("The song has no audio yet.");
   return track;
 }
 
@@ -252,19 +252,19 @@ export const requestPromotion = mutation({
     const user = await requireSeller(ctx);
     await enforceRateLimit(ctx, `promo:request:${user.id}`, 10, 60 * 60_000);
     const config = await readConfig(ctx);
-    if (!config.enabled) throw new Error("Promotion is paused right now.");
+    if (!config.enabled) throw new ConvexError("Promotion is paused right now.");
     const profile = await getProfile(ctx, user.id);
     const track = await promotableTrack(ctx, args.trackId, user.id, hasPermission(profile, "catalog.curate"));
     if (!args.customQuote) {
       const pkg = packagesFor(config, await rateFor(ctx, user.id)).find((p) => p.id === args.packageId);
-      if (!pkg) throw new Error("Pick a package, or ask for a custom quote.");
+      if (!pkg) throw new ConvexError("Pick a package, or ask for a custom quote.");
     }
     const note = args.note ? cleanText(args.note, REQUEST_NOTE_MAX) : undefined;
     let code: string | undefined;
     if (args.code?.trim()) {
       const row = await codeRow(ctx, args.code);
       const verdict = checkCode(asDiscount(row), Date.now(), user.id);
-      if (!verdict.ok) throw new Error(verdict.reason);
+      if (!verdict.ok) throw new ConvexError(verdict.reason);
       code = row!.code;
     }
     // one open request per song, so an admin never approves the same thing twice
@@ -278,7 +278,7 @@ export const requestPromotion = mutation({
         ),
       )
       .first();
-    if (open) throw new Error("There's already an open request for this song.");
+    if (open) throw new ConvexError("There's already an open request for this song.");
     const id = await ctx.db.insert("promotionRequests", {
       userId: user.id,
       trackId: track.trackId,
@@ -300,9 +300,9 @@ export const withdrawRequest = mutation({
   handler: async (ctx, { requestId }) => {
     const user = await requireUser(ctx);
     const r = await ctx.db.get(requestId);
-    if (!r || r.userId !== user.id) throw new Error("No such request.");
+    if (!r || r.userId !== user.id) throw new ConvexError("No such request.");
     const next = nextRequestStatus(r.status, "withdraw");
-    if (!next) throw new Error("This request can't be withdrawn now.");
+    if (!next) throw new ConvexError("This request can't be withdrawn now.");
     await ctx.db.patch(requestId, { status: next });
   },
 });
@@ -419,22 +419,22 @@ export const approveRequest = mutation({
     await requirePermission(ctx, "ads.manage");
     const admin = await requireUser(ctx);
     const r = await ctx.db.get(args.requestId);
-    if (!r) throw new Error("No such request.");
+    if (!r) throw new ConvexError("No such request.");
     const next = nextRequestStatus(r.status, "approve");
-    if (!next) throw new Error(`This request is ${r.status}; it can't be approved.`);
+    if (!next) throw new ConvexError(`This request is ${r.status}; it can't be approved.`);
     const config = await readConfig(ctx);
     const pkg = args.custom
       ? customPackage(args.custom.listeners, args.custom.pricePaise)
       : packagesFor(config, await rateFor(ctx, r.userId)).find((p) => p.id === (args.packageId ?? r.packageId));
-    if (!pkg) throw new Error(args.custom ? "That custom price is out of range (min ₹49)." : "Pick a package or set a custom price.");
+    if (!pkg) throw new ConvexError(args.custom ? "That custom price is out of range (min ₹49)." : "Pick a package or set a custom price.");
     if (pkg.listeners > remainingCapacity(config, await owedListeners(ctx))) {
-      throw new Error("Not enough capacity left for that many listeners.");
+      throw new ConvexError("Not enough capacity left for that many listeners.");
     }
     const codeText = args.code === undefined ? r.code : args.code.trim() || undefined;
     const row = await codeRow(ctx, codeText);
     if (codeText) {
       const verdict = checkCode(asDiscount(row), Date.now(), r.userId);
-      if (!verdict.ok) throw new Error(`Code: ${verdict.reason}`);
+      if (!verdict.ok) throw new ConvexError(`Code: ${verdict.reason}`);
     }
     const q = quote({
       pkg,
@@ -482,11 +482,11 @@ export const rejectRequest = mutation({
     await requirePermission(ctx, "ads.manage");
     const admin = await requireUser(ctx);
     const r = await ctx.db.get(requestId);
-    if (!r) throw new Error("No such request.");
+    if (!r) throw new ConvexError("No such request.");
     const next = nextRequestStatus(r.status, "reject");
-    if (!next) throw new Error(`This request is ${r.status}; it can't be rejected.`);
+    if (!next) throw new ConvexError(`This request is ${r.status}; it can't be rejected.`);
     const why = cleanText(reason, REJECT_REASON_MAX);
-    if (why.length < 3) throw new Error("Give the artist a reason.");
+    if (why.length < 3) throw new ConvexError("Give the artist a reason.");
     await ctx.db.patch(requestId, { status: next, rejectReason: why, decidedAt: Date.now(), decidedBy: admin.id });
     const artist = await artistContact(ctx, r.userId);
     if (artist.email) {
@@ -509,11 +509,11 @@ export const beginOrder = mutation({
     const user = await requireSeller(ctx);
     await enforceRateLimit(ctx, `promo:order:${user.id}`, 10, 60 * 60_000);
     const config = await readConfig(ctx);
-    if (!config.enabled) throw new Error("Promotion is paused right now.");
+    if (!config.enabled) throw new ConvexError("Promotion is paused right now.");
     const r = await ctx.db.get(requestId);
-    if (!r || r.userId !== user.id) throw new Error("No such request.");
+    if (!r || r.userId !== user.id) throw new ConvexError("No such request.");
     if (!approvalPayable(r, Date.now()) || !r.approved) {
-      throw new Error(
+      throw new ConvexError(
         r.status === "approved" ? "This approval has lapsed — ask again." : "This request isn't approved for payment.",
       );
     }
@@ -523,7 +523,7 @@ export const beginOrder = mutation({
       if (existing && existing.status === "created") return { orderId: existing._id, totalPaise: existing.totalPaise };
     }
     if (r.approved.listeners > remainingCapacity(config, await owedListeners(ctx))) {
-      throw new Error("We're full for now — this approval stays valid until it lapses; try again soon.");
+      throw new ConvexError("We're full for now — this approval stays valid until it lapses; try again soon.");
     }
     const a = r.approved;
     const orderId = await ctx.db.insert("promotionOrders", {
@@ -569,10 +569,10 @@ export const checkout = action({
     | { configured: true; keyId: string; razorpayOrderId: string; amount: number; currency: "INR" }
   > => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not signed in");
+    if (!identity) throw new ConvexError("Not signed in");
     const order = await ctx.runQuery(internal.promotions.orderForCheckout, { orderId });
-    if (!order || order.userId !== identity.subject) throw new Error("No such order.");
-    if (order.status !== "created") throw new Error("This order is already settled.");
+    if (!order || order.userId !== identity.subject) throw new ConvexError("No such order.");
+    if (order.status !== "created") throw new ConvexError("This order is already settled.");
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
     if (!keyId || !keySecret) return { configured: false };
@@ -592,9 +592,9 @@ export const checkout = action({
         notes: { trackId: order.trackId, packageId: order.packageId },
       }),
     });
-    if (!res.ok) throw new Error(`Razorpay refused the order (${res.status}).`);
+    if (!res.ok) throw new ConvexError(`Razorpay refused the order (${res.status}).`);
     const created = (await res.json()) as { id: string; amount: number };
-    if (created.amount !== order.totalPaise) throw new Error("Razorpay returned a different amount.");
+    if (created.amount !== order.totalPaise) throw new ConvexError("Razorpay returned a different amount.");
     await ctx.runMutation(internal.promotions.attachRazorpayOrder, { orderId, razorpayOrderId: created.id });
     return { configured: true, keyId, razorpayOrderId: created.id, amount: order.totalPaise, currency: "INR" };
   },
@@ -610,7 +610,7 @@ export const confirmPayment = action({
   handler: async (ctx, args): Promise<{ campaignId: Id<"promotionCampaigns"> | null }> => {
     const secret = process.env.RAZORPAY_KEY_SECRET ?? "";
     const ok = await paymentSignatureValid(args.razorpayOrderId, args.razorpayPaymentId, args.razorpaySignature, secret);
-    if (!ok) throw new Error("That payment couldn't be verified.");
+    if (!ok) throw new ConvexError("That payment couldn't be verified.");
     return ctx.runMutation(internal.promotions.markPaid, {
       razorpayOrderId: args.razorpayOrderId,
       razorpayPaymentId: args.razorpayPaymentId,
@@ -820,8 +820,8 @@ export const cancelCampaign = mutation({
   handler: async (ctx, { campaignId }) => {
     const user = await requireUser(ctx);
     const c = await ctx.db.get(campaignId);
-    if (!c || c.userId !== user.id) throw new Error("No such campaign.");
-    if (c.status !== "active") throw new Error("This campaign has already ended.");
+    if (!c || c.userId !== user.id) throw new ConvexError("No such campaign.");
+    if (c.status !== "active") throw new ConvexError("This campaign has already ended.");
     return { refundPaise: await endCampaign(ctx, c, "cancelled") };
   },
 });
@@ -1178,10 +1178,10 @@ export const createCode = mutation({
     await requirePermission(ctx, "ads.manage");
     const admin = await requireUser(ctx);
     const code = normaliseCode(args.code);
-    if (!/^[A-Z0-9-]{3,24}$/.test(code)) throw new Error("Codes are 3–24 letters, numbers or dashes.");
-    if (!args.percentOff === !args.amountOffPaise) throw new Error("Give either a percentage or an amount off.");
+    if (!/^[A-Z0-9-]{3,24}$/.test(code)) throw new ConvexError("Codes are 3–24 letters, numbers or dashes.");
+    if (!args.percentOff === !args.amountOffPaise) throw new ConvexError("Give either a percentage or an amount off.");
     const clash = await codeRow(ctx, code);
-    if (clash) throw new Error("That code already exists.");
+    if (clash) throw new ConvexError("That code already exists.");
     await ctx.db.insert("promotionCodes", {
       code,
       percentOff: args.percentOff ? Math.min(Math.max(Math.round(args.percentOff), 1), 90) : undefined,
@@ -1203,7 +1203,7 @@ export const setCodeActive = mutation({
   handler: async (ctx, { code, active }) => {
     await requirePermission(ctx, "ads.manage");
     const row = await codeRow(ctx, code);
-    if (!row) throw new Error("No such code.");
+    if (!row) throw new ConvexError("No such code.");
     await ctx.db.patch(row._id, { active });
   },
 });

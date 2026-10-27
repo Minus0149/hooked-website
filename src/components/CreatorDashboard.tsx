@@ -10,6 +10,7 @@ import { PromotePanel } from "./creator/PromotePanel";
 import { TrackCard } from "./creator/TrackCard";
 import type { Track } from "./creator/types";
 import { filterTracks, TRACK_FILTERS, type TrackFilter } from "./creator/filter";
+import { serverMessage } from "../lib/serverError";
 
 /**
  * The creator dashboard.
@@ -77,7 +78,7 @@ export function CreatorDashboard() {
       try {
         await apply({ artistName: artistName.trim(), bio: bio.trim() || undefined });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "That didn't go through");
+        setError(serverMessage(err, "That didn't go through"));
       } finally {
         setBusy(false);
       }
@@ -187,7 +188,7 @@ function CreatorWorkspace({ tracks, curator }: { tracks: Track[]; curator: boole
       setForm({ title: "", artist: "", genre: "", artwork: "", rights: false });
       setAdding(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add that");
+      setError(serverMessage(err, "Could not add that"));
     }
   };
 

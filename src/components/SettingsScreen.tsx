@@ -35,6 +35,7 @@ import { APPLE_CREDIT_NOTE } from "../lib/attribution";
 import { useDialogs } from "./ui/Dialogs";
 import { useLang, useT, type LangSetting } from "../lib/lang";
 import { readHookOfDayShown, writeHookOfDayShown } from "../lib/useHookOfDay";
+import { serverMessage } from "../lib/serverError";
 
 const BETA_URL = import.meta.env.VITE_BETA_URL ?? "https://hookedcue.com/beta";
 
@@ -234,7 +235,7 @@ export function SettingsScreen({
       localStorage.removeItem("hooked.library.v2");
       window.location.reload();
     } catch (err) {
-      notify(err instanceof Error ? err.message : "Could not delete the account", "error");
+      notify(serverMessage(err, "Could not delete the account"), "error");
       setDeleting(false);
     }
   };
