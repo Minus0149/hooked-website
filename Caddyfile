@@ -42,6 +42,12 @@
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(self \"https://api.razorpay.com\")"
 	}
 
+	# Only the landing ("/") belongs in search results. Every app screen is one
+	# person's library, settings, room or profile, or a link that needs an
+	# account (src/lib/robots.ts keeps the page's meta tag in step).
+	@private path /discover* /profile* /search* /settings* /library/* /people* /u/* /playlist/* /join-playlist/* /together/* /join* /reset-password* /admin* /creator*
+	header @private X-Robots-Tag "noindex, follow"
+
 	# hashed build output never changes under the same name
 	@hashed path /assets/*
 	header @hashed Cache-Control "public, max-age=31536000, immutable"

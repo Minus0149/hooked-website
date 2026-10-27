@@ -1,4 +1,6 @@
 import { TOUR_COPY, tasteStepButton } from "../lib/tourCopy";
+import { FAQ_LINK, LANDING_FACTS, LANDING_FAQ, PRIVACY_URL, songCountLabel } from "../lib/landingCopy";
+import { useDialog } from "../lib/dialog";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   AnimatePresence,
@@ -219,6 +221,7 @@ export function Onboarding({
   const tt = useT();
   // 0 = welcome, 1-3 = taste, 4-7 = the four swipes, 8 = the hold, 9 = done
   const [step, setStep] = useState(0);
+  const [faqOpen, setFaqOpen] = useState(false);
   const [taste, setTaste] = useState<TastePrefs>(EMPTY_TASTE);
   const [mood, setMood] = useState<MoodId | null>(null);
   const [wheel, setWheel] = useState<WheelOrigin | null>(null);
@@ -268,7 +271,9 @@ export function Onboarding({
         HookedCue<span style={{ color: "var(--accent)" }}>.</span>
       </div>
 
-      <AnimatePresence mode="wait">
+      {/* initial={false}: the welcome step is already on screen, painted by
+          index.html before this script loaded; fading it in again would blink */}
+      <AnimatePresence mode="wait" initial={false}>
         {step === 0 && (
           <motion.div
             key="welcome"
@@ -281,9 +286,14 @@ export function Onboarding({
               {tt(TOUR_COPY.welcome.headline.lead)} <em>{tt(TOUR_COPY.welcome.headline.accent)}</em>
             </h1>
             <p className="ob-copy">{tt(TOUR_COPY.welcome.copy)}</p>
-            <span className="eq" style={{ height: 22 }}>
-              <span /><span /><span /><span />
-            </span>
+            <ul className="ob-facts" aria-label={tt("At a glance")}>
+              {LANDING_FACTS.map((f) => (
+                <li key={f}>{tt(f)}</li>
+              ))}
+            </ul>
+            <button type="button" className="ob-faq-link" onClick={() => setFaqOpen(true)}>
+              {tt(FAQ_LINK)}
+            </button>
           </motion.div>
         )}
 
@@ -532,6 +542,56 @@ export function Onboarding({
           {tt(TOUR_COPY.skip)}
         </button>
       )}
+      <AnimatePresence>
+        {faqOpen && (
+          <FaqSheet songCount={songCountLabel(demoCatalog.length)} onClose={() => setFaqOpen(false)} />
+        )}
+      </AnimatePresence>
     </motion.div>
+  );
+}
+
+/** The objections, answered before the tour asks anything (lib/landingCopy.ts). */
+function FaqSheet({ songCount, onClose }: { songCount: string | null; onClose: () => void }) {
+  const tt = useT();
+  const dialog = useDialog({ onClose });
+  return (
+    <>
+      <motion.div
+        className="sheet-backdrop"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+      <motion.div
+        className="sheet ob-faq"
+        aria-labelledby="ob-faq-title"
+        initial={{ y: "110%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "110%" }}
+        transition={{ type: "spring", stiffness: 380, damping: 34 }}
+        {...dialog}
+      >
+        <h2 className="sheet-title" id="ob-faq-title">{tt("Before you start")}</h2>
+        <dl>
+          {LANDING_FAQ.map(({ q, a }) => (
+            <div key={q} className="ob-faq-item">
+              <dt>{tt(q)}</dt>
+              <dd>
+                {tt(a)}
+                {q === "Which songs are in it?" && songCount && <> {tt("Right now: {n}.", { n: songCount })}</>}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p className="ob-faq-foot">
+          <a href={PRIVACY_URL} target="_blank" rel="noreferrer">{tt("Privacy policy")}</a>
+        </p>
+        <button type="button" className="ob-primary" onClick={onClose}>
+          {tt("Got it")}
+        </button>
+      </motion.div>
+    </>
   );
 }

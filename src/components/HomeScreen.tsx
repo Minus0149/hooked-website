@@ -52,7 +52,6 @@ function HookOfDayCard({ track, onPlay }: { track: Track; onPlay: (t: Track) => 
       whileTap={{ scale: 0.98 }}
       style={{ ["--hotd" as string]: track.accent }}
       onClick={() => onPlay(track)}
-      aria-label={`${t("Hook of the day")}: ${track.title} — ${track.artist}`}
     >
       <img src={art(track.artwork, 200)} alt="" />
       <span className="hotd-meta">
@@ -233,7 +232,7 @@ export function HomeScreen({
 
       <motion.section className="mood-section" variants={rise}>
         <div className="section-head">
-          <h3 className="section-title">{t("What's the mood?")}</h3>
+          <h2 className="section-title">{t("What's the mood?")}</h2>
         </div>
         <div className="mood-row">
           {hour.moods.map((mood) => {
@@ -307,7 +306,7 @@ export function HomeScreen({
       <RecapCard />
 
       <motion.div className="section-head" variants={rise}>
-        <h3 className="section-title">{t("Your library")}</h3>
+        <h2 className="section-title">{t("Your library")}</h2>
       </motion.div>
       {libraryEmpty ? (
         // one invitation, not two empty boxes pretending to be a library
@@ -356,9 +355,9 @@ export function HomeScreen({
       {becauseRows.map((row) => (
         <motion.section key={row.genre} variants={rise}>
           <div className="section-head">
-            <h3 className="section-title">
+            <h2 className="section-title">
               {t("Because you wanted more")} <em style={{ color: "var(--accent)", fontStyle: "normal" }}>{row.genre}</em>
-            </h3>
+            </h2>
           </div>
           <div className="row-scroll">
             {row.tracks.map((t) => (
@@ -369,7 +368,7 @@ export function HomeScreen({
       ))}
 
       <motion.div className="section-head" variants={rise}>
-        <h3 className="section-title">{t("Fresh for you")}</h3>
+        <h2 className="section-title">{t("Fresh for you")}</h2>
         <span className="section-count">{t("tap to play")}</span>
       </motion.div>
       <motion.div className="row-scroll" variants={rise}>
@@ -381,9 +380,9 @@ export function HomeScreen({
       {liked.length > 0 && (
         <motion.div variants={rise}>
           <div className="section-head">
-            <h3 className="section-title">
+            <h2 className="section-title">
               <IconFolder size={14} /> {t("Recently saved")}
-            </h3>
+            </h2>
           </div>
           {liked.slice(0, 5).map((t) => (
             <button className="list-row" key={t.id} onClick={() => onDiscover(t.id)}>

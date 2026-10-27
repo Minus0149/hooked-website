@@ -1033,6 +1033,43 @@ button {
   font-size: 13.5px;
   font-weight: 600;
 }
+/* welcome step: three plain facts and the questions link (lib/landingCopy.ts) */
+.ob-facts {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+.ob-facts li {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ob-faq-link {
+  min-height: 44px;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-align: center;
+}
+.ob-faq { max-height: calc(100% - 24px); overflow-y: auto; }
+.ob-faq dl { margin: 6px 0 14px; }
+.ob-faq-item { padding: 12px 0; border-top: 1px solid var(--line); }
+.ob-faq-item:first-child { border-top: 0; }
+.ob-faq-item dt { font-weight: 700; font-size: 14.5px; margin-bottom: 4px; }
+.ob-faq-item dd { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+.ob-faq-foot { font-size: 13px; margin-bottom: 14px; }
+.ob-faq-foot a { color: var(--text); text-underline-offset: 3px; }
 .ob-arrow {
   position: absolute;
   z-index: 4;

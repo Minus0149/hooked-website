@@ -61,6 +61,7 @@ import { pathForView, pathFromLegacyHash, routeFor, type View } from "./lib/rout
 import { browserStorage, readStaff, staffNow, writeStaff } from "./lib/staffCache";
 import { ResetPasswordScreen } from "./components/ResetPasswordScreen";
 import { inApp } from "./lib/navigate";
+import { applyRobots } from "./lib/robots";
 import {
   DIR_TO_ACTION,
   type LibraryContainer,
@@ -202,6 +203,8 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     return () => window.removeEventListener("popstate", onPop);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // search engines: only "/" is indexable (lib/robots.ts)
+  useEffect(() => applyRobots(), [view]);
   const viewRef = useRef<View>("home");
   viewRef.current = view;
   const setViewNoHistory = useCallback((v: View) => {

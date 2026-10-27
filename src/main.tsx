@@ -17,7 +17,12 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { DialogProvider } from "./components/ui/Dialogs";
 import { authClient } from "./lib/auth-client";
 import { LangProvider } from "./lib/lang";
+import { applyRobots } from "./lib/robots";
+import "./styles/fonts.css";
 import "./styles/global.css";
+
+// /admin, /join, /reset-password never reach the app shell's per-view update
+applyRobots();
 
 // Fail loudly and early: an unset Convex URL used to surface as a deep,
 // cryptic error inside the client long after boot. One check explains itself.

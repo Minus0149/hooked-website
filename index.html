@@ -6,23 +6,25 @@
       The host serving this build ignores public/_headers, so the policy is
       declared here instead — a meta CSP is enforced by the browser exactly like
       the header. What it cannot carry is frame-ancestors and HSTS, which are
-      header-only by spec; those still need the Cloudflare transform rule
-      documented in SELF_HOSTED_CONVEX.md. Until that rule exists, framing is
-      refused by public/frame-guard.js.
+      header-only by spec; the Caddyfile sends those. Until a host sends them,
+      framing is refused by public/frame-guard.js.
       connect-src is filled in at build time from VITE_CONVEX_URL and
       VITE_CONVEX_SITE_URL (vite.config.ts), so it follows the backend.
+      Fonts are served from this origin (src/styles/fonts.css), so no Google
+      origins are allowed any more.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' https://checkout.razorpay.com https://cdn.razorpay.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; media-src https: blob:; connect-src __CONVEX_CONNECT__; frame-src https://checkout.razorpay.com https://api.razorpay.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
+      content="default-src 'self'; script-src 'self' https://checkout.razorpay.com https://cdn.razorpay.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' https: data: blob:; media-src https: blob:; connect-src __CONVEX_CONNECT__; frame-src https://checkout.razorpay.com https://api.razorpay.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
     />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <!-- zoom stays enabled: disabling it fails WCAG 1.4.4 and iOS ignores it anyway -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="HookedCue is a swipe-based music discovery app for finding new songs from 30-second previews. Skip, save, ask for more like this, or block artists with four gestures." />
-    <meta name="keywords" content="music discovery app, swipe music app, discover new songs, song recommendations, 30 second song previews, find new music" />
+    <title>HookedCue — discover new music, starting at the hook</title>
+    <meta name="description" content="Swipe through songs that start at their hook. Skip, save, ask for more like it, or never hear an artist again. Free in your browser, invite-only beta." />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" content="#08080C" />
+    <meta name="color-scheme" content="dark" />
     <meta name="application-name" content="HookedCue" />
     <meta name="apple-mobile-web-app-title" content="HookedCue" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -30,46 +32,93 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="canonical" href="https://app.hookedcue.com/" />
     <link rel="manifest" href="/site.webmanifest" />
-    <title>HookedCue - Swipe your next favorite song</title>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="HookedCue" />
-    <meta property="og:title" content="HookedCue - Swipe your next favorite song" />
-    <meta property="og:description" content="Find new music from 30-second hooks. Four swipes teach HookedCue what to play next." />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content="HookedCue — discover new music, starting at the hook" />
+    <meta property="og:description" content="Every song starts at its hook. Swipe to skip, save, get more like it, or never hear that artist again. Free in your browser." />
     <meta property="og:url" content="https://app.hookedcue.com/" />
-    <meta property="og:image" content="https://app.hookedcue.com/og-image.png" />
-    <meta property="og:image:secure_url" content="https://app.hookedcue.com/og-image.png" />
+    <meta property="og:image" content="https://app.hookedcue.com/og-hookedcue.png" />
+    <meta property="og:image:secure_url" content="https://app.hookedcue.com/og-hookedcue.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="HookedCue swipe-based music discovery app preview" />
+    <meta property="og:image:alt" content="HookedCue on a phone: a song card with skip, save, more-like-this and never buttons, next to the line 'Every song starts at its hook'" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="HookedCue - Swipe your next favorite song" />
-    <meta name="twitter:description" content="Find new music from 30-second hooks. Four swipes teach HookedCue what to play next." />
-    <meta name="twitter:image" content="https://app.hookedcue.com/og-image.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
-      rel="stylesheet"
-    />
+    <meta name="twitter:title" content="HookedCue — discover new music, starting at the hook" />
+    <meta name="twitter:description" content="Every song starts at its hook. Swipe to skip, save, get more like it, or never hear that artist again. Free in your browser." />
+    <meta name="twitter:image" content="https://app.hookedcue.com/og-hookedcue.png" />
+    <meta name="twitter:image:alt" content="HookedCue on a phone: a song card with skip, save, more-like-this and never buttons" />
+    <!-- self-hosted (src/styles/fonts.css): the headline and body faces, fetched with the CSS -->
+    <link rel="preload" href="/fonts/unbounded-normal-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/instrument-sans-normal-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <!-- JSON-LD lives in an external file: it lets script-src drop
-         'unsafe-inline' entirely (SEO crawlers follow the src fine) -->
-    <script type="application/ld+json" src="/structured-data.json"></script>
+    <!-- JSON-LD has to be inline: Google ignores a <script type="application/ld+json" src>.
+         It is data, never executed, so the CSP's script-src doesn't apply to it.
+         Only what is true today: free, in a browser, no ratings or user counts. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "HookedCue",
+        "url": "https://app.hookedcue.com/",
+        "description": "A swipe music discovery app. Every song starts at its hook; swipe up to skip, down to save, right for more like it, left to never hear that artist again.",
+        "applicationCategory": "MusicApplication",
+        "operatingSystem": "Any (web browser)",
+        "browserRequirements": "Requires JavaScript",
+        "isAccessibleForFree": true,
+        "inLanguage": "en",
+        "image": "https://app.hookedcue.com/og-hookedcue.png",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "sameAs": ["https://hookedcue.com/"]
+      }
+    </script>
+    <style>
+      /* the pre-painted welcome step below shows only when public/boot.js says
+         this is a first visit to "/" */
+      html:not([data-boot="tour"]) #boot-tour { display: none; }
+    </style>
+    <script src="/boot.js"></script>
     <script src="/frame-guard.js" defer></script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!--
+        The tour's first step as plain HTML, in the app's own classes, so a
+        first visit sees the promise as soon as the stylesheet arrives instead
+        of after ~700 kB of script. React replaces it on mount with the same
+        step (Onboarding.tsx, which skips its entrance fade for this reason).
+        tests/landing-copy.test.ts keeps these words equal to the app's.
+      -->
+      <div class="stage" id="boot-tour">
+        <div class="phone-wrap">
+          <div class="phone">
+            <div class="onboarding">
+              <div class="ob-logo">HookedCue<span style="color: var(--accent)">.</span></div>
+              <div class="ob-step-wrap">
+                <h1 class="ob-headline">your next favorite song is <em>one swipe away</em></h1>
+                <p class="ob-copy">We play you the best part of songs you've never heard. Four swipes teach us exactly what you love.</p>
+                <ul class="ob-facts" aria-label="At a glance"><li>Free</li><li>Starts at the hook</li><li>Invite-only beta</li></ul>
+                <button type="button" class="ob-faq-link">Questions? Is it free, which songs, why 30 seconds</button>
+              </div>
+              <div class="ob-dots"><span class="ob-dot on"></span><span class="ob-dot"></span><span class="ob-dot"></span><span class="ob-dot"></span><span class="ob-dot"></span><span class="ob-dot"></span><span class="ob-dot"></span><span class="ob-dot"></span><span class="ob-dot"></span><span class="ob-dot"></span></div>
+              <button type="button" class="ob-primary">Let's start</button>
+              <button type="button" class="ob-skip">Skip the tour</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <noscript>
       <main style="max-width: 720px; margin: 12vh auto; padding: 24px; color: #f4f2ee; font-family: system-ui, sans-serif; line-height: 1.6;">
-        <h1>HookedCue - swipe your next favorite song</h1>
+        <h1>HookedCue — discover new music, starting at the hook</h1>
         <p>
-          HookedCue is a music discovery app that plays short song previews and learns your taste from four gestures:
-          skip, save, more like this, and never again.
+          HookedCue is a swipe music discovery app. Every song starts at its hook, and four gestures decide what
+          plays next: skip, save, more like this, and never again.
         </p>
-        <p>Enable JavaScript to use the interactive swipe deck.</p>
+        <p>It is free and runs in your browser. Enable JavaScript to use the swipe deck.</p>
       </main>
     </noscript>
     <script type="module" src="/src/main.tsx"></script>
