@@ -1,7 +1,7 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { inApp } from "../lib/navigate";
 import { motion } from "motion/react";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "../lib/auth-client";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -22,6 +22,8 @@ import { serverMessage } from "../lib/serverError";
  */
 
 const PAGE = 24;
+/** pages a filtered catalogue view reads on its own before asking to keep looking */
+const AUTO_PAGES = 8;
 const MS = (s: number) => Math.round(s * 1000);
 const secs = (ms: number) => (ms / 1000).toFixed(1).replace(/\.0$/, "");
 const clock = (ms: number) => {
@@ -196,11 +198,15 @@ function CreatorWorkspace({ tracks, curator }: { tracks: Track[]; curator: boole
     <div className="admin admin-v2 creator-wrap">
       <header className="admin-head">
         <h2>{curator ? "Catalogue" : "Your music"}</h2>
-        <p>
-          {tracks.length} track{tracks.length === 1 ? "" : "s"} · {totals.live} live ·{" "}
-          {totals.hooks} hook{totals.hooks === 1 ? "" : "s"} · {totals.plays} plays ·{" "}
-          {saveRate}% save rate
-        </p>
+        {curator ? (
+          <p>The whole catalogue, newest first. Search by title or artist.</p>
+        ) : (
+          <p>
+            {tracks.length} track{tracks.length === 1 ? "" : "s"} · {totals.live} live ·{" "}
+            {totals.hooks} hook{totals.hooks === 1 ? "" : "s"} · {totals.plays} plays ·{" "}
+            {saveRate}% save rate
+          </p>
+        )}
       </header>
 
       <PromotePanel tracks={tracks} />
@@ -251,55 +257,155 @@ function CreatorWorkspace({ tracks, curator }: { tracks: Track[]; curator: boole
         </form>
       )}
 
-      {tracks.length === 0 && <p className="aq-empty">Nothing here yet. Add a track to start.</p>}
-      {tracks.length > 0 && (
-        <div className="creator-toolbar">
-          <input
-            className="auth-input creator-search"
-            type="search"
-            placeholder={`search ${tracks.length} tracks by title or artist`}
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setShown(PAGE);
-            }}
-          />
-          <div className="creator-filters" role="tablist" aria-label="show">
-            {TRACK_FILTERS.map((f) => (
-              <button
-                key={f.id}
-                role="tab"
-                aria-selected={filter === f.id}
-                className={filter === f.id ? "creator-filter on" : "creator-filter"}
-                onClick={() => {
-                  setFilter(f.id);
+      {curator ? (
+        <CatalogueList />
+      ) : (
+        <>
+          {tracks.length === 0 && <p className="aq-empty">Nothing here yet. Add a track to start.</p>}
+          {tracks.length > 0 && (
+            <div className="creator-toolbar">
+              <input
+                className="auth-input creator-search"
+                type="search"
+                placeholder={`search ${tracks.length} tracks by title or artist`}
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
                   setShown(PAGE);
                 }}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-          <p className="creator-count">
-            {visible.length === tracks.length
-              ? `${tracks.length} tracks`
-              : `${visible.length} of ${tracks.length} tracks`}
-            {" · "}mood tags appear once a few listeners agree
-          </p>
-        </div>
-      )}
-      {tracks.length > 0 && visible.length === 0 && (
-        <p className="aq-empty">Nothing matches that.</p>
-      )}
-      {visible.slice(0, shown).map((track) => (
-        <TrackCard key={track._id} track={track} />
-      ))}
-      {visible.length > shown && (
-        <button className="aq-btn creator-more" onClick={() => setShown((n) => n + PAGE)}>
-          show {Math.min(PAGE, visible.length - shown)} more · {visible.length - shown} left
-        </button>
+              />
+              <div className="creator-filters" role="tablist" aria-label="show">
+                {TRACK_FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    role="tab"
+                    aria-selected={filter === f.id}
+                    className={filter === f.id ? "creator-filter on" : "creator-filter"}
+                    onClick={() => {
+                      setFilter(f.id);
+                      setShown(PAGE);
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <p className="creator-count">
+                {visible.length === tracks.length
+                  ? `${tracks.length} tracks`
+                  : `${visible.length} of ${tracks.length} tracks`}
+                {" · "}mood tags appear once a few listeners agree
+              </p>
+            </div>
+          )}
+          {tracks.length > 0 && visible.length === 0 && (
+            <p className="aq-empty">Nothing matches that.</p>
+          )}
+          {visible.slice(0, shown).map((track) => (
+            <TrackCard key={track._id} track={track} />
+          ))}
+          {visible.length > shown && (
+            <button className="aq-btn creator-more" onClick={() => setShown((n) => n + PAGE)}>
+              show {Math.min(PAGE, visible.length - shown)} more · {visible.length - shown} left
+            </button>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+/**
+ * The curator's view of the catalogue: read from the server a page at a time,
+ * searched there too. Loading all of it in one query broke the dashboard once
+ * the catalogue passed ~13,000 tracks (28 Oct 2026).
+ */
+function CatalogueList() {
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<TrackFilter>("all");
+  // search once typing pauses, not on every key
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.creators.cataloguePage,
+    { search: search || undefined, filter },
+    { initialNumItems: PAGE },
+  );
+  const tracks = results as Track[];
+  const more = status === "CanLoadMore" || status === "LoadingMore";
+  // "needs hooks" and "mood-tagged" are decided after each page is read, so a
+  // page can come back empty. Keep reading on our own (a few pages at most)
+  // rather than showing "0 shown" and making someone click until they hit one.
+  const joined = !search && (filter === "needs-hooks" || filter === "tagged");
+  const [autoPages, setAutoPages] = useState(0);
+  useEffect(() => setAutoPages(0), [filter, search]);
+  useEffect(() => {
+    if (joined && status === "CanLoadMore" && tracks.length < PAGE && autoPages < AUTO_PAGES) {
+      setAutoPages((n) => n + 1);
+      loadMore(PAGE);
+    }
+  }, [joined, status, tracks.length, autoPages, loadMore]);
+  const searching = joined && more && tracks.length < PAGE && autoPages < AUTO_PAGES;
+
+  return (
+    <>
+      <div className="creator-toolbar">
+        <input
+          className="auth-input creator-search"
+          type="search"
+          placeholder="search the catalogue by title or artist"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <div className="creator-filters" role="tablist" aria-label="show">
+          {TRACK_FILTERS.map((f) => (
+            <button
+              key={f.id}
+              role="tab"
+              aria-selected={filter === f.id}
+              className={filter === f.id ? "creator-filter on" : "creator-filter"}
+              onClick={() => setFilter(f.id)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <p className="creator-count">
+          {status === "LoadingFirstPage" || searching
+            ? "looking…"
+            : joined && tracks.length === 0 && more
+              ? `none in the newest ${(autoPages + 1) * PAGE} tracks`
+              : `${tracks.length} shown${search ? ` for “${search}”` : ""}${more ? " · more below" : ""}`}
+          {" · "}mood tags appear once a few listeners agree
+        </p>
+      </div>
+      {status !== "LoadingFirstPage" && tracks.length === 0 && !more && (
+        <p className="aq-empty">Nothing matches that.</p>
+      )}
+      {tracks.map((track) => (
+        <TrackCard key={track._id} track={track} />
+      ))}
+      {more && (
+        <button
+          className="aq-btn creator-more"
+          disabled={status === "LoadingMore" || searching}
+          onClick={() => {
+            // a press on a filtered view gets a fresh run of automatic reads
+            if (joined) setAutoPages(0);
+            loadMore(PAGE);
+          }}
+        >
+          {status === "LoadingMore" || searching
+            ? "loading…"
+            : joined
+              ? "keep looking"
+              : `show ${PAGE} more`}
+        </button>
+      )}
+    </>
   );
 }
 

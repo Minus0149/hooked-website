@@ -21,6 +21,7 @@ import type * as catalogRules from "../catalogRules.js";
 import type * as charts from "../charts.js";
 import type * as collab from "../collab.js";
 import type * as contentReports from "../contentReports.js";
+import type * as creatorRules from "../creatorRules.js";
 import type * as creators from "../creators.js";
 import type * as crons from "../crons.js";
 import type * as curation from "../curation.js";
@@ -80,6 +81,7 @@ declare const fullApi: ApiFromModules<{
   charts: typeof charts;
   collab: typeof collab;
   contentReports: typeof contentReports;
+  creatorRules: typeof creatorRules;
   creators: typeof creators;
   crons: typeof crons;
   curation: typeof curation;

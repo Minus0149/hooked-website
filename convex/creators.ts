@@ -2,6 +2,17 @@ import { v, ConvexError } from "convex/values";
 import { runtimeFor } from "./runtime";
 import { publishable } from "./moods";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import { paginationOptsValidator } from "convex/server";
+import {
+  CATALOGUE_FILTERS,
+  CATALOGUE_PAGE_MAX,
+  OWNED_CAP,
+  SEARCH_TAKE,
+  keepForFilter,
+  keepJoined,
+  mergeById,
+} from "./creatorRules";
 import { components } from "./_generated/api";
 import {
   cleanAccent,
@@ -100,7 +111,48 @@ export const apply = mutation({
   },
 });
 
-/** Everything the creator dashboard needs in one round trip. */
+/** A track with what the dashboard shows on its card: hooks + their counters, audio, mood tags. */
+async function withDetails(ctx: QueryCtx, track: Doc<"tracks">, moodFloor: number) {
+  const hooks = await ctx.db
+    .query("hooks")
+    .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))
+    .collect();
+  hooks.sort((a, b) => a.order - b.order);
+  // counters live in hookStats; the dashboard joins them rather than
+  // denormalising them back onto the hook
+  const withStats = await Promise.all(
+    hooks.map(async (hook) => {
+      const stats = await ctx.db
+        .query("hookStats")
+        .withIndex("by_hookId", (q) => q.eq("hookId", hook._id))
+        .unique();
+      return { ...hook, plays: stats?.plays ?? 0, saves: stats?.saves ?? 0, skips: stats?.skips ?? 0 };
+    }),
+  );
+  // How listeners hear this track, once enough of them agree — the same floor
+  // every client sees, so an artist can't read one fan's vote off their own
+  // dashboard.
+  const tally = await ctx.db
+    .query("trackMoods")
+    .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))
+    .unique();
+  return {
+    ...track,
+    audioUrl: track.audioStorageId ? await ctx.storage.getUrl(track.audioStorageId) : null,
+    hooks: withStats,
+    moods: publishable(tally?.counts ?? [], moodFloor),
+  };
+}
+
+/**
+ * Who you are on the creator side, plus the tracks you own.
+ *
+ * Only *owned* tracks come back here, even for a curator. The curator used to
+ * get the whole catalogue in this one query; at ~13,000 tracks that is past
+ * Convex's per-query read limit, the query threw, and the dashboard never
+ * loaded (28 Oct 2026). The catalogue is now read a page at a time through
+ * `cataloguePage`.
+ */
 export const dashboard = query({
   args: {},
   handler: async (ctx) => {
@@ -111,77 +163,52 @@ export const dashboard = query({
 
     if (!creator && !curator) return { creator: null, curator: false, tracks: [] };
 
-    const owned = curator
-      ? await ctx.db.query("tracks").collect()
-      : await ctx.db
-          .query("tracks")
-          .withIndex("by_owner", (q) => q.eq("ownerUserId", user.id))
-          .collect();
-
+    const owned = await ctx.db
+      .query("tracks")
+      .withIndex("by_owner", (q) => q.eq("ownerUserId", user.id))
+      .take(OWNED_CAP);
     const moodFloor = (await runtimeFor(ctx)).moodMinVotes;
-
-    // Three lookups per track (hooks, their stats, the mood tally) is fine for
-    // an artist with a dozen songs and fatal for a curator, who sees the whole
-    // catalogue: at 1,000 tracks it passed Convex's 4,096-reads-per-query cap
-    // and the dashboard crashed the app. Past a small catalogue, each table is
-    // read once and joined here instead.
-    const owns = new Set(owned.map((t) => t.trackId));
-    const bulk = owned.length > 40;
-    const hooksAll = bulk ? (await ctx.db.query("hooks").collect()).filter((h) => owns.has(h.trackId)) : null;
-    const statsAll = bulk ? await ctx.db.query("hookStats").collect() : null;
-    const talliesAll = bulk ? await ctx.db.query("trackMoods").collect() : null;
-    const hooksBy = new Map<string, NonNullable<typeof hooksAll>>();
-    for (const h of hooksAll ?? []) hooksBy.set(h.trackId, [...(hooksBy.get(h.trackId) ?? []), h]);
-    const statsBy = new Map((statsAll ?? []).map((st) => [String(st.hookId), st]));
-    const tallyBy = new Map((talliesAll ?? []).map((t) => [t.trackId, t]));
-
-    const tracks = await Promise.all(
-      owned.map(async (track) => {
-        const hooks = bulk
-          ? (hooksBy.get(track.trackId) ?? [])
-          : await ctx.db
-              .query("hooks")
-              .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))
-              .collect();
-        hooks.sort((a, b) => a.order - b.order);
-        // counters live in hookStats now; the dashboard still wants them, so
-        // they're joined here rather than denormalised back onto the hook
-        const withStats = await Promise.all(
-          hooks.map(async (hook) => {
-            const stats = bulk
-              ? statsBy.get(String(hook._id))
-              : await ctx.db
-                  .query("hookStats")
-                  .withIndex("by_hookId", (q) => q.eq("hookId", hook._id))
-                  .unique();
-            return {
-              ...hook,
-              plays: stats?.plays ?? 0,
-              saves: stats?.saves ?? 0,
-              skips: stats?.skips ?? 0,
-            };
-          }),
-        );
-        // How listeners hear this track, once enough of them agree — the same
-        // floor every client sees, so an artist can't read one fan's vote off
-        // their own dashboard.
-        const tally = bulk
-          ? tallyBy.get(track.trackId)
-          : await ctx.db
-              .query("trackMoods")
-              .withIndex("by_trackId", (q) => q.eq("trackId", track.trackId))
-              .unique();
-        return {
-          ...track,
-          audioUrl: track.audioStorageId ? await ctx.storage.getUrl(track.audioStorageId) : null,
-          hooks: withStats,
-          moods: publishable(tally?.counts ?? [], moodFloor),
-        };
-      }),
-    );
+    const tracks = await Promise.all(owned.map((t) => withDetails(ctx, t, moodFloor)));
     tracks.sort((a, b) => a.title.localeCompare(b.title));
-
     return { creator, curator, tracks };
+  },
+});
+
+/**
+ * The whole catalogue, for curators, one page at a time (newest first).
+ * A search reads the title and artist search indexes instead of scanning.
+ * Filters that depend on joined data (needs hooks, mood-tagged) are applied
+ * per page, so a page can come back short; "show more" keeps going.
+ */
+export const cataloguePage = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    search: v.optional(v.string()),
+    filter: v.optional(v.union(...CATALOGUE_FILTERS.map((f) => v.literal(f)))),
+  },
+  handler: async (ctx, { paginationOpts, search, filter = "all" }) => {
+    await requirePermission(ctx, "catalog.curate");
+    const moodFloor = (await runtimeFor(ctx)).moodMinVotes;
+    const term = cleanText(search ?? "", 80);
+
+    if (term.length > 0) {
+      // one bounded page: the best matches by title, then by artist
+      const [byTitle, byArtist] = await Promise.all([
+        ctx.db.query("tracks").withSearchIndex("search_title", (q) => q.search("title", term)).take(SEARCH_TAKE),
+        ctx.db.query("tracks").withSearchIndex("search_artist", (q) => q.search("artist", term)).take(SEARCH_TAKE),
+      ]);
+      const merged = mergeById(byTitle, byArtist).filter((t) => keepForFilter(t, filter));
+      const detailed = await Promise.all(merged.map((t) => withDetails(ctx, t, moodFloor)));
+      return { page: detailed.filter((t) => keepJoined(t, filter)), isDone: true, continueCursor: "" };
+    }
+
+    const base = ctx.db.query("tracks").order("desc");
+    const result = await (filter === "drafts"
+      ? base.filter((q) => q.eq(q.field("hidden"), true))
+      : base
+    ).paginate({ ...paginationOpts, numItems: Math.min(paginationOpts.numItems, CATALOGUE_PAGE_MAX) });
+    const detailed = await Promise.all(result.page.map((t) => withDetails(ctx, t, moodFloor)));
+    return { ...result, page: detailed.filter((t) => keepJoined(t, filter)) };
   },
 });
 
