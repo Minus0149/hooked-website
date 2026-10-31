@@ -25,6 +25,7 @@ import {
   ROOM_CODE_LENGTH,
   inviteCodeChange,
   inviteOpen,
+  membersAfterSharing,
   makeCode,
   mergeFeed,
   mutualMix,
@@ -411,7 +412,12 @@ export const playlist = query({
       isOwner: me === pl.userId,
       isMember: me ? access.members.includes(me) : false,
       canAdd: me ? canAddToPlaylist(access, me) : false,
-      members: memberProfiles.filter((m): m is Doc<"profiles"> => m !== null).map(person),
+      // the owner also gets each row's id, for "remove" (never anyone's userId)
+      members: members.flatMap((m, i) => {
+        const p = memberProfiles[i];
+        if (!p) return [];
+        return [{ ...person(p), memberId: me === pl.userId ? m._id : null }];
+      }),
       songs: songs
         .sort((a, b) => b._creationTime - a._creationTime)
         .map((s) => ({
@@ -443,6 +449,12 @@ export const setPlaylistSharing = mutation({
     if (change === "issue") patch.inviteCode = await freshCode(ctx, PLAYLIST_CODE_LENGTH, "playlist");
     if (change === "revoke") patch.inviteCode = undefined;
     await ctx.db.patch(playlistId, patch);
+    // neither public nor collaborative: it's private again, so nobody else keeps it
+    if (membersAfterSharing(next) === "removeAll") {
+      for (const m of await ctx.db.query("playlistMembers").withIndex("by_playlist", (q) => q.eq("playlistId", playlistId)).collect()) {
+        await dropMember(ctx, m);
+      }
+    }
     return { inviteCode: change === "keep" ? pl.inviteCode ?? null : patch.inviteCode ?? null };
   },
 });
@@ -466,6 +478,27 @@ export const joinPlaylist = mutation({
       .first();
     if (!already) await ctx.db.insert("playlistMembers", { playlistId: pl._id, userId: user.id, at: Date.now() });
     return { playlistId: pl._id };
+  },
+});
+
+/** Take someone out of a playlist, and stop their swipe-downs landing in it. */
+async function dropMember(ctx: MutationCtx, m: Doc<"playlistMembers">) {
+  await ctx.db.delete(m._id);
+  const p = await getProfile(ctx, m.userId);
+  if (p && p.saveTarget === `pl:${m.playlistId}`) await ctx.db.patch(p._id, { saveTarget: "liked" });
+}
+
+/** The owner takes one member out. Songs they added stay; the owner can remove those too. */
+export const removeMember = mutation({
+  args: { playlistId: v.id("playlists"), memberId: v.id("playlistMembers") },
+  handler: async (ctx, { playlistId, memberId }) => {
+    const { user } = await requireGatedUser(ctx);
+    await enforceRateLimit(ctx, `playlist:share:${user.id}`, 60, 10 * 60_000);
+    const pl = await ctx.db.get(playlistId);
+    if (!pl || pl.userId !== user.id) throw new ConvexError("Only the owner can change this");
+    const m = await ctx.db.get(memberId);
+    if (!m || m.playlistId !== playlistId) return;
+    await dropMember(ctx, m);
   },
 });
 

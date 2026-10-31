@@ -145,6 +145,16 @@ export function inviteCodeChange(
   if (!open && hasCode) return "revoke";
   return "keep";
 }
+/**
+ * What a sharing change does to the people who joined. Turning off both
+ * Public and Collaborative makes the playlist private again, and used to
+ * leave every member with it in their library (and their saves landing in
+ * it). Now they all leave with the link.
+ */
+export function membersAfterSharing(next: { visibility?: string | null; collaborative?: boolean | null }): "keep" | "removeAll" {
+  return inviteOpen(next) ? "keep" : "removeAll";
+}
+
 export function makeCode(length: number, rand: () => number): string {
   let out = "";
   for (let i = 0; i < length; i++) out += CODE_ALPHABET[Math.floor(rand() * CODE_ALPHABET.length) % CODE_ALPHABET.length];

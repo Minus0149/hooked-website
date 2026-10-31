@@ -633,6 +633,8 @@ export function PlaylistSharingPanel({ playlistId, name }: { playlistId: string;
   const tx = useT();
   const pl = useQuery(api.social.playlist, { playlistId });
   const setSharing = useMutation(api.social.setPlaylistSharing);
+  const removeMember = useMutation(api.social.removeMember);
+  const { confirm, notify } = useDialogs();
   const [note, setNote] = useState<string | null>(null);
   if (!pl || !pl.isOwner) return null;
   const toggle = (patch: { visibility?: string; collaborative?: boolean }) =>
@@ -666,9 +668,43 @@ export function PlaylistSharingPanel({ playlistId, name }: { playlistId: string;
         </button>
       )}
       {pl.members.length > 0 && (
-        <p className="settings-hint">
-          {tx("With {list}", { list: pl.members.map((m) => (m.username ? `@${m.username}` : m.name)).join(", ") })}
-        </p>
+        <>
+          <p className="settings-hint">{tx("People in it. Turning off Public and Collaborative takes everyone out.")}</p>
+          {pl.members.map((m) => (
+            <div key={String(m.memberId ?? m.username ?? m.name)} className="social-person">
+              <span className="social-person-main">
+                <Avatar name={m.name} />
+                <span>
+                  <b>{m.name}</b>
+                  {m.username && <small>@{m.username}</small>}
+                </span>
+              </span>
+              {m.memberId && (
+                <button
+                  type="button"
+                  className="social-block"
+                  onClick={async () => {
+                    const who = m.username ? `@${m.username}` : m.name;
+                    const ok = await confirm({
+                      title: tx("Remove {name}?", { name: who }),
+                      body: tx("They lose this playlist. Songs they added stay until you remove them."),
+                      confirmLabel: tx("Remove"),
+                      danger: true,
+                    });
+                    if (!ok) return;
+                    try {
+                      await removeMember({ playlistId: pl.id, memberId: m.memberId! });
+                    } catch (e) {
+                      notify(`${tx("Couldn't do that")}: ${serverMessage(e)}`);
+                    }
+                  }}
+                >
+                  {tx("Remove")}
+                </button>
+              )}
+            </div>
+          ))}
+        </>
       )}
     </div>
   );
