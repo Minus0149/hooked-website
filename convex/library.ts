@@ -20,7 +20,7 @@ import {
 } from "./security";
 import { touchCatalog } from "./catalog";
 import { normalizeUsername, usernameProblem } from "../src/lib/username";
-import { coerceAfterHook } from "./socialRules";
+import { coerceAfterHook, publicName } from "./socialRules";
 
 export type ProfileVerdict =
   | "create"
@@ -131,7 +131,8 @@ export const getLibrary = query({
     for (const p of joined) {
       if (ownerNames.has(p.userId)) continue;
       const o = await getProfile(ctx, p.userId);
-      ownerNames.set(p.userId, o?.name?.trim() || (o?.username ? `@${o.username}` : "Someone"));
+      // never the email-derived default name: members see what social.ts shows
+      ownerNames.set(p.userId, publicName(o));
     }
     return {
       liked: songs.filter((s) => s.kind === "liked"),
@@ -764,6 +765,8 @@ export const ACCOUNT_DELETION = {
     promotionOrders: "payment records, 8 years",
     // anonymous per-song counts for the artist; the listener marker rows go
     trackInsights: "anonymous counts",
+    // a song report stays for moderation; its reporter is replaced with "deleted"
+    contentReports: "reports kept, reporter removed",
   } as Record<string, string>,
 } as const;
 
@@ -793,6 +796,14 @@ export const deleteMyAccount = mutation({
     for (const doc of [...swipes, ...songs, ...never, ...buried, ...playlists, ...votes, ...imports, ...adEvents, ...reports]) {
       await ctx.db.delete(doc._id);
     }
+
+    // songs they reported stay in the moderators' queue, with nobody attached
+    // (contentReports.reporter is "user:<id>", which the schema scan can't see)
+    const songReports = await ctx.db
+      .query("contentReports")
+      .withIndex("by_reporter_track", (q) => q.eq("reporter", `user:${userId}`))
+      .collect();
+    for (const r of songReports) await ctx.db.patch(r._id, { reporter: "deleted" });
 
     // paid promotion: a running campaign has to be cancelled first (that is
     // what refunds its unused listens); ended ones, a personal rate and this

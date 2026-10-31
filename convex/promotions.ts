@@ -692,6 +692,18 @@ export const claimEvent = internalMutation({
   },
 });
 
+/** Undo a claim whose handling failed, so Razorpay's retry is processed rather than skipped. */
+export const releaseEvent = internalMutation({
+  args: { eventId: v.string() },
+  handler: async (ctx, { eventId }) => {
+    const row = await ctx.db
+      .query("razorpayEvents")
+      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+      .unique();
+    if (row) await ctx.db.delete(row._id);
+  },
+});
+
 export const refundSettled = internalMutation({
   args: { refundId: v.string(), ok: v.boolean() },
   handler: async (ctx, { refundId, ok }) => {
@@ -741,22 +753,31 @@ export const razorpayWebhook = httpAction(async (ctx, request) => {
   }
   const payment = body.payload?.payment?.entity;
   const orderId = body.payload?.order?.entity?.id ?? payment?.order_id;
-  switch (body.event) {
-    case "order.paid":
-    case "payment.captured":
-      if (orderId && payment?.id) {
-        await ctx.runMutation(internal.promotions.markPaid, { razorpayOrderId: orderId, razorpayPaymentId: payment.id });
+  try {
+    switch (body.event) {
+      case "order.paid":
+      case "payment.captured":
+        if (orderId && payment?.id) {
+          await ctx.runMutation(internal.promotions.markPaid, { razorpayOrderId: orderId, razorpayPaymentId: payment.id });
+        }
+        break;
+      case "payment.failed":
+        if (orderId) await ctx.runMutation(internal.promotions.markFailed, { razorpayOrderId: orderId });
+        break;
+      case "refund.processed":
+      case "refund.failed": {
+        const refundId = body.payload?.refund?.entity?.id;
+        if (refundId) await ctx.runMutation(internal.promotions.refundSettled, { refundId, ok: body.event === "refund.processed" });
+        break;
       }
-      break;
-    case "payment.failed":
-      if (orderId) await ctx.runMutation(internal.promotions.markFailed, { razorpayOrderId: orderId });
-      break;
-    case "refund.processed":
-    case "refund.failed": {
-      const refundId = body.payload?.refund?.entity?.id;
-      if (refundId) await ctx.runMutation(internal.promotions.refundSettled, { refundId, ok: body.event === "refund.processed" });
-      break;
     }
+  } catch (error) {
+    // The event was claimed before it was handled. Answering 200 now would
+    // tell Razorpay it landed, and its retry would be skipped as a duplicate:
+    // a paid order with no campaign when the checkout tab was already closed.
+    console.error("[razorpay] webhook handling failed:", error);
+    if (eventId) await ctx.runMutation(internal.promotions.releaseEvent, { eventId });
+    return new Response("retry", { status: 500 });
   }
   return new Response("ok", { status: 200 });
 });

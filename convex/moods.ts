@@ -1,7 +1,11 @@
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { enforceRateLimit, requireGatedUser, requirePermission } from "./security";
+import { cleanText, enforceRateLimit, requireGatedUser, requirePermission } from "./security";
 import { runtimeFor } from "./runtime";
+import catalogJson from "../src/data/catalog.json";
+
+/** The bundled first deck: songs a listener can be dealt before the catalogue loads. */
+const BUNDLED_IDS = new Set((catalogJson as { id: string }[]).map((t) => t.id));
 
 /**
  * What a song feels like, according to the people who heard it.
@@ -73,10 +77,23 @@ export function publishable(counts: Counts, floor: number): Counts {
  */
 export const vote = mutation({
   args: { trackId: v.string(), mood: v.string() },
-  handler: async (ctx, { trackId, mood }) => {
+  handler: async (ctx, { trackId: rawTrackId, mood }) => {
     const { user } = await requireGatedUser(ctx);
     if (!isMood(mood)) throw new ConvexError("Unknown mood");
     await enforceRateLimit(ctx, `mood:${user.id}`, 240, 60_000);
+
+    // Only a song that exists gets a tally. crowd() reads trackMoods whole for
+    // every listener, so votes on made-up ids (any length, 240 a minute) used
+    // to grow it until that query hit Convex's read limits for everyone.
+    const trackId = cleanText(rawTrackId, 120);
+    if (!trackId) return;
+    const known =
+      BUNDLED_IDS.has(trackId) ||
+      (await ctx.db
+        .query("tracks")
+        .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
+        .first()) !== null;
+    if (!known) return;
 
     const userId = String(user.id);
     const existing = await ctx.db

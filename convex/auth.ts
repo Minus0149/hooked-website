@@ -87,6 +87,9 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
         await sendEmail(ctx, user.email, mail.subject, mail.html, `password reset for ${user.email}: ${url}`);
       },
       resetPasswordTokenExpiresIn: 3600,
+      // a reset is how someone takes their account back: whoever had the old
+      // password (or a stolen session) is signed out everywhere by it
+      revokeSessionsOnPasswordReset: true,
     },
     // Signing up with an address proves nothing about owning it. An approved
     // invite only counts once the inbox has clicked this link — otherwise the

@@ -4,6 +4,7 @@ import { runtimeFor } from "./runtime";
 import { getProfile, requirePermission, requireUser } from "./security";
 import { inviteLink, isFoundingListener, makeCode } from "./referralRules";
 import { secureRandom } from "./secureRandom";
+import { publicName } from "./socialRules";
 
 /**
  * Invite a friend — see referralRules.ts for the rules and access.ts
@@ -48,8 +49,10 @@ export const mine = query({
     const people = await Promise.all(
       invited.map(async (r) => ({
         // their name only — never the friend's email: the inviter didn't
-        // necessarily know which address their friend applied with
-        name: r.name,
+        // necessarily know which address their friend applied with. A signup
+        // with no name stores the address's local part (access.nameFor), so
+        // that one reads as "Someone", the same rule social.ts uses.
+        name: publicName({ name: r.name, email: r.email }),
         joined: await joinedByEmail(ctx, r.email),
         at: r.decidedAt ?? r.submittedAt,
       })),

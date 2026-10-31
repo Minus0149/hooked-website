@@ -24,7 +24,7 @@ describe("account deletion coverage", () => {
 
   it("covers every table that stores a person's id or email", () => {
     const personal = tables
-      .filter((t) => /^\s*(userId|userEmail|email|ownerUserId):/m.test(t.body))
+      .filter((t) => /^\s*(userId|userEmail|email|ownerUserId|reporter):/m.test(t.body))
       .map((t) => t.name);
     const decided = new Set<string>([
       ...ACCOUNT_DELETION.deleted,
