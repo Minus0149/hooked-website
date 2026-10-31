@@ -8,6 +8,8 @@ import {
   CATALOGUE_FILTERS,
   CATALOGUE_PAGE_MAX,
   OWNED_CAP,
+  UPLOAD_FRESH_MS,
+  audioUploadProblem,
   SEARCH_TAKE,
   keepForFilter,
   keepJoined,
@@ -240,6 +242,15 @@ export const attachAudio = mutation({
     }
     if (!rightsConfirmed) {
       throw new ConvexError("Confirm you hold the rights to this recording first");
+    }
+    // the file has to be this upload: fresh, audio, and a sane size
+    const file = await ctx.db.system.get(storageId);
+    const problem = audioUploadProblem(file, Date.now());
+    if (problem) {
+      // a fresh upload that isn't usable is this creator's own junk: drop it
+      // (an old file is never touched, it may be someone else's)
+      if (file && Date.now() - file._creationTime <= UPLOAD_FRESH_MS) await ctx.storage.delete(storageId);
+      throw new ConvexError(problem);
     }
     // replacing audio drops the old file rather than leaking it
     if (track.audioStorageId && track.audioStorageId !== storageId) {
