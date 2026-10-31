@@ -1,8 +1,9 @@
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { deckLive } from "./featureRules";
+import { DECK_EVENT_DAILY, deckCountsFor, deckLive } from "./featureRules";
+import { authComponent } from "./auth";
 import { isMood } from "./moods";
-import { cleanText, enforceRateLimit, requirePermission } from "./security";
+import { cleanText, enforceRateLimit, getProfile, requirePermission } from "./security";
 
 /**
  * Sponsored mood decks: a brand presents a deck (a mood and/or genre, and
@@ -39,8 +40,10 @@ export const live = query({
 
 /**
  * Count an impression (chip seen), an open (deck started) or a play (a song
- * dealt inside the deck). Rate-limited by the anonymous install key so a
- * script can't pad a sponsor's report; the key itself is never stored.
+ * dealt inside the deck). Only signed-in listeners count (featureRules
+ * deckCountsFor): guests still see decks, they just aren't in the report. Each
+ * account counts a few times a day per deck at most; no id is stored with the
+ * counts. `anonKey` is still accepted from older app builds and ignored.
  */
 export const record = mutation({
   args: {
@@ -48,13 +51,20 @@ export const record = mutation({
     event: v.union(v.literal("impression"), v.literal("open"), v.literal("play")),
     anonKey: v.optional(v.string()),
   },
-  handler: async (ctx, { deckId, event, anonKey }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    const who = identity?.subject ?? cleanText(anonKey ?? "", 64);
-    if (!who) return;
+  handler: async (ctx, { deckId, event }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) return;
+    const who = String(user._id);
+    if (!deckCountsFor(await getProfile(ctx, who))) return;
     await enforceRateLimit(ctx, `deck:${event}:${who}`, event === "play" ? 60 : 20, 60 * 60_000);
     const deck = await ctx.db.get(deckId);
     if (!deck || !deckLive(deck, Date.now())) return;
+    // past the day's allowance for this deck: quietly not counted
+    try {
+      await enforceRateLimit(ctx, `deck:day:${event}:${deckId}:${who}`, DECK_EVENT_DAILY[event], 86_400_000);
+    } catch {
+      return;
+    }
     const day = dayOf(Date.now());
     const row = await ctx.db
       .query("sponsoredDeckStats")

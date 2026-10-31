@@ -33,6 +33,21 @@ export function deckLive(d: DeckWindow, now: number): boolean {
   return d.active && d.startsAt <= now && now < d.endsAt;
 }
 
+/**
+ * Whose deck events reach a sponsor's report. An anonymous install key is free
+ * to mint, so counting them let a script pad any deck's impressions, opens and
+ * plays (the same hole recordPromoted had). Only a signed-in, active account
+ * counts, and never staff who run decks (ads.manage) previewing their own.
+ */
+export function deckCountsFor(profile: { suspended?: boolean; isAdmin?: boolean; permissions?: string[] } | null): boolean {
+  if (!profile || profile.suspended) return false;
+  if (profile.isAdmin || (profile.permissions ?? []).includes("ads.manage")) return false;
+  return true;
+}
+
+/** How often one account's event counts for one deck in a day. */
+export const DECK_EVENT_DAILY = { impression: 1, open: 3, play: 50 } as const;
+
 /** The label listeners see, always carrying who paid for it (ASCI). */
 export function deckLabel(d: { title: string; brand: string }): string {
   return `${d.title} · presented by ${d.brand}`;
