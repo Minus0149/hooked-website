@@ -1,4 +1,5 @@
 import { v, ConvexError } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -256,8 +257,14 @@ export const record = internalMutation({
   },
 });
 
-/** The admin queue. Behind the existing users.view permission — no new access path. */
-export const list = query({
+/**
+ * The queue's totals, for the tab badge and the panel's header. Each count is
+ * an index range read up to COUNT_CAP rows, so the numbers stop at "5000+"
+ * rather than reading the whole table on every change.
+ */
+export const COUNT_CAP = 5000;
+
+export const counts = query({
   args: {},
   handler: async (ctx) => {
     // null, not a throw: the dashboard reads null as "not yours to see", and a
@@ -268,18 +275,41 @@ export const list = query({
     } catch {
       return null;
     }
-    const rows = await ctx.db.query("accessRequests").collect();
-    rows.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
-    const count = (s: string) => rows.filter((r) => r.status === s).length;
-    return {
-      total: rows.length,
-      pending: count("pending"),
-      approved: count("approved"),
-      rejected: count("rejected"),
-      fromApp: rows.filter((r) => r.source === "app").length,
-      fromLanding: rows.filter((r) => r.source === "landing").length,
-      requests: rows,
-    };
+    const status = async (s: "pending" | "approved" | "rejected") =>
+      (await ctx.db.query("accessRequests").withIndex("by_status", (q) => q.eq("status", s)).take(COUNT_CAP)).length;
+    const source = async (s: "app" | "landing") =>
+      (await ctx.db.query("accessRequests").withIndex("by_source", (q) => q.eq("source", s)).take(COUNT_CAP)).length;
+    const [pending, approved, rejected, fromApp, fromLanding] = await Promise.all([
+      status("pending"),
+      status("approved"),
+      status("rejected"),
+      source("app"),
+      source("landing"),
+    ]);
+    return { total: pending + approved + rejected, pending, approved, rejected, fromApp, fromLanding, cap: COUNT_CAP };
+  },
+});
+
+/**
+ * The admin queue, newest first, a page at a time. It used to return every
+ * request ever made in one query (and re-send all of it on every new signup).
+ * Behind the existing users.view permission — no new access path.
+ */
+export const list = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    status: v.optional(v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected"))),
+  },
+  handler: async (ctx, { paginationOpts, status }) => {
+    try {
+      await requirePermission(ctx, "users.view");
+    } catch {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+    const opts = { ...paginationOpts, numItems: Math.min(Math.max(1, paginationOpts.numItems), 100) };
+    return status
+      ? await ctx.db.query("accessRequests").withIndex("by_status", (q) => q.eq("status", status)).order("desc").paginate(opts)
+      : await ctx.db.query("accessRequests").order("desc").paginate(opts);
   },
 });
 

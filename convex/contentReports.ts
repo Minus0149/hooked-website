@@ -1,4 +1,5 @@
 import { v, ConvexError } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent } from "./auth";
@@ -147,22 +148,27 @@ export type ReportGroup = {
   lastAt: number;
 };
 
-/** Open reports, one row per track, the most-reported first. */
+/**
+ * Open reports, newest first, a page at a time, each page grouped by track
+ * (src/lib/contentReport.ts mergeReportGroups joins the pages). It used to read
+ * the newest 500 in one query: past that, older reports never showed at all.
+ */
 export const listOpen = query({
-  args: {},
-  handler: async (ctx): Promise<ReportGroup[] | null> => {
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
     try {
       await requirePermission(ctx, "catalog.curate");
     } catch {
-      return null;
+      return { page: [] as ReportGroup[], isDone: true, continueCursor: "" };
     }
-    const open = await ctx.db
+    const opts = { ...paginationOpts, numItems: Math.min(Math.max(1, paginationOpts.numItems), 200) };
+    const result = await ctx.db
       .query("contentReports")
       .withIndex("by_status", (q) => q.eq("status", "open"))
       .order("desc")
-      .take(500);
+      .paginate(opts);
     const groups = new Map<string, ReportGroup>();
-    for (const r of open) {
+    for (const r of result.page) {
       const g =
         groups.get(r.trackId) ??
         ({ trackId: r.trackId, title: r.title, artist: r.artist, artwork: null, hidden: false, count: 0, reasons: {}, notes: [], lastAt: 0 } as ReportGroup);
@@ -180,7 +186,7 @@ export const listOpen = query({
       g.artwork = t?.artwork ?? null;
       g.hidden = t?.hidden === true;
     }
-    return [...groups.values()].sort((a, b) => b.count - a.count || b.lastAt - a.lastAt);
+    return { ...result, page: [...groups.values()] };
   },
 });
 

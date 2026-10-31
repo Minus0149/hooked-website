@@ -14,8 +14,11 @@ const LABEL = Object.fromEntries(REPORT_REASONS.map((r) => [r.id, r.label])) as 
 export function SongReportsPanel({
   groups,
   onResolve,
+  onLoadMore,
 }: {
   groups: ReportGroup[];
+  /** older reports wait on the server until asked for (contentReports.listOpen is paged) */
+  onLoadMore?: () => void;
   onResolve: (trackId: string, action: "dismiss" | "hide", title: string) => void;
 }) {
   return (
@@ -61,6 +64,11 @@ export function SongReportsPanel({
             </div>
           </div>
         ))}
+        {onLoadMore && (
+          <button className="aq-btn" onClick={onLoadMore}>
+            load older reports
+          </button>
+        )}
       </section>
     </>
   );

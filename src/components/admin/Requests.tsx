@@ -8,7 +8,7 @@
  * shared primitives in ui/ as it is next worked on.
  */
 import { useState } from "react";
-import { useQuery } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 
 type RequestStatus = "pending" | "approved" | "rejected";
@@ -27,6 +27,9 @@ type AccessRow = {
   invited?: boolean;
 };
 
+/** Rows per page of the queue (access.list is paged on the server). */
+const PAGE = 50;
+
 /** The approval queue. Approving an email is what lets that account be created. */
 export function RequestsPanel({
   data,
@@ -36,22 +39,28 @@ export function RequestsPanel({
 }: {
   data: {
     total: number; pending: number; approved: number; rejected: number;
-    fromApp: number; fromLanding: number; requests: AccessRow[];
+    fromApp: number; fromLanding: number; cap: number;
   };
   onDecide: (id: string, status: RequestStatus) => void;
   onInvited: (id: string, invited: boolean) => void;
   onRemove: (id: string, email: string) => void;
 }) {
   const [filter, setFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
-  const rows = data.requests.filter((r) => filter === "all" || r.status === filter);
+  const paged = usePaginatedQuery(
+    api.access.list,
+    { status: filter === "all" ? undefined : filter },
+    { initialNumItems: PAGE },
+  );
+  const rows = paged.results as AccessRow[];
+  const n = (count: number) => (count >= data.cap ? `${data.cap}+` : String(count));
 
   return (
     <>
       <header className="admin-head">
         <h2>Access requests</h2>
         <p>
-          {data.pending} waiting · {data.approved} approved · {data.rejected} rejected ·{" "}
-          {data.fromApp} from the app, {data.fromLanding} from the site
+          {n(data.pending)} waiting · {n(data.approved)} approved · {n(data.rejected)} rejected ·{" "}
+          {n(data.fromApp)} from the app, {n(data.fromLanding)} from the site
         </p>
       </header>
 
@@ -65,12 +74,14 @@ export function RequestsPanel({
             onClick={() => setFilter(f)}
           >
             {f}
-            {f !== "all" && ` (${f === "pending" ? data.pending : f === "approved" ? data.approved : data.rejected})`}
+            {f !== "all" && ` (${n(f === "pending" ? data.pending : f === "approved" ? data.approved : data.rejected)})`}
           </button>
         ))}
       </div>
 
-      {rows.length === 0 ? (
+      {paged.status === "LoadingFirstPage" ? (
+        <p className="aq-empty">Loading…</p>
+      ) : rows.length === 0 ? (
         <p className="aq-empty">Nothing {filter === "all" ? "here" : `marked ${filter}`} yet.</p>
       ) : (
         rows.map((r) => (
@@ -119,6 +130,12 @@ export function RequestsPanel({
           </div>
         ))
       )}
+      {paged.status === "CanLoadMore" && (
+        <button className="aq-btn" onClick={() => paged.loadMore(PAGE)}>
+          load more
+        </button>
+      )}
+      {paged.status === "LoadingMore" && <p className="aq-empty">Loading…</p>}
     </>
   );
 }

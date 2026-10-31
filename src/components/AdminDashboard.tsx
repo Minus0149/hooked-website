@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import { mergeReportGroups } from "../lib/reportGroups";
 import { motion } from "motion/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "../lib/auth-client";
@@ -108,11 +109,18 @@ export function AdminDashboard() {
   const analytics = useQuery(api.admin.analytics, can("stats.view") && open("analytics") ? {} : "skip");
   const moodSummary = useQuery(api.moods.adminSummary, can("stats.view") && open("moods") ? {} : "skip");
   const userData = useQuery(api.admin.users, can("users.view") && open("users") ? {} : "skip");
-  // small tables, and their pending counts badge the sidebar, so these stay live
-  const requests = useQuery(api.access.list, can("users.view") ? {} : "skip");
+  // the queue's counts badge the sidebar, so they stay live; its rows are paged
+  // inside the Requests panel (access.list)
+  const requests = useQuery(api.access.counts, can("users.view") ? {} : "skip");
   const creatorData = useQuery(api.creators.listCreators, can("users.view") ? {} : "skip");
-  // open song reports: few, and their count badges the sidebar
-  const songReports = useQuery(api.contentReports.listOpen, can("catalog.curate") ? {} : "skip");
+  // open song reports, a page at a time; a track on two pages shows once
+  const reportPages = usePaginatedQuery(api.contentReports.listOpen, can("catalog.curate") ? {} : "skip", {
+    initialNumItems: 100,
+  });
+  const songReports = useMemo(
+    () => (reportPages.status === "LoadingFirstPage" ? undefined : mergeReportGroups(reportPages.results)),
+    [reportPages.status, reportPages.results],
+  );
   const resolveReport = useMutation(api.contentReports.resolve);
   const badge = (id: Tab) =>
     id === "requests" && requests?.pending
@@ -120,7 +128,7 @@ export function AdminDashboard() {
       : id === "creators" && creatorData?.pending
         ? ` (${creatorData.pending})`
         : id === "songReports" && songReports?.length
-          ? ` (${songReports.length})`
+          ? ` (${songReports.length}${reportPages.status === "CanLoadMore" ? "+" : ""})`
           : "";
   const waiting = <p className="admin-empty">Loading…</p>;
 
@@ -293,6 +301,7 @@ export function AdminDashboard() {
         {activeTab === "songReports" && songReports && (
           <SongReportsPanel
             groups={songReports}
+            onLoadMore={reportPages.status === "CanLoadMore" ? () => reportPages.loadMore(100) : undefined}
             onResolve={async (trackId, action, title) => {
               if (action === "hide") {
                 const ok = await confirm({
