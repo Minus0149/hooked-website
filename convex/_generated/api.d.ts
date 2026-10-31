@@ -65,6 +65,7 @@ import type * as socialRules from "../socialRules.js";
 import type * as songs from "../songs.js";
 import type * as sponsoredDecks from "../sponsoredDecks.js";
 import type * as tracks from "../tracks.js";
+import type * as verdicts from "../verdicts.js";
 
 import type {
   ApiFromModules,
@@ -130,6 +131,7 @@ declare const fullApi: ApiFromModules<{
   songs: typeof songs;
   sponsoredDecks: typeof sponsoredDecks;
   tracks: typeof tracks;
+  verdicts: typeof verdicts;
 }>;
 
 /**

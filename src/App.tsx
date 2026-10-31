@@ -72,6 +72,8 @@ import {
 import { serverMessage } from "./lib/serverError";
 import { offerReset, trailingSkips } from "./lib/skipStreak";
 import { SkipStreakPrompt } from "./components/SkipStreakPrompt";
+import { CrowdReveal } from "./components/CrowdReveal";
+import { crowdReveal, nextStreak, verdictOf, type CrowdStats, type Reveal } from "./lib/crowdReveal";
 
 const ONBOARD_KEY = "hooked.onboarded.v1";
 // taste-first gate: anonymous visitors get a few free swipes, then the wall.
@@ -811,6 +813,17 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
   }, [state.queue, injectNext]);
 
   const onDeck = state.queue[0] ?? null;
+
+  // the crowd reveal: how everyone else judged the song on screen, fetched
+  // while it plays so the answer is ready the instant it's swiped
+  const deckCrowd = useQuery(api.verdicts.forTrack, onDeck ? { trackId: onDeck.id } : "skip");
+  const crowdCache = useRef<{ id: string; stats: CrowdStats } | null>(null);
+  useEffect(() => {
+    if (onDeck && deckCrowd) crowdCache.current = { id: onDeck.id, stats: deckCrowd };
+  }, [onDeck, deckCrowd]);
+  const [crowd, setCrowd] = useState<{ key: number; reveal: Reveal; title: string; streak: number } | null>(null);
+  const crowdStreak = useRef(0);
+  const crowdTimer = useRef<number | undefined>(undefined);
   const next = state.queue[1] ?? null;
   const previous = state.history.length
     ? state.history[state.history.length - 1]
@@ -883,6 +896,16 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
           event: promotedOutcome(dir),
         }).catch(() => undefined);
       }
+      // up/down are verdicts; a playlist being played is "next", not a verdict
+      const verdict = dir === "up" || dir === "down" ? verdictOf(action) : null;
+      if (track && verdict && !state.session) {
+        const stats = crowdCache.current?.id === track.id ? crowdCache.current.stats : null;
+        const reveal = crowdReveal(stats, verdict);
+        crowdStreak.current = nextStreak(crowdStreak.current, reveal);
+        window.clearTimeout(crowdTimer.current);
+        setCrowd({ key: Date.now(), reveal, title: track.title, streak: crowdStreak.current });
+        crowdTimer.current = window.setTimeout(() => setCrowd(null), 2600);
+      }
       swipe(action);
       if (signedIn && track) {
         const playingHookId = hookRef.current?.id;
@@ -906,7 +929,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
         );
       }
     },
-    [swipe, showToast, onDeck, signedIn, recordSwipe, syncWrite, handleSwipeForAds, handleSwipeForPromoted, recordPromoted],
+    [swipe, showToast, onDeck, signedIn, recordSwipe, syncWrite, handleSwipeForAds, handleSwipeForPromoted, recordPromoted, state.session],
   );
 
   const hookRef = useRef(hook);
@@ -1492,6 +1515,12 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
             }}
           />
         </div>
+
+        <AnimatePresence>
+          {crowd && view === "discover" && (
+            <CrowdReveal key={crowd.key} reveal={crowd.reveal} title={crowd.title} streak={crowd.streak} />
+          )}
+        </AnimatePresence>
 
         <AnimatePresence>
           {toast && (
