@@ -76,6 +76,18 @@ export function isMutual(aFollowsB: boolean, bFollowsA: boolean): boolean {
   return aFollowsB && bFollowsA;
 }
 
+/**
+ * What the mutual playlist draws from: each person's Liked songs, nothing else.
+ * It used to read every saved row, so a follow-back showed the other person
+ * their private playlists and discoveries too. A playlist is shared only when
+ * its owner shares it (visibility / collaborative), never by following.
+ */
+export const MUTUAL_SOURCE_KIND = "liked" as const;
+
+export function mutualSource<T extends { kind: string }>(rows: readonly T[]): T[] {
+  return rows.filter((r) => r.kind === MUTUAL_SOURCE_KIND);
+}
+
 export type SongRef = { trackId: string };
 
 /**

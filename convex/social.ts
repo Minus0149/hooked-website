@@ -16,6 +16,8 @@ import {
   coerceVisibility,
   followProblem,
   isMutual,
+  MUTUAL_SOURCE_KIND,
+  mutualSource,
   PLAYLIST_CODE_LENGTH,
   ROOM_CODE_LENGTH,
   inviteCodeChange,
@@ -77,14 +79,18 @@ async function counts(ctx: Ctx, userId: string) {
   return { followers: followers.length, following: following.length };
 }
 
-/** Everything a person has saved, newest first, one row per song. */
-async function savedSongs(ctx: Ctx, userId: string) {
+/**
+ * A person's Liked songs, newest first, one row per song: all the mutual
+ * playlist may show. Private playlists and discoveries stay theirs
+ * (socialRules.mutualSource).
+ */
+async function likedSongs(ctx: Ctx, userId: string) {
   const rows = await ctx.db
     .query("librarySongs")
-    .withIndex("by_user_kind", (q) => q.eq("userId", userId))
+    .withIndex("by_user_kind", (q) => q.eq("userId", userId).eq("kind", MUTUAL_SOURCE_KIND))
     .collect();
   const seen = new Set<string>();
-  return rows
+  return mutualSource(rows)
     .sort((a, b) => b._creationTime - a._creationTime)
     .filter((r) => (seen.has(r.trackId) ? false : (seen.add(r.trackId), true)));
 }
@@ -310,7 +316,7 @@ export const mutual = query({
     if (!other || other.suspended || other.userId === me) return null;
     const ok = isMutual(await follows(ctx, me, other.userId), await follows(ctx, other.userId, me));
     if (!ok) return { allowed: false as const, name: displayName(other) };
-    const [mine, theirs] = await Promise.all([savedSongs(ctx, me), savedSongs(ctx, other.userId)]);
+    const [mine, theirs] = await Promise.all([likedSongs(ctx, me), likedSongs(ctx, other.userId)]);
     const mix = mutualMix(mine, theirs, 60);
     return {
       allowed: true as const,

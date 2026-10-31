@@ -426,7 +426,7 @@ export function UserScreen({
               {tx("Your mutual playlist")}
               <small>
                 {p.mutual
-                  ? tx("songs you both saved, then picks from each other")
+                  ? tx("songs you both liked, then picks from each other's Liked")
                   : tx("unlocks when you follow each other")}
               </small>
             </span>
