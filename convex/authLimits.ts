@@ -43,9 +43,14 @@ export const AUTH_RATE_LIMIT = {
  * there with ?token=<reset token> appended, and on a phone with Expo Go
  * installed that opens Expo Go, which fetches the URL from the attacker's
  * server, token included. Nothing needs it: the phone app sends no Origin
- * header and its callbacks are the https web app. "hooked://" is the app's
- * own scheme.
+ * header and its callbacks are the https web app.
+ *
+ * "hooked://" went too, for the same reason: any Android app can register the
+ * hooked scheme, so redirectTo=hooked://x on someone else's reset handed the
+ * token to whichever app answered. No flow used it: the phone's sign-up,
+ * verification and reset callbacks are all https://app.hookedcue.com, and it
+ * sends expo-origin, never Origin (the server has no expo() plugin to read it).
  */
 export function authTrustedOrigins(siteUrl: string): string[] {
-  return [siteUrl, "hooked://"];
+  return [siteUrl];
 }

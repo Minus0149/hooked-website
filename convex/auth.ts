@@ -63,7 +63,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth({
     baseURL: authSiteUrl,
     secret: authSecret,
-    // the web SPA and the phone app's own scheme; never "exp://" (authLimits.ts)
+    // the web SPA only; never "exp://" or "hooked://" (authLimits.ts)
     trustedOrigins: authTrustedOrigins(siteUrl),
     advanced: {
       ipAddress: {

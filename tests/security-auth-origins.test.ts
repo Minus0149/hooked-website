@@ -19,10 +19,29 @@ const trusted = (url: string) =>
 // reader there with the reset token, which Expo Go then fetched from the
 // attacker's server.
 describe("auth redirects stay on HookedCue", () => {
-  it("accepts the web app and the phone app's own scheme", () => {
+  it("accepts the web app", () => {
     expect(trusted(`${SITE}/reset-password`)).toBe(true);
     expect(trusted("/profile")).toBe(true);
-    expect(trusted("hooked://track/123")).toBe(true);
+  });
+
+  // any Android app can claim the hooked:// scheme, and no flow needs it
+  it("refuses app schemes, the phone app's own included", () => {
+    expect(trusted("hooked://track/123")).toBe(false);
+    expect(trusted("hooked://reset?token=x")).toBe(false);
+    expect(authTrustedOrigins(SITE)).toEqual([SITE]);
+  });
+
+  it("the phone app's auth callbacks are all the https web app", () => {
+    const mobile = resolve(__dirname, "..", "..", "mobile", "src", "components");
+    let auth = "";
+    try {
+      auth = readFileSync(resolve(mobile, "AuthForm.tsx"), "utf8") + readFileSync(resolve(mobile, "AccessGate.tsx"), "utf8");
+    } catch {
+      return; // the phone app isn't checked out here (CI)
+    }
+    expect(auth).not.toMatch(/hooked:\/\//);
+    expect(auth).toMatch(/callbackURL: WEB_APP_URL/);
+    expect(auth).toMatch(/redirectTo: `\$\{WEB_APP_URL\}\/reset-password`/);
   });
 
   it("refuses an exp:// URL on any host", () => {
