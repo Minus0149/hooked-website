@@ -166,6 +166,24 @@ export function inviteEmail(name: string, url: string): { subject: string; html:
   };
 }
 
+/** Approved a few days ago but never made an account: one nudge, never more (convex/access.ts remindUnjoined). */
+export function inviteReminderEmail(name: string, url: string): { subject: string; html: string } {
+  const first = name.trim().split(/\s+/)[0] || "there";
+  return {
+    subject: "your HookedCue invite is still waiting",
+    html: renderEmail({
+      preheader: "Your spot is saved. One tap to make your account.",
+      heading: `Your spot is still here, ${first}.`,
+      paragraphs: [
+        "You were approved for the HookedCue beta a few days ago, but your account isn't made yet. It takes a minute: every song starts at its hook, so you'll know in seconds if you love it.",
+      ],
+      button: { label: "Create my account", url },
+      after: "On Android you can also install it from Google Play (the steps are in your first invite email). On an iPhone or a computer, the button above is all you need: it runs in your browser.",
+      note: "This is the only reminder we'll send. If you'd rather not join, just ignore it.",
+    }),
+  };
+}
+
 const rupeesText = (paise: number) =>
   `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 

@@ -123,4 +123,11 @@ crons.daily(
   {},
 );
 
+/** One "your invite is still waiting" email to people approved 3+ days ago with no account (10:37 IST). */
+crons.daily(
+  "remind approved people who never joined",
+  { hourUTC: 5, minuteUTC: 7 },
+  internal.access.remindUnjoined,
+);
+
 export default crons;

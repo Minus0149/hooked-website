@@ -2,7 +2,7 @@ import { v, ConvexError } from "convex/values";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { inviteEmail } from "./emailTemplate";
+import { inviteEmail, inviteReminderEmail } from "./emailTemplate";
 import { cleanCode, referralDecision } from "./referralRules";
 import { runtimeFor } from "./runtime";
 import {
@@ -376,6 +376,48 @@ export function signupAllowed(status: string | null | undefined): boolean {
 export function joinUrl(site: string, email: string): string {
   return `${site.replace(/\/+$/, "")}/join?email=${encodeURIComponent(email)}`;
 }
+
+export const REMIND_AFTER_DAYS = 3;
+/** Older approvals are left alone: a first reminder weeks later reads as spam. */
+export const REMIND_WITHIN_DAYS = 30;
+
+/** One reminder, only to someone invited 3–30 days ago who still has no account. */
+export function needsReminder(
+  row: { status: string; invited?: boolean; remindedAt?: string; decidedAt?: string },
+  hasProfile: boolean,
+  nowMs: number,
+): boolean {
+  if (row.status !== "approved" || !row.invited || row.remindedAt || hasProfile || !row.decidedAt) return false;
+  const age = (nowMs - Date.parse(row.decidedAt)) / 86_400_000;
+  return age >= REMIND_AFTER_DAYS && age <= REMIND_WITHIN_DAYS;
+}
+
+/** Daily (convex/crons.ts): nudge approved people who never made their account. */
+export const remindUnjoined = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const site = process.env.SITE_URL ?? "https://app.hookedcue.com";
+    const now = Date.now();
+    const approved = await ctx.db
+      .query("accessRequests")
+      .withIndex("by_status", (q) => q.eq("status", "approved"))
+      .collect();
+    let sent = 0;
+    for (const row of approved) {
+      if (!needsReminder(row, false, now)) continue; // cheap checks first, profile lookup only for candidates
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_email", (q) => q.eq("email", row.email))
+        .first();
+      if (!needsReminder(row, profile !== null, now)) continue;
+      const mail = inviteReminderEmail(row.name, joinUrl(site, row.email));
+      await ctx.scheduler.runAfter(0, internal.email.send, { to: row.email, subject: mail.subject, html: mail.html });
+      await ctx.db.patch(row._id, { remindedAt: new Date(now).toISOString() });
+      sent++;
+    }
+    return { sent };
+  },
+});
 
 export const approvalFor = internalQuery({
   args: { email: v.string() },

@@ -526,6 +526,8 @@ export default defineSchema({
     decidedAt: v.optional(v.string()),
     decidedBy: v.optional(v.string()),
     invited: v.optional(v.boolean()),
+    /** when the one "your invite is still waiting" reminder went out (convex/access.ts remindUnjoined) */
+    remindedAt: v.optional(v.string()),
     /** the listener whose invite link this came through (convex/referrals.ts) */
     referredBy: v.optional(v.string()),
     referralCode: v.optional(v.string()),
