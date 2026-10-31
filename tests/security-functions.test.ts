@@ -24,6 +24,7 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   "share.track": "a shared song link must open for anyone; visible tracks only",
   "runtime.get": "client tuning knobs (free swipes, thresholds); no user data",
   "moods.crowd": "crowd mood tags, published only past a vote floor",
+  "verdicts.forTrack": "the crowd reveal shown to guests too: summed save/skip counts for one song, nobody named",
   "featured.current": "the public hook of the day",
   "featured.archive": "past hooks of the day",
   "ads.getConfig": "ad cadence settings the deck reads",
