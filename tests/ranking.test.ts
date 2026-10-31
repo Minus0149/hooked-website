@@ -439,3 +439,15 @@ describe("what the deck is made of", () => {
     expect(unaskedCountry({ genre: "country", lang: "hi" }, NO_STEER)).toBe(false);
   });
 });
+
+describe("taste still counts in a big catalogue", () => {
+  it("a learned keep reaches the front of a 7,000-song pool, not just a few places", () => {
+    const big = [
+      ...Array.from({ length: 300 }, (_, i) => track("house" + i, { genre: "house" })),
+      ...Array.from({ length: 6700 }, (_, i) => track("other" + i, { genre: "metal" })),
+    ];
+    const top = rankPool(big, steer({ taste: { ...steer().taste }, boostGenres: ["house"] })).slice(0, 20);
+    // 300 of 7,000 is 4% of the pool; the boost must lift it well past that
+    expect(top.filter((t) => t.genre === "house").length).toBeGreaterThanOrEqual(5);
+  });
+});

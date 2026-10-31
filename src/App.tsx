@@ -70,6 +70,8 @@ import {
   type Track,
 } from "./types";
 import { serverMessage } from "./lib/serverError";
+import { offerReset, trailingSkips } from "./lib/skipStreak";
+import { SkipStreakPrompt } from "./components/SkipStreakPrompt";
 
 const ONBOARD_KEY = "hooked.onboarded.v1";
 // taste-first gate: anonymous visitors get a few free swipes, then the wall.
@@ -180,12 +182,21 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
     applyCatalog,
     applyAffinity,
     setMood,
+    freshSuggestions,
     applyCrowdMoods,
     applyMoodPicks,
     setStrengths,
     model,
     sound,
   } = useStore();
+  // "not feeling these?" after a run of skips; any answer quiets it until the next full run
+  const skipRun = trailingSkips(state.history);
+  const [skipQuietAt, setSkipQuietAt] = useState(0);
+  const showSkipPrompt = !state.session && offerReset(skipRun, skipQuietAt);
+  // a save or a right-swipe ends the run, and with it the quiet
+  useEffect(() => {
+    if (skipRun < skipQuietAt) setSkipQuietAt(0);
+  }, [skipRun, skipQuietAt]);
   // latest state without re-creating callbacks that read it (the debounced
   // prefs push below reads state.prefs at fire time, not capture time)
   const stateRef = useRef(state);
@@ -1330,6 +1341,22 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
                 onPickMood={pickMood}
                 onClearMood={() => setMood(null)}
               />
+              <AnimatePresence>
+                {showSkipPrompt && !activeAd && (
+                  <SkipStreakPrompt
+                    streak={skipRun}
+                    onMood={(mood) => {
+                      setSkipQuietAt(skipRun);
+                      setMood(mood);
+                    }}
+                    onFresh={() => {
+                      setSkipQuietAt(skipRun);
+                      freshSuggestions();
+                    }}
+                    onDismiss={() => setSkipQuietAt(skipRun)}
+                  />
+                )}
+              </AnimatePresence>
               {/* house ad between swipes — music keeps playing under it */}
               <AnimatePresence>
                 {activeAd && (

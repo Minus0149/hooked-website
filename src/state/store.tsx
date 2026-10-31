@@ -55,6 +55,32 @@ const PERSIST_KEY = "hooked.library.v2";
  */
 const MOOD_TTL = 6 * 60 * 60 * 1000;
 
+/**
+ * The deck holds DECK_DEPTH ranked cards, not the whole catalogue, and is
+ * re-ranked from the full catalogue (with everything learned so far) whenever
+ * fewer than REFILL_BELOW remain, and right after a right-swipe. Ranking all
+ * ~7,000 songs once at load and only popping cards after that meant saves and
+ * skips never reached the deck until a reload (31 Oct measurement: 98% of the
+ * next 40 cards were the ones dealt at load, after 30 swipes).
+ */
+export const DECK_DEPTH = 60;
+export const REFILL_BELOW = 52;
+const WEEK_MS = 7 * 86_400_000;
+
+/** Songs dealt in the last week wait their turn. */
+function recentIds(deckMemory: Record<string, { seen: number }>, now = Date.now()): Set<string> {
+  const ids = new Set<string>();
+  for (const [id, m] of Object.entries(deckMemory)) if (now - m.seen < WEEK_MS) ids.add(id);
+  return ids;
+}
+
+/** blocked ∪ recently seen, unless that would leave fewer than a deck's worth to deal. */
+function dealExclusions(catalog: Track[], blocked: Set<string>, deckMemory: Record<string, { seen: number }>): Set<string> {
+  const withRecent = new Set([...blocked, ...recentIds(deckMemory)]);
+  const left = catalog.reduce((n, t) => n + (withRecent.has(t.id) ? 0 : 1), 0);
+  return left >= DECK_DEPTH ? withRecent : blocked;
+}
+
 export interface HistoryEntry {
   track: Track;
   action: SwipeAction;
@@ -193,6 +219,7 @@ type Action =
   // sent by the ring — picking is a mode switch, not a rating — but a stored
   // pick still hydrates from APPLY_MOOD_PICKS
   | { type: "SET_MOOD"; mood: MoodId | null; trackId?: string }
+  | { type: "FRESH_SUGGESTIONS" }
   // the catalogue's published mood tags arrived
   | { type: "APPLY_CROWD_MOODS"; crowd: CrowdMoods }
   // this listener's own labels, from the profile rather than this device
@@ -353,7 +380,7 @@ function blockedIds(
   return blocked;
 }
 
-function initState(): AppState {
+export function initState(): AppState {
   const saved = loadPersisted();
   const liked = uniqueById(saved?.liked ?? []);
   const discoveries = uniqueById(saved?.discoveries ?? []);
@@ -393,7 +420,7 @@ function initState(): AppState {
     taste,
     prefs: { ...DEFAULT_PREFS, ...coercePrefs(saved?.prefs) },
     queue: spreadAlbums(
-      buildQueue(BAKED, inLibrary, neverArtists, {
+      buildQueue(BAKED, dealExclusions(BAKED, new Set([...inLibrary, ...(saved?.neverTracks ?? [])]), saved?.deckMemory ?? {}), neverArtists, {
         sound: null, // no history yet, so no taste vector
         soundStrength: SOUND_PLACES,
         taste,
@@ -407,7 +434,7 @@ function initState(): AppState {
         // the model the first time it ranks with a real library behind it.
         model: null,
         modelStrength: MODEL_PLACES,
-      }),
+      }).slice(0, DECK_DEPTH),
     ),
     history: [],
     liked,
@@ -423,7 +450,7 @@ function initState(): AppState {
   };
 }
 
-function reducer(state: AppState, action: Action): AppState {
+export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "SWIPE": {
       const current = state.queue[0];
@@ -452,23 +479,34 @@ function reducer(state: AppState, action: Action): AppState {
           }
         }
       }
-      if (action.action === "more") {
-        // keep the visible peek card in place — re-ranking the card the user
-        // can already see reads as photos jumping around
-        const [peek, ...tail] = rest;
+      // keep the visible peek card in place — re-ranking the card the user
+      // can already see reads as photos jumping around
+      const similarFirst = (list: Track[]) => {
+        const [peek, ...tail] = list;
         const similar = tail.filter(
           (t) => t.genre === current.genre || t.artist === current.artist,
         );
         const others = tail.filter(
           (t) => t.genre !== current.genre && t.artist !== current.artist,
         );
+        return peek ? [peek, ...shuffle(similar), ...others] : [...shuffle(similar), ...others];
+      };
+      // a right-swipe re-deals from the whole catalogue right away
+      const forceRefill = action.action === "more" && !playingSession;
+      if (action.action === "more") {
         // inside a playlist the order is the playlist's, so "more" only steers
         // what the deck deals after it
-        if (!playingSession) {
-          rest = peek
-            ? [peek, ...shuffle(similar), ...others]
-            : [...shuffle(similar), ...others];
-        }
+        if (!playingSession) rest = similarFirst(rest);
+        boostGenres = [
+          current.genre,
+          ...boostGenres.filter((g) => g !== current.genre),
+        ].slice(0, 3);
+      }
+      // a save says "more of this" too, just quieter: it nudges the genre at
+      // the next refill instead of re-dealing now. Without it the first ~30
+      // swipes barely moved the deck (the model needs both saves and skips
+      // before it says anything).
+      if (savedToLibrary && !playingSession) {
         boostGenres = [
           current.genre,
           ...boostGenres.filter((g) => g !== current.genre),
@@ -489,7 +527,7 @@ function reducer(state: AppState, action: Action): AppState {
       // refill with the just-swiped track, anything already queued, or
       // recently seen songs — re-dealing the same card right back was the
       // "old image appears again" glitch (and, with ↩, duplicate queue ids)
-      if (rest.length < 3) {
+      if (rest.length < REFILL_BELOW || forceRefill) {
         // per-playlist + global discovery rules: while THIS playlist is the
         // save target, its toggles relax the deck's exclusions; the global
         // Settings toggles are the default strictness for everything else
@@ -522,9 +560,13 @@ function reducer(state: AppState, action: Action): AppState {
         }
 
         const allowed = state.allowedIds ? new Set(state.allowedIds) : null;
+        // Everything behind the visible card and its peek is re-dealt (inside a
+        // playlist, the playlist's own songs stay put), ranked with what this
+        // swipe just taught: new saves, burials and right-swipes count now.
+        const kept = playingSession ? rest : rest.slice(0, 2);
         const avoid = new Set([
           current.id,
-          ...rest.map((t) => t.id),
+          ...kept.map((t) => t.id),
           ...state.history.slice(-12).map((h) => h.track.id),
         ]);
         // Refills skip admin-hidden tracks, buried songs and anything the
@@ -551,7 +593,11 @@ function reducer(state: AppState, action: Action): AppState {
         const pool = fresh.length >= 3 ? fresh : pickable.filter((t) => t.id !== current.id);
         // Refills honour the steer and the taste answers too — otherwise a
         // right-swipe's promise expired the moment its one reshuffle was spent
-        rest = [...rest, ...rankPool(pool, { ...steerOf(state), boostGenres })];
+        const learned = steerOf({ ...state, liked, discoveries, playlists, neverArtists, neverTracks, boostGenres });
+        const keptIds = new Set(kept.map((t) => t.id));
+        const ranked = rankPool(pool.filter((t) => !keptIds.has(t.id)), learned);
+        rest = [...kept, ...ranked.slice(0, Math.max(DECK_DEPTH - kept.length, 10))];
+        if (forceRefill) rest = similarFirst(rest);
       }
       // deck memory: every dealt card is remembered — skips count toward the
       // two-strike auto-bury (song only; the artist stays dealable)
@@ -662,10 +708,10 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         taste: action.taste,
         queue: spreadAlbums(
-          buildQueue(state.catalog, blockedIds(state), state.neverArtists, {
+          buildQueue(state.catalog, dealExclusions(state.catalog, blockedIds(state), state.deckMemory), state.neverArtists, {
             ...steerOf(state),
             taste: action.taste,
-          }),
+          }).slice(0, DECK_DEPTH),
         ),
       };
 
@@ -740,11 +786,28 @@ function reducer(state: AppState, action: Action): AppState {
       };
     }
 
+    case "FRESH_SUGGESTIONS": {
+      // "Not feeling these?" → start the suggestions fresh: forget the skips
+      // (they train the model as dislikes) and the genres steered toward, drop
+      // the mood, and re-deal behind the card on screen. Saves, burials and the
+      // onboarding answers stay: those were deliberate.
+      const deckMemory: typeof state.deckMemory = {};
+      for (const [id, m] of Object.entries(state.deckMemory)) deckMemory[id] = { ...m, skips: 0 };
+      const next = { ...state, deckMemory, boostGenres: [], mood: null, moodSetAt: 0 };
+      const head = state.session ? null : state.queue[0];
+      const exclude = dealExclusions(state.catalog, blockedIds(state), deckMemory);
+      if (head) exclude.add(head.id);
+      const rest = buildQueue(state.catalog, exclude, state.neverArtists, steerOf(next)).slice(0, DECK_DEPTH);
+      return { ...next, session: null, queue: spreadAlbums(uniqueById(head ? [head, ...rest] : rest)) };
+    }
+
     case "END_SESSION": {
       if (!state.session) return state;
       let queue = withoutSession(state.queue, state.session);
       if (queue.length === 0) {
-        queue = spreadAlbums(buildQueue(state.catalog, libraryIds(state), state.neverArtists, steerOf(state)));
+        queue = spreadAlbums(
+          buildQueue(state.catalog, dealExclusions(state.catalog, blockedIds(state), state.deckMemory), state.neverArtists, steerOf(state)).slice(0, DECK_DEPTH),
+        );
       }
       return { ...state, session: null, queue };
     }
@@ -793,7 +856,7 @@ function reducer(state: AppState, action: Action): AppState {
             !action.neverArtists.includes(t.artist) &&
             !queued.has(t.id),
         );
-        queue = [...queue, ...shuffle(fresh.length >= 3 ? fresh : fallback)];
+        queue = [...queue, ...shuffle(fresh.length >= 3 ? fresh : fallback).slice(0, DECK_DEPTH)];
       }
       return {
         ...state,
@@ -827,13 +890,14 @@ function reducer(state: AppState, action: Action): AppState {
       // rebuilt from the new catalogue. Filtering the old queue instead would
       // empty the deck whenever the server list isn't a superset of the baked one.
       const head = state.queue[0];
-      const exclude = libraryIds(state);
+      // buried songs and the last week's cards stay out after a reload too
+      const exclude = dealExclusions(action.tracks, blockedIds(state), state.deckMemory);
       if (head) exclude.add(head.id);
       // a playlist being played keeps its place: its songs stay in front
       const pending = pendingSession(state.queue, state.session);
       for (const t of pending) exclude.add(t.id);
 
-      const rest = buildQueue(action.tracks, exclude, state.neverArtists, steerOf(state));
+      const rest = buildQueue(action.tracks, exclude, state.neverArtists, steerOf(state)).slice(0, DECK_DEPTH);
       return {
         ...state,
         catalog: action.tracks,
@@ -869,7 +933,16 @@ function reducer(state: AppState, action: Action): AppState {
       // Picking a mood switches the deck; clearing it re-ranks behind the
       // card on screen. The rules live in moodQueue (data/ranking.ts).
       if (!state.queue[0]) return next;
-      return { ...next, queue: moodQueue(state.queue, steerOf(next)) };
+      {
+        const [head, ...queued] = state.queue;
+        const allowed = state.allowedIds ? new Set(state.allowedIds) : null;
+        const skip = dealExclusions(state.catalog, blockedIds(state), state.deckMemory);
+        const pool = state.catalog.filter(
+          (t) => t.id !== head.id && (!allowed || allowed.has(t.id)) && !skip.has(t.id) && !state.neverArtists.includes(t.artist),
+        );
+        // the deck holds DECK_DEPTH cards, so a mood draws from the whole catalogue
+        return { ...next, queue: moodQueue(uniqueById([head, ...queued, ...pool]), steerOf(next)).slice(0, DECK_DEPTH) };
+      }
     }
 
     case "APPLY_CROWD_MOODS": {
@@ -961,6 +1034,8 @@ interface StoreValue {
   applyAffinity: (scores: Record<string, number>, strength: number) => void;
   /** Pick a face. Pass a trackId when it was pressed on a card — that labels it. */
   setMood: (mood: MoodId | null, trackId?: string) => void;
+  /** forget skips and steering, re-deal fresh (the "not feeling these?" prompt) */
+  freshSuggestions: () => void;
   applyCrowdMoods: (crowd: CrowdMoods) => void;
   applyMoodPicks: (picks: Record<string, MoodId>) => void;
   /** Runtime config for the client-side signals; `mix` is absent from older servers. */
@@ -1030,6 +1105,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "APPLY_AFFINITY", scores, strength }),
       setMood: (mood: MoodId | null, trackId?: string) =>
         dispatch({ type: "SET_MOOD", mood, trackId }),
+      freshSuggestions: () => dispatch({ type: "FRESH_SUGGESTIONS" }),
       applyCrowdMoods: (crowd: CrowdMoods) =>
         dispatch({ type: "APPLY_CROWD_MOODS", crowd }),
       applyMoodPicks: (picks: Record<string, MoodId>) =>

@@ -4433,3 +4433,44 @@ html:lang(hi) body * { letter-spacing: 0 !important; }
 .room-reaction { padding: 4px 10px; border-radius: 999px; font-size: 12.5px; background: var(--surface-2); }
 .room-reaction.save { color: var(--save); }
 .room-reaction.skip { color: var(--muted); }
+
+/* ---------- "not feeling these?" after a run of skips (SkipStreakPrompt) ---------- */
+.skip-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
+  width: min(440px, calc(100% - 32px));
+  translate: -50% 0;
+  z-index: 40;
+  padding: 16px 16px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 94%, black);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+.skip-prompt-title { margin: 0 0 4px; font-weight: 700; font-size: 17px; color: var(--text); }
+.skip-prompt-sub { margin: 0 0 12px; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.skip-prompt-moods { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.skip-prompt-mood {
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.skip-prompt-actions { display: flex; gap: 8px; }
+.skip-prompt-fresh,
+.skip-prompt-dismiss {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.skip-prompt-fresh { border: 0; background: var(--accent); color: #0b0b10; }
+.skip-prompt-dismiss { border: 1px solid var(--line); background: transparent; color: var(--text); }

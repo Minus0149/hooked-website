@@ -145,6 +145,9 @@ export function shuffle<T>(arr: T[]): T[] {
  * rest of the deck follow. As a 16-place nudge in a catalogue of two thousand,
  * picking a face changed the next few cards and nothing after them.
  */
+/** How many places the random order spreads over (see rankPool). */
+export const SHUFFLE_SPAN = 200;
+
 export function rankPool(pool: Track[], steer: Steer): Track[] {
   const useAffinity = steer.affinityStrength > 0;
   const useMood = steer.mood !== null && steer.moodStrength > 0;
@@ -152,9 +155,12 @@ export function rankPool(pool: Track[], steer: Steer): Track[] {
   const useSound = steer.sound !== null && steer.soundStrength > 0;
   const scored = shuffle(pool).map((t, i) => ({
     t,
-    // index keeps the shuffle meaningful; score is worth a few places, not all
+    // The shuffle spans at most SHUFFLE_SPAN places (small pools keep their own size), so the
+    // taste signals (each worth ~6-16 places) actually move songs. Spanning the
+    // whole catalogue (~7,000 places) drowned them: a listener who only kept
+    // Punjabi saw 6% Punjabi after 300 swipes (31 Oct measurement).
     key:
-      i -
+      i * Math.min(1, SHUFFLE_SPAN / Math.max(1, pool.length)) -
       tasteScore(t, steer.taste) * 12 -
       (useAffinity ? (steer.affinity[t.id] ?? 0) * steer.affinityStrength : 0) -
       genreBoostScore(t, steer.boostGenres) * 6 -
