@@ -1,10 +1,11 @@
 import { v, ConvexError } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent } from "./auth";
 import { cleanText, enforceRateLimit, requirePermission } from "./security";
 import { renderEmail } from "./emailTemplate";
 import { touchCatalog } from "./catalog";
+import { resolveSong } from "./songs";
 
 /**
  * "Report this song" — Google Play's user-generated-content policy asks for an
@@ -42,6 +43,20 @@ export function reportLimit(reporter: string): number {
   return reporter.startsWith("user:") ? 10 : 5;
 }
 
+/**
+ * Copyright emails, per hour. A report itself is cheap (a row in the admin's
+ * queue), but each copyright one also mailed the inbox, and device keys are
+ * free to mint: up to 300 emails an hour with the reporter's own words in
+ * the subject. Past these the report is still filed; it just doesn't mail.
+ */
+export const COPYRIGHT_EMAIL_LIMITS = { global: 20, perReporter: 3 } as const;
+
+/** The subject carries nothing anyone typed: the kind of report and a cleaned id. */
+export function copyrightSubject(trackId: string): string {
+  const id = trackId.replace(/[^A-Za-z0-9:_.-]/g, "").slice(0, 80);
+  return `Copyright report: track ${id || "unknown"}`;
+}
+
 export const submit = mutation({
   args: {
     trackId: v.string(),
@@ -56,7 +71,9 @@ export const submit = mutation({
     const reporter = reporterKey(user ? String(user._id) : null, args.anonKey);
     if (!reporter) throw new ConvexError("Couldn't send that report. Try again?");
     await enforceRateLimit(ctx, `report:${reporter}`, reportLimit(reporter), 60 * 60_000);
-    await enforceRateLimit(ctx, "report:global", 300, 60 * 60_000);
+    // the shared ceiling is for device keys only: minting keys can fill it, and
+    // then no listener with an account could report anything for the hour
+    if (reporter.startsWith("anon:")) await enforceRateLimit(ctx, "report:global", 300, 60 * 60_000);
 
     const trackId = cleanText(args.trackId, 120);
     // one open report per person per track: a second tap just says thanks again
@@ -66,14 +83,11 @@ export const submit = mutation({
       .collect();
     if (earlier.some((r) => r.status === "open")) return { ok: true as const, duplicate: true };
 
-    // the stored title/artist come from the catalogue when the track is there
-    // (the deck can also show the bundled starter list, which isn't)
-    const track = await ctx.db
-      .query("tracks")
-      .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
-      .unique();
-    const title = track?.title ?? cleanText(args.title, 200);
-    const artist = track?.artist ?? cleanText(args.artist, 200);
+    // only a song we have: the catalogue, an upload, or the bundled first deck
+    // (convex/songs.ts). Its title and artist are ours, never the client's.
+    const song = await resolveSong(ctx, trackId);
+    if (!song) return { ok: true as const, duplicate: false };
+    const { title, artist } = song.track;
     const note = (args.note ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
 
     await ctx.db.insert("contentReports", {
@@ -87,12 +101,13 @@ export const submit = mutation({
       createdAt: Date.now(),
     });
 
-    if (args.reason === "copyright") {
+    if (args.reason === "copyright" && (await mayEmail(ctx, reporter))) {
       const site = process.env.SITE_URL ?? "https://app.hookedcue.com";
       const who = user ? `a listener with an account (${user.email})` : "a listener without an account";
       await ctx.scheduler.runAfter(0, internal.email.send, {
         to: COPYRIGHT_INBOX,
-        subject: `copyright report: ${title} — ${artist}`,
+        // the song and the note are in the body, escaped by renderEmail
+        subject: copyrightSubject(trackId),
         html: renderEmail({
           preheader: "A listener reported a song for copyright.",
           heading: "Copyright report",
@@ -108,6 +123,17 @@ export const submit = mutation({
     return { ok: true as const, duplicate: false };
   },
 });
+
+/** Under both copyright-email ceilings: the reporter's own first, so one script can't use up the shared one. */
+async function mayEmail(ctx: MutationCtx, reporter: string): Promise<boolean> {
+  try {
+    await enforceRateLimit(ctx, `report:mail:${reporter}`, COPYRIGHT_EMAIL_LIMITS.perReporter, 60 * 60_000);
+    await enforceRateLimit(ctx, "report:mail:global", COPYRIGHT_EMAIL_LIMITS.global, 60 * 60_000);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export type ReportGroup = {
   trackId: string;
