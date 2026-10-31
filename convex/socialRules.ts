@@ -211,3 +211,29 @@ export function publicName(p: { name?: string | null; email?: string | null; use
   if (!fromEmail) return name;
   return p.username ? `@${p.username}` : "Someone";
 }
+
+export type BlockRow = { blockerId: string; blockedId: string };
+
+/**
+ * Everyone on the other side of a block from `me`, whichever of the two
+ * blocked. A block is mutual in effect: the blocked person can't see, follow
+ * or join the blocker either, or the block would only hide them from view.
+ */
+export function blockedPeople(rows: readonly BlockRow[], me: string): Set<string> {
+  const out = new Set<string>();
+  for (const r of rows) {
+    if (r.blockerId === me) out.add(r.blockedId);
+    else if (r.blockedId === me) out.add(r.blockerId);
+  }
+  return out;
+}
+
+/** Blocking needs a different, real account. */
+export function blockProblem(blockerId: string, blockedId: string | null): string | null {
+  if (!blockedId) return "No one with that username";
+  if (blockerId === blockedId) return "You can't block yourself";
+  return null;
+}
+
+/** How many blocks one person may hold (each is read on every social query). */
+export const BLOCK_LIST_MAX = 500;

@@ -4404,6 +4404,12 @@ html:lang(hi) body * { letter-spacing: 0 !important; }
 .social-follow.on { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
 .social-follow:active { transform: scale(0.96); }
 .social-follow:disabled { opacity: 0.6; }
+/* quieter than Follow: a text button under it */
+.social-block {
+  flex: none; margin-top: 6px; padding: 6px 10px; border: 0; background: transparent; cursor: pointer;
+  color: var(--muted); font-size: 12.5px; font-weight: 600;
+}
+.social-block:disabled { opacity: 0.6; }
 
 .social-hero { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 0 10px; text-align: center; }
 .social-badge { margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: var(--surface-2); color: var(--muted); }

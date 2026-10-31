@@ -339,6 +339,82 @@ export function PeopleScreen({
   );
 }
 
+/**
+ * Block or unblock from someone's page. Blocking asks first (the app's own
+ * dialog), because it also removes follows both ways and their place in your
+ * playlists and rooms.
+ */
+function BlockButton({ username, blocked }: { username: string; blocked: boolean }) {
+  const tx = useT();
+  const block = useMutation(api.social.block);
+  const unblock = useMutation(api.social.unblock);
+  const { confirm, notify } = useDialogs();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      className="social-block"
+      disabled={busy}
+      onClick={async () => {
+        if (!blocked) {
+          const ok = await confirm({
+            title: tx("Block @{name}?", { name: username }),
+            body: tx("You'll stop following each other, they leave your playlists and rooms, and neither of you sees the other's page or shares."),
+            confirmLabel: tx("Block"),
+            danger: true,
+          });
+          if (!ok) return;
+        }
+        setBusy(true);
+        try {
+          await (blocked ? unblock({ username }) : block({ username }));
+        } catch (e) {
+          notify(`${tx("Couldn't do that")}: ${serverMessage(e)}`);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {blocked ? tx("Unblock") : tx("Block")}
+    </button>
+  );
+}
+
+/** Settings: the people you've blocked, each with an Unblock. */
+export function BlockedPeople() {
+  const tx = useT();
+  const people = useQuery(api.social.blocked);
+  const unblock = useMutation(api.social.unblock);
+  const { notify } = useDialogs();
+  if (!people || people.length === 0) return null;
+  return (
+    <>
+      <p className="settings-group">{tx("blocked people")}</p>
+      {people.map((x) => (
+        <button
+          key={x.username}
+          type="button"
+          className="settings-row"
+          onClick={async () => {
+            try {
+              await unblock({ username: x.username! });
+            } catch (e) {
+              notify(`${tx("Couldn't do that")}: ${serverMessage(e)}`);
+            }
+          }}
+        >
+          <span className="settings-row-icon">·</span>
+          <span className="settings-row-label">
+            {x.name}
+            <small>@{x.username}</small>
+          </span>
+          <span className="settings-row-value" style={{ color: "var(--more)" }}>{tx("unblock")}</span>
+        </button>
+      ))}
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Someone's page
 // ---------------------------------------------------------------------------
@@ -391,8 +467,11 @@ export function UserScreen({
               <b>{p.following}</b> {tx("following")}
             </button>
           </div>
-          {!p.isMe && p.username && <FollowButton username={p.username} following={p.iFollow} />}
+          {!p.isMe && p.username && !p.blockedByMe && <FollowButton username={p.username} following={p.iFollow} />}
+          {!p.isMe && p.username && <BlockButton username={p.username} blocked={p.blockedByMe} />}
         </motion.div>
+
+        {p.blockedByMe && <p className="settings-hint">{tx("You blocked @{name}. Unblock to see their page again.", { name: p.username ?? username })}</p>}
 
         {list && (
           <motion.div variants={rise}>
@@ -413,7 +492,7 @@ export function UserScreen({
           </motion.div>
         )}
 
-        {!p.isMe && (
+        {!p.isMe && !p.blockedByMe && (
           <motion.button
             type="button"
             className="settings-row"

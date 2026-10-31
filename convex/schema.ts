@@ -904,6 +904,20 @@ export default defineSchema({
     .index("by_followee", ["followeeId"])
     .index("by_pair", ["followerId", "followeeId"]),
 
+  /**
+   * One person blocking another. Works both ways (convex/socialRules.ts
+   * blockedPeople): neither sees the other's page, posts or playlists,
+   * follows, or joins the other's playlists and rooms.
+   */
+  blocks: defineTable({
+    blockerId: v.string(),
+    blockedId: v.string(),
+    at: v.number(),
+  })
+    .index("by_blocker", ["blockerId"])
+    .index("by_blocked", ["blockedId"])
+    .index("by_pair", ["blockerId", "blockedId"]),
+
   /** A song someone shared to their followers, with an optional note. */
   posts: defineTable({
     userId: v.string(),

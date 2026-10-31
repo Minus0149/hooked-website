@@ -36,6 +36,7 @@ import { useDialogs } from "./ui/Dialogs";
 import { useLang, useT, type LangSetting } from "../lib/lang";
 import { readHookOfDayShown, writeHookOfDayShown } from "../lib/useHookOfDay";
 import { serverMessage } from "../lib/serverError";
+import { BlockedPeople } from "./SocialScreens";
 
 const BETA_URL = import.meta.env.VITE_BETA_URL ?? "https://hookedcue.com/beta";
 
@@ -726,6 +727,8 @@ export function SettingsScreen({
           <small>{tt("cloud library is untouched")}</small>
         </span>
       </button>
+      {/* people you blocked, with the way back (convex/social.ts block) */}
+      {session.data && <BlockedPeople />}
       {session.data && (
         <button className="settings-row" onClick={removeAccount} disabled={deleting}>
           <span className="settings-row-icon" style={{ color: "var(--never)" }}>✕</span>

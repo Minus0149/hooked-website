@@ -753,6 +753,7 @@ export const ACCOUNT_DELETION = {
     "rooms",
     "roomMembers",
     "roomReactions",
+    "blocks",
     // and in the auth component: the user (email, name, password), sessions and linked accounts
   ],
   kept: {
@@ -835,7 +836,7 @@ export const deleteMyAccount = mutation({
     // the social side: follows both ways, shared songs, playlist memberships
     // (theirs in other people's playlists, and other people's in theirs, with
     // the songs those people added), rooms they hosted and what they did in rooms
-    const [following, followers, posts, memberOf, hosted, inRooms, reactions] = await Promise.all([
+    const [following, followers, posts, memberOf, hosted, inRooms, reactions, blocking, blockedBy] = await Promise.all([
       ctx.db.query("follows").withIndex("by_follower", (q) => q.eq("followerId", userId)).collect(),
       ctx.db.query("follows").withIndex("by_followee", (q) => q.eq("followeeId", userId)).collect(),
       ctx.db.query("posts").withIndex("by_user_at", (q) => q.eq("userId", userId)).collect(),
@@ -843,6 +844,9 @@ export const deleteMyAccount = mutation({
       ctx.db.query("rooms").withIndex("by_host", (q) => q.eq("hostId", userId)).collect(),
       ctx.db.query("roomMembers").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
       ctx.db.query("roomReactions").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      // blocks both ways: theirs, and other people's of them
+      ctx.db.query("blocks").withIndex("by_blocker", (q) => q.eq("blockerId", userId)).collect(),
+      ctx.db.query("blocks").withIndex("by_blocked", (q) => q.eq("blockedId", userId)).collect(),
     ]);
     const othersInMine = (
       await Promise.all(
@@ -854,7 +858,7 @@ export const deleteMyAccount = mutation({
         playlists.map((pl) => ctx.db.query("librarySongs").withIndex("by_playlist", (q) => q.eq("playlistId", pl._id)).collect()),
       )
     ).flat();
-    for (const d of [...following, ...followers, ...posts, ...memberOf, ...inRooms, ...reactions, ...othersInMine]) await ctx.db.delete(d._id);
+    for (const d of [...following, ...followers, ...posts, ...memberOf, ...inRooms, ...reactions, ...othersInMine, ...blocking, ...blockedBy]) await ctx.db.delete(d._id);
     for (const d of songsInMine) if ((await ctx.db.get(d._id)) !== null) await ctx.db.delete(d._id);
     for (const r of hosted) {
       const [members, roomReactions] = await Promise.all([

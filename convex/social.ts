@@ -6,11 +6,14 @@ import { trackFields } from "./schema";
 import { cleanText, cleanTrack, enforceRateLimit, getProfile, requireGatedUser } from "./security";
 import { normalizeUsername } from "../src/lib/username";
 import {
+  BLOCK_LIST_MAX,
   ROOM_MAX_MEMBERS,
   ROOM_MAX_TRACKS,
   ROOM_PRESENCE_MS,
   canAddToPlaylist,
   canRemoveFromPlaylist,
+  blockProblem,
+  blockedPeople,
   canViewPlaylist,
   cleanNote,
   coerceVisibility,
@@ -69,6 +72,27 @@ async function follows(ctx: Ctx, followerId: string, followeeId: string) {
     .withIndex("by_pair", (q) => q.eq("followerId", followerId).eq("followeeId", followeeId))
     .first();
   return row !== null;
+}
+
+/** Everyone `me` has blocked or been blocked by (socialRules.blockedPeople). */
+async function blockedSet(ctx: Ctx, me: string): Promise<Set<string>> {
+  const [mine, theirs] = await Promise.all([
+    ctx.db.query("blocks").withIndex("by_blocker", (q) => q.eq("blockerId", me)).take(BLOCK_LIST_MAX),
+    ctx.db.query("blocks").withIndex("by_blocked", (q) => q.eq("blockedId", me)).take(BLOCK_LIST_MAX * 4),
+  ]);
+  return blockedPeople([...mine, ...theirs], me);
+}
+
+async function blockRow(ctx: Ctx, blockerId: string, blockedId: string) {
+  return ctx.db
+    .query("blocks")
+    .withIndex("by_pair", (q) => q.eq("blockerId", blockerId).eq("blockedId", blockedId))
+    .first();
+}
+
+/** A block between the two, whichever way round. */
+async function blockedBetween(ctx: Ctx, a: string, b: string): Promise<boolean> {
+  return (await blockRow(ctx, a, b)) !== null || (await blockRow(ctx, b, a)) !== null;
 }
 
 async function counts(ctx: Ctx, userId: string) {
@@ -146,6 +170,24 @@ export const profile = query({
     if (!me) return null;
     const p = await byUsername(ctx, username);
     if (!p || p.suspended) return null;
+    if (p.userId !== me) {
+      // someone who blocked me isn't there; someone I blocked shows only the way back
+      if (await blockRow(ctx, p.userId, me)) return null;
+      if (await blockRow(ctx, me, p.userId)) {
+        return {
+          ...person(p),
+          isMe: false,
+          blockedByMe: true,
+          iFollow: false,
+          followsMe: false,
+          mutual: false,
+          followers: 0,
+          following: 0,
+          playlists: [],
+          posts: [],
+        };
+      }
+    }
     const [c, iFollow, followsMe, playlists, posts] = await Promise.all([
       counts(ctx, p.userId),
       follows(ctx, me, p.userId),
@@ -168,6 +210,7 @@ export const profile = query({
     return {
       ...person(p),
       isMe,
+      blockedByMe: false,
       iFollow,
       followsMe,
       mutual: isMutual(iFollow, followsMe),
@@ -190,7 +233,8 @@ export const searchPeople = query({
       .query("profiles")
       .withIndex("by_username", (x) => x.gte("username", prefix).lt("username", `${prefix}￿`))
       .take(12);
-    const people = found.filter((p) => !p.suspended && p.userId !== me && p.username);
+    const blocked = await blockedSet(ctx, me);
+    const people = found.filter((p) => !p.suspended && p.userId !== me && p.username && !blocked.has(p.userId));
     return Promise.all(people.map(async (p) => ({ ...person(p), iFollow: await follows(ctx, me, p.userId) })));
   },
 });
@@ -203,6 +247,8 @@ export const connections = query({
     if (!me) return [];
     const p = await byUsername(ctx, username);
     if (!p) return [];
+    const blocked = await blockedSet(ctx, me);
+    if (blocked.has(p.userId)) return [];
     const rows =
       kind === "followers"
         ? await ctx.db.query("follows").withIndex("by_followee", (q) => q.eq("followeeId", p.userId)).take(200)
@@ -211,7 +257,7 @@ export const connections = query({
     const profiles = await Promise.all(ids.map((id) => getProfile(ctx, id)));
     const out = [];
     for (const x of profiles) {
-      if (!x || x.suspended || !x.username) continue;
+      if (!x || x.suspended || !x.username || blocked.has(x.userId)) continue;
       out.push({ ...person(x), iFollow: x.userId === me ? null : await follows(ctx, me, x.userId) });
     }
     return out;
@@ -226,6 +272,7 @@ export const follow = mutation({
     const target = await byUsername(ctx, username);
     const problem = followProblem(user.id, target && !target.suspended ? target.userId : null);
     if (problem) throw new ConvexError(problem);
+    if (await blockedBetween(ctx, user.id, target!.userId)) throw new ConvexError("You can't follow this account");
     if (await follows(ctx, user.id, target!.userId)) return;
     await ctx.db.insert("follows", { followerId: user.id, followeeId: target!.userId, at: Date.now() });
   },
@@ -279,7 +326,8 @@ export const feed = query({
     const me = await viewerId(ctx);
     if (!me) return [];
     const following = await ctx.db.query("follows").withIndex("by_follower", (q) => q.eq("followerId", me)).take(300);
-    const authors = [me, ...following.map((f) => f.followeeId)];
+    const blocked = await blockedSet(ctx, me);
+    const authors = [me, ...following.map((f) => f.followeeId).filter((id) => !blocked.has(id))];
     const lists = await Promise.all(
       authors.map((id) => ctx.db.query("posts").withIndex("by_user_at", (q) => q.eq("userId", id)).order("desc").take(10)),
     );
@@ -314,6 +362,7 @@ export const mutual = query({
     if (!me) return null;
     const other = await byUsername(ctx, username);
     if (!other || other.suspended || other.userId === me) return null;
+    if (await blockedBetween(ctx, me, other.userId)) return null;
     const ok = isMutual(await follows(ctx, me, other.userId), await follows(ctx, other.userId, me));
     if (!ok) return { allowed: false as const, name: displayName(other) };
     const [mine, theirs] = await Promise.all([likedSongs(ctx, me), likedSongs(ctx, other.userId)]);
@@ -343,6 +392,7 @@ export const playlist = query({
     if (!pl) return null;
     const { access, members } = await playlistAccess(ctx, pl);
     if (!canViewPlaylist(access, me)) return null;
+    if (me && me !== pl.userId && (await blockedBetween(ctx, me, pl.userId))) return null;
     const [owner, songs] = await Promise.all([
       getProfile(ctx, pl.userId),
       ctx.db.query("librarySongs").withIndex("by_playlist", (q) => q.eq("playlistId", id)).collect(),
@@ -408,6 +458,8 @@ export const joinPlaylist = mutation({
     // a link to a playlist the owner has stopped sharing opens nothing
     if (!pl || !inviteOpen(pl)) throw new ConvexError("That invite link doesn't work any more");
     if (pl.userId === user.id) return { playlistId: pl._id };
+    // the same answer as a dead link: a block isn't announced
+    if (await blockedBetween(ctx, user.id, pl.userId)) throw new ConvexError("That invite link doesn't work any more");
     const already = await ctx.db
       .query("playlistMembers")
       .withIndex("by_pair", (q) => q.eq("playlistId", pl._id).eq("userId", user.id))
@@ -475,6 +527,8 @@ export const invite = query({
     if (!clean) return null;
     const pl = await ctx.db.query("playlists").withIndex("by_inviteCode", (q) => q.eq("inviteCode", clean)).unique();
     if (!pl || !inviteOpen(pl)) return null;
+    const me = await viewerId(ctx);
+    if (me && me !== pl.userId && (await blockedBetween(ctx, me, pl.userId))) return null;
     const owner = await getProfile(ctx, pl.userId);
     const count = (await ctx.db.query("librarySongs").withIndex("by_playlist", (q) => q.eq("playlistId", pl._id)).collect()).length;
     return { playlistId: pl._id, name: pl.name, accent: pl.accent, collaborative: pl.collaborative ?? false, owner: owner ? person(owner) : null, count };
@@ -540,6 +594,7 @@ export const joinRoom = mutation({
     await enforceRateLimit(ctx, `room:join:${user.id}`, 30, 10 * 60_000);
     const room = await openRoom(ctx, code);
     if (!room) throw new ConvexError("That room has closed");
+    if (room.hostId !== user.id && (await blockedBetween(ctx, user.id, room.hostId))) throw new ConvexError("That room has closed");
     const now = Date.now();
     const members = await ctx.db.query("roomMembers").withIndex("by_room", (q) => q.eq("roomId", room._id)).collect();
     const mine = members.find((m) => m.userId === user.id);
@@ -634,6 +689,7 @@ export const room = query({
     const clean = normalizeCode(code);
     const r = clean ? await ctx.db.query("rooms").withIndex("by_code", (q) => q.eq("code", clean)).unique() : null;
     if (!r) return null;
+    if (r.hostId !== me && (await blockedBetween(ctx, me, r.hostId))) return null;
     const open = roomIsOpen(r, Date.now());
     const [members, reactions] = await Promise.all([
       ctx.db.query("roomMembers").withIndex("by_room", (q) => q.eq("roomId", r._id)).collect(),
@@ -661,3 +717,87 @@ export const room = query({
   },
 });
 
+// ---------------------------------------------------------------------------
+// Blocking
+// ---------------------------------------------------------------------------
+
+/**
+ * Undo every tie between two people: follows both ways (which also ends their
+ * mutual playlist), each one's membership of the other's playlists, and each
+ * one's place in a room the other hosts.
+ */
+async function separate(ctx: MutationCtx, a: string, b: string) {
+  for (const [x, y] of [[a, b], [b, a]] as const) {
+    const rows = await ctx.db
+      .query("follows")
+      .withIndex("by_pair", (q) => q.eq("followerId", x).eq("followeeId", y))
+      .collect();
+    for (const r of rows) await ctx.db.delete(r._id);
+
+    // y's memberships of playlists x owns
+    for (const m of await ctx.db.query("playlistMembers").withIndex("by_user", (q) => q.eq("userId", y)).collect()) {
+      const pl = await ctx.db.get(m.playlistId);
+      if (!pl || pl.userId !== x) continue;
+      await ctx.db.delete(m._id);
+      const member = await getProfile(ctx, y);
+      if (member && member.saveTarget === `pl:${pl._id}`) await ctx.db.patch(member._id, { saveTarget: "liked" });
+    }
+
+    // y's seats in rooms x hosts
+    for (const m of await ctx.db.query("roomMembers").withIndex("by_user", (q) => q.eq("userId", y)).collect()) {
+      const room = await ctx.db.get(m.roomId);
+      if (room && room.hostId === x) await ctx.db.delete(m._id);
+    }
+  }
+}
+
+/** Block someone: they disappear from each other's social side, both ways. */
+export const block = mutation({
+  args: { username: v.string() },
+  handler: async (ctx, { username }) => {
+    const { user } = await requireGatedUser(ctx);
+    await enforceRateLimit(ctx, `block:${user.id}`, 60, 60 * 60_000);
+    const target = await byUsername(ctx, username);
+    const problem = blockProblem(user.id, target ? target.userId : null);
+    if (problem) throw new ConvexError(problem);
+    const them = target!.userId;
+    if (!(await blockRow(ctx, user.id, them))) {
+      const held = await ctx.db.query("blocks").withIndex("by_blocker", (q) => q.eq("blockerId", user.id)).take(BLOCK_LIST_MAX);
+      if (held.length >= BLOCK_LIST_MAX) throw new ConvexError("You've blocked as many people as you can");
+      await ctx.db.insert("blocks", { blockerId: user.id, blockedId: them, at: Date.now() });
+    }
+    await separate(ctx, user.id, them);
+  },
+});
+
+/** Lift a block. Follows it removed stay removed. */
+export const unblock = mutation({
+  args: { username: v.string() },
+  handler: async (ctx, { username }) => {
+    const { user } = await requireGatedUser(ctx);
+    await enforceRateLimit(ctx, `block:${user.id}`, 60, 60 * 60_000);
+    const target = await byUsername(ctx, username);
+    if (!target) return;
+    const rows = await ctx.db
+      .query("blocks")
+      .withIndex("by_pair", (q) => q.eq("blockerId", user.id).eq("blockedId", target.userId))
+      .collect();
+    for (const r of rows) await ctx.db.delete(r._id);
+  },
+});
+
+/** The people I've blocked, for Settings. Never who blocked me. */
+export const blocked = query({
+  args: {},
+  handler: async (ctx) => {
+    const me = await viewerId(ctx);
+    if (!me) return [];
+    const rows = await ctx.db.query("blocks").withIndex("by_blocker", (q) => q.eq("blockerId", me)).take(BLOCK_LIST_MAX);
+    const out = [];
+    for (const r of rows.sort((a, b) => b.at - a.at)) {
+      const p = await getProfile(ctx, r.blockedId);
+      if (p?.username) out.push(person(p));
+    }
+    return out;
+  },
+});
