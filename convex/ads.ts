@@ -233,8 +233,13 @@ const dayKey = () => new Date().toISOString().slice(0, 10);
  * the ceiling is three cards a day, not a bank control.
  */
 export const nextAd = query({
+  // userId is still accepted from older builds and ignored: the signed-in
+  // listener is read from the session, or anyone could pass someone else's id
+  // and read when they last saw an ad (and so when they were last swiping)
   args: { userId: v.optional(v.string()), anonKey: v.optional(v.string()) },
-  handler: async (ctx, { userId, anonKey }) => {
+  handler: async (ctx, { anonKey }) => {
+    const me = await authComponent.safeGetAuthUser(ctx);
+    const userId = me ? String(me._id) : undefined;
     const config = await readConfig(ctx);
     if (!config.enabled || config.maxPerDay === 0) return null;
     if (!userId && !anonKey) return null;

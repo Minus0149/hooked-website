@@ -238,6 +238,24 @@ export const finishImport = internalMutation({
   },
 });
 
+/**
+ * The one start of a run's matching. importPlaylist is a public action, so it
+ * used to do all its iTunes and Deezer lookups (up to 2 a row, 400 rows)
+ * before anything checked the token: anyone could run it with junk ids, in
+ * parallel, and get the deployment's IP throttled by both catalogues, which
+ * broke every real import. Now the token, the caller and "not started yet"
+ * are checked first.
+ */
+export const claimRun = internalMutation({
+  args: { importId: v.id("imports"), token: v.string(), userId: v.string() },
+  handler: async (ctx, { importId, token, userId }) => {
+    const run = await openRun(ctx, importId, token);
+    if (!run || run.userId !== userId || run.claimedAt) return false;
+    await ctx.db.patch(importId, { claimedAt: Date.now() });
+    return true;
+  },
+});
+
 /** Live counter while the run is still matching, so the UI isn't a blank wait. */
 export const progressImport = internalMutation({
   args: { importId: v.id("imports"), token: v.string(), done: v.number() },
@@ -292,6 +310,12 @@ export const importPlaylist = action({
       .slice(0, MAX_ROWS);
 
     if (rows.length === 0) throw new ConvexError("Nothing to import");
+
+    // before any outside request: signed in, this run's owner, its token, once
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new ConvexError("Not signed in");
+    const claimed: boolean = await ctx.runMutation(internal.imports.claimRun, { importId, token, userId: identity.subject });
+    if (!claimed) throw new ConvexError("That import is no longer open");
 
     try {
       const matches: Match[] = [];

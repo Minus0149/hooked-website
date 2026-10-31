@@ -12,6 +12,7 @@ import { components, internal } from "./_generated/api";
 import { authComponent } from "./auth";
 import { PERMISSIONS } from "./schema";
 import { enforceRateLimit, requireAdmin, requirePermission } from "./security";
+import { approvalRow } from "./access";
 import { runtimeFor } from "./runtime";
 
 type Perm = (typeof PERMISSIONS)[number];
@@ -894,8 +895,45 @@ export const deleteUserData = mutation({
       await ctx.db.delete(doc._id);
     }
     await ctx.db.delete(profileId);
+
+    // An admin removing someone is a removal, not a reset: their approved
+    // request used to stay, and so did their sign-in, so the next sign-in
+    // built a fresh, unsuspended profile. The address is marked rejected (only
+    // the address is kept) and the sign-in and its sessions go.
+    const request = target.email ? await approvalRow(ctx, target.email) : null;
+    if (request) await ctx.db.patch(request._id, removedRequestPatch("removed by admin"));
+    for (const model of ["session", "account"] as const) {
+      await ctx.runMutation(components.betterAuth.adapter.deleteMany, {
+        input: { model, where: [{ field: "userId", value: userId }] },
+        paginationOpts: { numItems: 500, cursor: null },
+      });
+    }
+    await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+      input: { model: "user", where: [{ field: "_id", value: userId }] },
+    });
   },
 });
+
+/**
+ * What's left of an access request when its email may not come back: the
+ * address and the rejection, nothing the person told us.
+ */
+export function removedRequestPatch(why: string) {
+  return {
+    status: "rejected" as const,
+    decidedAt: new Date().toISOString(),
+    decidedBy: why,
+    name: "removed",
+    device: undefined,
+    androidVersion: undefined,
+    listensOn: undefined,
+    genres: undefined,
+    hours: undefined,
+    lastSkipped: undefined,
+    notes: undefined,
+    userAgent: undefined,
+  };
+}
 
 /** Promote/demote admins. The last remaining admin can't demote themself. */
 export const setAdmin = mutation({

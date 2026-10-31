@@ -448,6 +448,10 @@ export const setTrackHidden = mutation({
     const { user, curator } = await requireCreator(ctx);
     const track = await requireOwnedTrack(ctx, trackId, curator, user.id);
     if (!hidden) {
+      // a moderator's hide (a takedown, a report) is lifted by staff, not the uploader
+      if (!curator && moderatorHid(track.hiddenBy)) {
+        throw new ConvexError("This song was taken down after a review. Email hello@hookedcue.com if you think that's wrong.");
+      }
       if (track.origin === "artist" && !track.rightsConfirmedAt) {
         throw new ConvexError(
           "Confirm you hold the rights to this recording before publishing",
@@ -464,7 +468,8 @@ export const setTrackHidden = mutation({
         throw new ConvexError("There's no audio on this track yet");
       }
     }
-    await ctx.db.patch(track._id, { hidden });
+    // a curator publishing it lifts a moderator's mark along with the hide
+    await ctx.db.patch(track._id, hidden ? { hidden } : { hidden, ...(moderatorHid(track.hiddenBy) ? { hiddenBy: undefined } : {}) });
     await touchCatalog(ctx, { urgent: true });
   },
 });
@@ -677,3 +682,8 @@ export const scrubMediaUrls = internalMutation({
     return { table, patched, done: page.isDone };
   },
 });
+
+/** Hidden by staff (Catalog) or by resolving a song report: only staff lift it. */
+export function moderatorHid(hiddenBy: string | undefined): boolean {
+  return hiddenBy === "admin" || hiddenBy === "report";
+}

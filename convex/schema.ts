@@ -499,6 +499,8 @@ export default defineSchema({
     // rely on the caller's identity travelling with it — this is what proves
     // the writes belong to the run that was authorised. Cleared on completion.
     token: v.optional(v.string()),
+    /** when importPlaylist started matching this run: a run is matched once (imports.claimRun) */
+    claimedAt: v.optional(v.number()),
   })
     .index("by_userId", ["userId"])
     .index("by_status", ["status"]),

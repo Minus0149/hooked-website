@@ -22,6 +22,7 @@ import { normalizeUsername, usernameProblem } from "../src/lib/username";
 import { coerceAfterHook, publicName } from "./socialRules";
 import { resolveSong } from "./songs";
 import { approvalRow } from "./access";
+import { removedRequestPatch } from "./admin";
 
 export type ProfileVerdict =
   | "create"
@@ -350,7 +351,9 @@ export const recordSwipe = mutation({
     // credit the hook that was actually on screen. A "more" counts as interest
     // without a save; "never" is about the artist, not the hook, so it only
     // counts as a play.
-    if (hookId) {
+    // once per listener per hook per day: a script re-swiping one song 180
+    // times a minute used to reorder its hooks and pad the play counts
+    if (hookId && (await firstHookSwipeToday(ctx, user.id, hookId))) {
       const hook = await ctx.db.get(hookId);
       if (hook && hook.trackId === safeTrack.trackId) {
         // hookStats, not the hook itself — the hook row is read by every
@@ -410,6 +413,16 @@ export const recordSwipe = mutation({
     }
   },
 });
+
+/** True the first time today this listener's swipe credits this hook (a rateLimits marker, swept after 2 days). */
+async function firstHookSwipeToday(ctx: MutationCtx, userId: string, hookId: string): Promise<boolean> {
+  try {
+    await enforceRateLimit(ctx, `hookstat:${userId}:${hookId}`, 1, 86_400_000);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** Mirrors the ↩ back button: removes the latest swipe and reverts its side effects. */
 export const revertSwipe = mutation({
@@ -770,6 +783,9 @@ export const ACCOUNT_DELETION = {
     trackInsights: "anonymous counts",
     // a song report stays for moderation; its reporter is replaced with "deleted"
     contentReports: "reports kept, reporter removed",
+    // a suspended account's request becomes a bare "rejected" row with the
+    // address only, so deleting the account isn't a way back in (others' go)
+    accessRequests: "deleted, except a suspended account's: address kept, rejected",
   } as Record<string, string>,
 } as const;
 
@@ -898,11 +914,11 @@ export const deleteMyAccount = mutation({
 
     const email = (profile.email ?? "").toLowerCase();
     if (email) {
-      const request = await ctx.db
-        .query("accessRequests")
-        .withIndex("by_email", (q) => q.eq("email", email))
-        .unique();
-      if (request) await ctx.db.delete(request._id);
+      const request = await approvalRow(ctx, email);
+      // a suspended account's address stays rejected (address only), or
+      // deleting it would be the way to come back with a clean account
+      if (request && profile.suspended) await ctx.db.patch(request._id, removedRequestPatch("suspended account deleted"));
+      else if (request) await ctx.db.delete(request._id);
     }
 
     // their invite code goes, and friends they invited stop pointing at them

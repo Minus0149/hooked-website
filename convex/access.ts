@@ -4,6 +4,7 @@ import { internalMutation, internalQuery, mutation, query, type MutationCtx } fr
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { DISPOSABLE_MESSAGE, emailKey, isDisposableEmail } from "./emailIdentity";
+import { ipRateKey } from "./callerIp";
 import { inviteEmail, inviteReminderEmail } from "./emailTemplate";
 import { cameByInvite, cleanCode, referralDecision, referralLockedUntil } from "./referralRules";
 import { runtimeFor } from "./runtime";
@@ -217,13 +218,15 @@ export const submit = internalMutation({
   },
   handler: async (ctx, { ip, ref, ...args }) => {
     // per-IP first: the ceiling that actually costs an attacker something
-    await enforceRateLimit(ctx, `access:ip:${ip}`, 8, 60 * 60_000);
+    // (an IPv6 caller counts by its /64, callerIp.ipRateKey)
+    await enforceRateLimit(ctx, `access:ip:${ipRateKey(ip)}`, 8, 60 * 60_000);
     // per person, not per spelling: j.doe+1@gmail.com and jdoe+2@gmail.com share one
     const key = emailKey(cleanText(args.email, MAX.email)) || "anon";
     await enforceRateLimit(ctx, `access:email:${key}`, 5, 10 * 60_000);
     // and a floor under the whole queue, so a botnet spread across many IPs
-    // can't fill the table one "valid" row at a time
-    await enforceRateLimit(ctx, "access:global", 300, 60 * 60_000);
+    // can't fill the table one "valid" row at a time. One per way in: filling
+    // the app's no longer stops the landing's signups, and the other way round.
+    await enforceRateLimit(ctx, "access:global:app", 300, 60 * 60_000);
     const result = await upsertRequest(ctx, { ...args, source: "app" });
     return await applyReferral(ctx, ref, args.email, result);
   },
@@ -247,11 +250,11 @@ export const record = internalMutation({
   },
   handler: async (ctx, { ip, ref, ...args }) => {
     // the landing server is trusted, but the shared secret could leak
-    if (ip) await enforceRateLimit(ctx, `access:ip:${ip}`, 30, 60 * 60_000);
+    if (ip) await enforceRateLimit(ctx, `access:ip:${ipRateKey(ip)}`, 30, 60 * 60_000);
     // two calls per signup (email, then details), so a little looser than the app's 5
     const key = emailKey(cleanText(args.email, MAX.email)) || "anon";
     await enforceRateLimit(ctx, `access:email:${key}`, 10, 10 * 60_000);
-    await enforceRateLimit(ctx, "access:global", 300, 60 * 60_000);
+    await enforceRateLimit(ctx, "access:global:landing", 300, 60 * 60_000);
     const result = await upsertRequest(ctx, { ...args, source: "landing" });
     return await applyReferral(ctx, ref, args.email, result);
   },

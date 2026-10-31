@@ -239,7 +239,7 @@ function UserDetailPanel({
             onClick={async () => {
               const ok = await confirm({
                 title: `Delete all data for ${detail.email}?`,
-                body: "Swipes, library, playlists and profile are wiped. This can't be undone.",
+                body: "Swipes, library, playlists, profile and their sign-in are removed, and the address is marked rejected so it can't sign up again. This can't be undone.",
                 confirmLabel: "Delete everything",
                 danger: true,
               });

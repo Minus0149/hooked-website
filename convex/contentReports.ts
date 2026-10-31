@@ -201,8 +201,10 @@ export const resolve = mutation({
         .query("tracks")
         .withIndex("by_trackId", (q) => q.eq("trackId", trackId))
         .unique();
-      if (t && !t.hidden) {
-        await ctx.db.patch(t._id, { hidden: true });
+      // marked as a moderator's hide, so the song's owner can't simply publish
+      // it again from their dashboard (creators.setTrackHidden)
+      if (t && t.hiddenBy !== "report") {
+        await ctx.db.patch(t._id, { hidden: true, hiddenBy: "report", hiddenReason: undefined, keep: undefined });
         await touchCatalog(ctx, { urgent: true });
       }
     }
