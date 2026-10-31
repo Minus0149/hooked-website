@@ -49,6 +49,12 @@ listener per campaign, counted on the server (`recordPromoted`). Swipes on it
 to the artist with the **save rate**. There are no bots and no incentives: a
 listen is someone who was already swiping through music.
 
+Only **signed-in listeners** count (an active account, never the artist on
+their own song), and the 3 seconds are measured on the server from when the
+card was shown. Guests are still dealt promoted cards, but an anonymous
+install key is free to mint, so counting them would let a script "deliver"
+a campaign and leave nothing to refund (`promotionRules.countsForCampaign`).
+
 Pacing (admin-editable): at most one promoted card in every 10 cards (client),
 at most 2 promoted cards per listener per day, never the same campaign to the
 same listener twice (server). Campaigns furthest behind a straight-line

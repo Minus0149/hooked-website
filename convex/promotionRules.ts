@@ -249,6 +249,28 @@ export function countsAsListen(playedMs: number, alreadyCounted: boolean): boole
   return !alreadyCounted && Number.isFinite(playedMs) && playedMs >= COUNTED_LISTEN_MS;
 }
 
+/**
+ * Whose events a campaign counts, as delivery and in the artist's stats.
+ *
+ * An artist pays per distinct listener, and an anonymous install key is free
+ * to mint: a script calling recordPromoted with a fresh anonKey each time used
+ * to "deliver" a whole campaign in minutes, which ended it as completed with
+ * nothing refunded. So only a signed-in listener with an active account counts
+ * (accounts are invite-only, one per verified email), and never the artist on
+ * their own song. Guests are still dealt promoted cards; they just aren't billed.
+ */
+export function countsForCampaign(viewer: string, campaignOwnerId: string, activeAccount: boolean): boolean {
+  return viewer.startsWith("u:") && activeAccount && viewer !== `u:${campaignOwnerId}`;
+}
+
+/**
+ * The server's clock, not the client's playedMs: a listen counts only once the
+ * card was shown (its view row written) at least COUNTED_LISTEN_MS ago.
+ */
+export function shownLongEnough(shownAt: number, now: number): boolean {
+  return Number.isFinite(shownAt) && now - shownAt >= COUNTED_LISTEN_MS;
+}
+
 /** Undelivered listeners, refunded pro rata. Rounded down: never refund more than was paid. */
 export function refundFor(paidPaise: number, listeners: number, delivered: number): number {
   if (listeners <= 0 || paidPaise <= 0) return 0;

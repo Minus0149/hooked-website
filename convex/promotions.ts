@@ -22,6 +22,7 @@ import {
   REJECT_REASON_MAX,
   REQUEST_NOTE_MAX,
   countsAsListen,
+  countsForCampaign,
   mayDeal,
   normaliseCode,
   packagesFor,
@@ -30,6 +31,7 @@ import {
   refundFor,
   remainingCapacity,
   saveRate,
+  shownLongEnough,
   webhookSignatureValid,
   pickCampaign,
   targetMatches,
@@ -1008,8 +1010,12 @@ export const recordPromoted = mutation({
       view = (await ctx.db.get(id))!;
     }
     if (event === "shown") return;
+    // the view row above keeps the daily cap and "never twice" for everyone;
+    // only a signed-in, active listener who isn't the artist is counted
+    const listener = viewer.startsWith("u:") ? await getProfile(ctx, viewer.slice(2)) : null;
+    if (!countsForCampaign(viewer, c.userId, listener !== null && !listener.suspended)) return;
     if (event === "listen") {
-      if (!countsAsListen(playedMs ?? 0, view.listened)) return;
+      if (!countsAsListen(playedMs ?? 0, view.listened) || !shownLongEnough(view.at, Date.now())) return;
       await ctx.db.patch(view._id, { listened: true });
       const delivered = c.delivered + 1;
       const done = delivered >= c.listeners;
