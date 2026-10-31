@@ -1,5 +1,6 @@
 import { httpRouter } from "convex/server";
 import { applyOriginAllowed } from "./applyOrigin";
+import { ingestIp } from "./callerIp";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent, createAuth } from "./auth";
@@ -158,7 +159,8 @@ http.route({
 
     try {
       const result = await ctx.runMutation(internal.access.record, {
-        ip: clientIp(request),
+        // the visitor's IP as the landing saw it, not the landing server's (callerIp.ts)
+        ip: ingestIp(body.ip, clientIp(request)),
         name: str(body.name),
         email: str(body.email),
         device: str(body.device),
