@@ -26,6 +26,8 @@ export type EmailContent = {
   paragraphs: string[];
   button: { label: string; url: string };
   /** small print under the button, e.g. when the link expires */
+  /** A paragraph under the button, for whoever the steps don't fit. */
+  after?: string;
   note?: string;
   /** numbered steps shown before the button, each a link (the button is the last step) */
   steps?: { label: string; detail?: string; url: string }[];
@@ -91,6 +93,7 @@ ${stepsHtml(c.steps)}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px;"><tr>
 <td bgcolor="#ff3d71" style="border-radius:999px;background:#ff3d71;"><a href="${escapeHtml(url)}" style="display:inline-block;padding:14px 28px;font:700 16px/1 ${FONT};color:#0b0b10;text-decoration:none;border-radius:999px;">${escapeHtml(c.button.label)}</a></td>
 </tr></table>
+${c.after ? `<p style="margin:0 0 16px;font:400 15px/1.55 ${FONT};color:#b9b7c2;">${bold(c.after)}</p>` : ""}
 ${c.note ? `<p style="margin:0 0 12px;font:400 13px/1.5 ${FONT};color:#8e8c99;">${escapeHtml(c.note)}</p>` : ""}
 <p style="margin:0;font:400 12px/1.5 ${FONT};color:#6f6d7a;">Button not working? Paste this into your browser:<br><a href="${escapeHtml(url)}" style="color:#ff7aa0;word-break:break-all;">${escapeHtml(url)}</a></p>
 </td></tr>
@@ -151,6 +154,8 @@ export function inviteEmail(name: string, url: string): { subject: string; html:
       paragraphs: [
         "Your spot in the HookedCue beta is ready. Three quick steps on your Android phone, signed in to Google with the same Gmail you want to test with:",
       ],
+      // there's no iPhone app yet, but the browser build is the whole app, so iPhone and computer users only need step 3
+      after: "On an iPhone or a computer? Skip steps 1 and 2: tap step 3 and HookedCue runs in your browser at app.hookedcue.com, the whole app, same account.",
       steps: [
         { label: "Join the testers group", detail: "One tap — Google needs this before it shows you the app.", url: TESTER_GROUP_URL },
         { label: "Install HookedCue from Google Play", detail: "Tap “Become a tester”, then install.", url: PLAY_OPT_IN_URL },

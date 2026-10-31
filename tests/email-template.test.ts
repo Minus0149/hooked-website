@@ -51,6 +51,13 @@ describe("HookedCue emails", () => {
     expect(html).toContain('href="https://app.hookedcue.com/profile?signup=1"');
   });
 
+  it("tells iPhone and computer users the browser build is the whole app", () => {
+    const { html } = inviteEmail("Ada", "https://app.hookedcue.com/join?email=ada%40gmail.com");
+    const iphone = html.indexOf("On an iPhone or a computer?");
+    expect(iphone).toBeGreaterThan(html.indexOf("Create my account")); // under the button, after the Android steps
+    expect(html).toContain("runs in your browser at app.hookedcue.com");
+  });
+
   it("walks a tester through group, Play and account in order", () => {
     const { html } = inviteEmail("Ada", "https://app.hookedcue.com/join?email=ada%40gmail.com");
     const group = html.indexOf("https://groups.google.com/g/hookedcue-beta");
