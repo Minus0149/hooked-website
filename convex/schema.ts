@@ -541,6 +541,18 @@ export default defineSchema({
     /** the listener whose invite link this came through (convex/referrals.ts) */
     referredBy: v.optional(v.string()),
     referralCode: v.optional(v.string()),
+    /**
+     * The one-time code(s) in this person's invite emails, hashed
+     * (convex/inviteCodes.ts). Sign-up must present one. Absent on rows invited
+     * before 31 Oct 2026 until access:reissueInviteCodes has run.
+     */
+    inviteCodeHashes: v.optional(v.array(v.string())),
+    inviteCodeIssuedAt: v.optional(v.string()),
+    /** when a code was used to create the account, and by which sign-in; after that no code works */
+    inviteClaimedAt: v.optional(v.string()),
+    inviteClaimedBy: v.optional(v.string()),
+    /** when access:reissueInviteCodes mailed a code to someone invited before codes existed */
+    inviteReissuedAt: v.optional(v.string()),
   })
     .index("by_email", ["email"])
     .index("by_emailKey", ["emailKey"])

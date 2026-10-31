@@ -45,7 +45,7 @@ describe("needsReminder", () => {
 
 describe("inviteReminderEmail", () => {
   it("links back to account creation and says it's the only reminder", () => {
-    const { subject, html } = inviteReminderEmail("Ada Lovelace", "https://app.hookedcue.com/join?email=ada%40gmail.com");
+    const { subject, html } = inviteReminderEmail("Ada Lovelace", "https://app.hookedcue.com/join?email=ada%40gmail.com", "K7QM4XRP");
     expect(subject).toContain("still waiting");
     expect(html).toContain("Your spot is still here, Ada.");
     expect(html).toContain('href="https://app.hookedcue.com/join?email=ada%40gmail.com"');

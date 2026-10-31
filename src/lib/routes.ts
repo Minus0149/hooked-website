@@ -24,7 +24,7 @@ export type View =
 
 export type Route =
   | { kind: "app"; view: View }
-  | { kind: "join"; email: string }
+  | { kind: "join"; email: string; code?: string }
   | { kind: "reset"; token: string | null; error: string | null }
   | { kind: "admin" }
   | { kind: "creator" }
@@ -51,8 +51,12 @@ export function routeFor(pathname: string, search = ""): Route {
   if (invite) return { kind: "app", view: `invite:${invite[1].toUpperCase()}` };
   const room = /^\/together\/([a-z0-9]+)$/i.exec(raw);
   if (room) return { kind: "app", view: `room:${room[1].toUpperCase()}` };
-  if (path === "/join")
-    return { kind: "join", email: params.get("email") ?? "" };
+  if (path === "/join") {
+    const email = params.get("email") ?? "";
+    // the invite email's one-time code rides along in its link
+    const code = params.get("code");
+    return code ? { kind: "join", email, code } : { kind: "join", email };
+  }
   if (path === "/reset-password")
     return {
       kind: "reset",

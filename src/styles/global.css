@@ -3786,6 +3786,10 @@ html[data-motion="reduced"] .drift { animation: none !important; }
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--text) 7%, transparent);
 }
 .auth-input.has-error { border-color: color-mix(in srgb, var(--never) 70%, transparent); }
+/* the invite code: typed off an email, letter by letter */
+.auth-code-input { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; letter-spacing: .12em; text-transform: uppercase; }
+.auth-code-input::placeholder { font-family: var(--font-body); letter-spacing: normal; text-transform: none; }
+.auth-hint { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
 .auth-pass { position: relative; display: block; }
 .auth-pass .auth-input { padding-right: 68px; }
 .auth-pass-toggle {

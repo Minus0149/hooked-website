@@ -36,6 +36,9 @@ export const AUTH_COPY = {
   haveAccount: "Already have an account? Sign in",
   showPassword: "show",
   hidePassword: "hide",
+  codeLabel: "invite code",
+  codePlaceholder: "from your invite email",
+  codeHint: "It's in your invite email, under the button. The link there fills it in.",
 } as const;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -52,6 +55,19 @@ export function authProblem(
   if (mode === "join" && password.length < 8)
     return "Use at least 8 characters.";
   return null;
+}
+
+/**
+ * The one-time code from the invite email, as the server reads it: case,
+ * spaces and dashes don't matter (web/convex/inviteCodes.ts cleanInviteCode).
+ */
+export function cleanInviteCode(raw: string | null | undefined): string {
+  return (raw ?? "").slice(0, 64).toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/** Creating an account needs the invite code; null when one is typed. */
+export function inviteCodeProblem(code: string): string | null {
+  return cleanInviteCode(code) ? null : "Enter the invite code from your invite email.";
 }
 
 export function resetPasswordProblem(

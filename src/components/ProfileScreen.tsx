@@ -14,11 +14,14 @@ export function ProfileScreen({
   isAdmin,
   onBack,
   joinEmail,
+  joinCode,
 }: {
   isAdmin: boolean;
   onBack: () => void;
   /** set when the page was opened from an invite link (/join?email=…) */
   joinEmail?: string;
+  /** the invite's one-time code, when the link carried it (/join?…&code=…) */
+  joinCode?: string;
 }) {
   const tt = useT();
   const session = authClient.useSession();
@@ -136,6 +139,7 @@ export function ProfileScreen({
           <AuthForm
             initialMode={joinEmail !== undefined ? "join" : "signin"}
             initialEmail={joinEmail ?? ""}
+            initialCode={joinCode ?? ""}
             onApply={() => setApplying(true)}
           />
         </div>

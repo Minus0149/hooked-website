@@ -2,7 +2,7 @@ import { httpRouter } from "convex/server";
 import { ConvexError } from "convex/values";
 import { applyOriginAllowed } from "./applyOrigin";
 import { DISPOSABLE_MESSAGE } from "./emailIdentity";
-import { ingestIp } from "./callerIp";
+import { headerIp, ingestIp } from "./callerIp";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent, createAuth } from "./auth";
@@ -22,15 +22,9 @@ authComponent.registerRoutes(http, createAuth, {
   },
 });
 
-/** Cloudflare fronts this domain, so cf-connecting-ip is the trustworthy one. */
+/** Cloudflare fronts this domain, so cf-connecting-ip is the trustworthy one (callerIp.headerIp). */
 function clientIp(request: Request): string {
-  const cf = request.headers.get("cf-connecting-ip");
-  if (cf) return cf.trim().slice(0, 64);
-  const real = request.headers.get("x-real-ip");
-  if (real) return real.trim().slice(0, 64);
-  const fwd = request.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim().slice(0, 64);
-  return "unknown";
+  return headerIp(request.headers);
 }
 
 /**

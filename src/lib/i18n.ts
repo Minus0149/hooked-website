@@ -300,6 +300,11 @@ export const HI: Record<string, string> = {
 
   // ---- sign in / create account (lib/authForms.ts)
   "8 or more characters": "8 या उससे ज़्यादा अक्षर",
+  "invite code": "इनवाइट कोड",
+  "from your invite email": "आपके इनवाइट ईमेल से",
+  "It's in your invite email, under the button. The link there fills it in.":
+    "यह आपके इनवाइट ईमेल में बटन के नीचे है। वहाँ का लिंक इसे अपने आप भर देता है।",
+  "Enter the invite code from your invite email.": "अपने इनवाइट ईमेल से इनवाइट कोड डालें।",
   "Already have an account? Sign in": "पहले से अकाउंट है? साइन इन करें",
   "Choose a password.": "पासवर्ड चुनें।",
   "Create your account with the email your invite was sent to.":

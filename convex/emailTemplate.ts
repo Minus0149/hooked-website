@@ -13,6 +13,7 @@
  */
 
 import { EMAIL_LOGO_CID } from "./emailLogo";
+import { formatInviteCode } from "./inviteCodes";
 
 /** The logo travels inside the email (convex/emailLogo.ts), so no inbox blocks it. */
 export const EMAIL_ICON_SRC = `cid:${EMAIL_LOGO_CID}`;
@@ -31,6 +32,8 @@ export type EmailContent = {
   note?: string;
   /** numbered steps shown before the button, each a link (the button is the last step) */
   steps?: { label: string; detail?: string; url: string }[];
+  /** a code to type, printed large under the button (the invite code) */
+  code?: { label: string; value: string; detail?: string };
 };
 
 export function escapeHtml(s: string): string {
@@ -65,6 +68,17 @@ function stepsHtml(steps: EmailContent["steps"]): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 6px;">${rows}</table>`;
 }
 
+/** Monospace and spaced out, so it reads letter by letter off a phone screen. */
+function codeHtml(code: EmailContent["code"]): string {
+  if (!code) return "";
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;"><tr>
+<td bgcolor="#0b0b10" style="background:#0b0b10;border:1px solid #23232e;border-radius:14px;padding:14px 18px;">
+<div style="font:700 11px/1.4 ${FONT};letter-spacing:1.5px;text-transform:uppercase;color:#8e8c99;">${escapeHtml(code.label)}</div>
+<div style="font:700 26px/1.3 'SFMono-Regular', Menlo, Consolas, 'Courier New', monospace;letter-spacing:4px;color:#f4f2ee;">${escapeHtml(code.value)}</div>
+${code.detail ? `<div style="font:400 13px/1.5 ${FONT};color:#8e8c99;">${escapeHtml(code.detail)}</div>` : ""}
+</td></tr></table>`;
+}
+
 export function renderEmail(c: EmailContent): string {
   const url = safeUrl(c.button.url);
   const paras = c.paragraphs
@@ -93,6 +107,7 @@ ${stepsHtml(c.steps)}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px;"><tr>
 <td bgcolor="#ff3d71" style="border-radius:999px;background:#ff3d71;"><a href="${escapeHtml(url)}" style="display:inline-block;padding:14px 28px;font:700 16px/1 ${FONT};color:#0b0b10;text-decoration:none;border-radius:999px;">${escapeHtml(c.button.label)}</a></td>
 </tr></table>
+${codeHtml(c.code)}
 ${c.after ? `<p style="margin:0 0 16px;font:400 15px/1.55 ${FONT};color:#b9b7c2;">${bold(c.after)}</p>` : ""}
 ${c.note ? `<p style="margin:0 0 12px;font:400 13px/1.5 ${FONT};color:#8e8c99;">${escapeHtml(c.note)}</p>` : ""}
 <p style="margin:0;font:400 12px/1.5 ${FONT};color:#6f6d7a;">Button not working? Paste this into your browser:<br><a href="${escapeHtml(url)}" style="color:#ff7aa0;word-break:break-all;">${escapeHtml(url)}</a></p>
@@ -143,17 +158,40 @@ export const TESTER_GROUP_URL = "https://groups.google.com/g/hookedcue-beta";
 /** Play's opt-in page for the closed test ("Become a tester", then install). */
 export const PLAY_OPT_IN_URL = "https://play.google.com/apps/testing/com.minus.hookedcue";
 
-/** Approved for the beta: the only way in is this link — accounts are invite-only. */
-export function inviteEmail(name: string, url: string): { subject: string; html: string } {
+/** The invite code box both invite emails carry: the link fills it in, the app asks for it. */
+const inviteCodeBox = (code: string): EmailContent["code"] => ({
+  label: "Your invite code",
+  value: formatInviteCode(code),
+  detail: "The button fills it in. In the Android app, type it in the invite code box. It works once, for this email only.",
+});
+
+/**
+ * Approved for the beta: the only way in is this link — accounts are invite-only.
+ * `reissued` is the one-off resend for invites mailed before they carried a
+ * code (access:reissueInviteCodes).
+ */
+export function inviteEmail(
+  name: string,
+  url: string,
+  code: string,
+  opts: { reissued?: boolean } = {},
+): { subject: string; html: string } {
   const first = name.trim().split(/\s+/)[0] || "there";
+  const lead =
+    "Your spot in the HookedCue beta is ready. Three quick steps on your Android phone, signed in to Google with the same Gmail you want to test with:";
   return {
-    subject: "you're in — welcome to the HookedCue beta",
+    subject: opts.reissued ? "your HookedCue invite, now with your code" : "you're in — welcome to the HookedCue beta",
     html: renderEmail({
-      preheader: "Your spot in the beta is ready — three quick steps.",
+      preheader: opts.reissued
+        ? "Creating your account now needs the code in this email."
+        : "Your spot in the beta is ready — three quick steps.",
       heading: `You're in, ${first}.`,
-      paragraphs: [
-        "Your spot in the HookedCue beta is ready. Three quick steps on your Android phone, signed in to Google with the same Gmail you want to test with:",
-      ],
+      paragraphs: opts.reissued
+        ? [
+            "Creating a HookedCue account now needs a one-time invite code, so nobody else can sign up with your address. Yours is in this email; the earlier invite didn't have one, so use this one.",
+            lead,
+          ]
+        : [lead],
       // there's no iPhone app yet, but the browser build is the whole app, so iPhone and computer users only need step 3
       after: "On an iPhone or a computer? Skip steps 1 and 2: tap step 3 and HookedCue runs in your browser at app.hookedcue.com, the whole app, same account.",
       steps: [
@@ -161,13 +199,14 @@ export function inviteEmail(name: string, url: string): { subject: string; html:
         { label: "Install HookedCue from Google Play", detail: "Tap “Become a tester”, then install.", url: PLAY_OPT_IN_URL },
       ],
       button: { label: "3. Create my account", url },
-      note: "This invite is for this email address only. If you weren't expecting it, you can ignore it.",
+      code: inviteCodeBox(code),
+      note: "This invite is for this email address only, so don't pass the code on. If you weren't expecting it, you can ignore it.",
     }),
   };
 }
 
 /** Approved a few days ago but never made an account: one nudge, never more (convex/access.ts remindUnjoined). */
-export function inviteReminderEmail(name: string, url: string): { subject: string; html: string } {
+export function inviteReminderEmail(name: string, url: string, code: string): { subject: string; html: string } {
   const first = name.trim().split(/\s+/)[0] || "there";
   return {
     subject: "your HookedCue invite is still waiting",
@@ -178,6 +217,7 @@ export function inviteReminderEmail(name: string, url: string): { subject: strin
         "You were approved for the HookedCue beta a few days ago, but your account isn't made yet. It takes a minute: every song starts at its hook, so you'll know in seconds if you love it.",
       ],
       button: { label: "Create my account", url },
+      code: inviteCodeBox(code),
       after: "On Android you can also install it from Google Play (the steps are in your first invite email). On an iPhone or a computer, the button above is all you need: it runs in your browser.",
       note: "This is the only reminder we'll send. If you'd rather not join, just ignore it.",
     }),

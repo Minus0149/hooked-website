@@ -3,14 +3,16 @@ import { convex, crossDomain } from "@convex-dev/better-auth/plugins";
 import { betterAuth } from "better-auth/minimal";
 import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
-import { query } from "./_generated/server";
+import { query, type MutationCtx } from "./_generated/server";
 import authConfig from "./auth.config";
 import { smtpSettings } from "./emailConfig";
 import { resetEmail, verifyEmail } from "./emailTemplate";
 import { APIError } from "better-auth/api";
-import { NOT_APPROVED_MESSAGE, approvalRow, signupAllowed } from "./access";
+import { NOT_APPROVED_MESSAGE, approvalRow, claimInvite, inviteCodeVerdict, signupAllowed } from "./access";
 import { DISPOSABLE_MESSAGE, isDisposableEmail } from "./emailIdentity";
 import { AUTH_RATE_LIMIT, authTrustedOrigins } from "./authLimits";
+import { headerIp } from "./callerIp";
+import { INVITE_CODE_MESSAGES, type InviteVerdict } from "./inviteCodes";
 
 const siteUrl = process.env.SITE_URL ?? "https://app.hookedcue.com";
 // falls back to the deployment's own HTTP URL, which Convex provides to every function
@@ -59,6 +61,39 @@ async function approvalStatus(ctx: GenericCtx<DataModel>, email: string): Promis
   return null;
 }
 
+type InviteArgs = { email: string; code?: string; ip: string };
+
+/**
+ * Whether a sign-up holds its invite's one-time code (access.inviteCodeVerdict),
+ * from either context, as approvalStatus. A mutation, not a query: a wrong
+ * code is counted against the inbox and the caller.
+ */
+async function inviteStatus(ctx: GenericCtx<DataModel>, args: InviteArgs): Promise<InviteVerdict> {
+  const c = ctx as unknown as {
+    runMutation?: (fn: typeof internal.access.checkInviteCode, args: InviteArgs) => Promise<InviteVerdict>;
+    db?: MutationCtx["db"];
+  };
+  if (c.runMutation) return c.runMutation(internal.access.checkInviteCode, args);
+  if (c.db) return inviteCodeVerdict(ctx as unknown as MutationCtx, args.email, args.code, args.ip);
+  return "missing";
+}
+
+/** Once the account exists, its invite's codes stop working (access.claimInvite). */
+async function markInviteUsed(ctx: GenericCtx<DataModel>, email: string, userId: string) {
+  const c = ctx as unknown as {
+    runMutation?: (fn: typeof internal.access.claimInviteCode, args: { email: string; userId: string }) => Promise<null>;
+    db?: MutationCtx["db"];
+  };
+  if (c.runMutation) await c.runMutation(internal.access.claimInviteCode, { email, userId });
+  else if (c.db) await claimInvite(ctx as unknown as MutationCtx, email, userId);
+}
+
+/** The invite code a sign-up sent: `inviteCode` in the body, next to email and password. */
+function sentInviteCode(context: { body?: unknown } | null | undefined): string | undefined {
+  const body = context?.body as { inviteCode?: unknown } | undefined;
+  return typeof body?.inviteCode === "string" ? body.inviteCode : undefined;
+}
+
 export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth({
     baseURL: authSiteUrl,
@@ -101,11 +136,15 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
     },
     // Accounts are invite-only: HookedCue is a beta you apply for, and only an
     // approved email may create an account. Everyone else gets the message and
-    // the app points them at the application form.
+    // the app points them at the application form. An approved address isn't
+    // enough on its own: the sign-up must also carry the one-time code from the
+    // invite email (convex/inviteCodes.ts), which only the inbox ever saw.
+    // Every account is made here, so this is every sign-up path: email and
+    // password is the only one (no social providers, no admin plugin).
     databaseHooks: {
       user: {
         create: {
-          before: async (user) => {
+          before: async (user, context) => {
             // a request from a temporary inbox is refused, so this only bites
             // an approval made before the list existed
             if (isDisposableEmail(String(user.email ?? ""))) {
@@ -115,6 +154,19 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
             if (!signupAllowed(status)) {
               throw new APIError("FORBIDDEN", { message: NOT_APPROVED_MESSAGE });
             }
+            const verdict = await inviteStatus(ctx, {
+              email: String(user.email ?? ""),
+              code: sentInviteCode(context),
+              ip: headerIp(context?.request?.headers ?? context?.headers),
+            });
+            // a readable APIError, not a crash: phone builds from before the
+            // code box show this text as it is
+            if (verdict !== "ok") {
+              throw new APIError("FORBIDDEN", { message: INVITE_CODE_MESSAGES[verdict] });
+            }
+          },
+          after: async (user) => {
+            await markInviteUsed(ctx, String(user.email ?? ""), String(user.id));
           },
         },
       },

@@ -45,21 +45,21 @@ describe("HookedCue emails", () => {
   });
 
   it("invites by first name and links to account creation", () => {
-    const { subject, html } = inviteEmail("Ada Lovelace", "https://app.hookedcue.com/profile?signup=1");
+    const { subject, html } = inviteEmail("Ada Lovelace", "https://app.hookedcue.com/profile?signup=1", "K7QM4XRP");
     expect(subject).toContain("HookedCue beta");
     expect(html).toContain("You&#39;re in, Ada."); // the apostrophe is escaped like everything else
     expect(html).toContain('href="https://app.hookedcue.com/profile?signup=1"');
   });
 
   it("tells iPhone and computer users the browser build is the whole app", () => {
-    const { html } = inviteEmail("Ada", "https://app.hookedcue.com/join?email=ada%40gmail.com");
+    const { html } = inviteEmail("Ada", "https://app.hookedcue.com/join?email=ada%40gmail.com", "K7QM4XRP");
     const iphone = html.indexOf("On an iPhone or a computer?");
     expect(iphone).toBeGreaterThan(html.indexOf("Create my account")); // under the button, after the Android steps
     expect(html).toContain("runs in your browser at app.hookedcue.com");
   });
 
   it("walks a tester through group, Play and account in order", () => {
-    const { html } = inviteEmail("Ada", "https://app.hookedcue.com/join?email=ada%40gmail.com");
+    const { html } = inviteEmail("Ada", "https://app.hookedcue.com/join?email=ada%40gmail.com", "K7QM4XRP");
     const group = html.indexOf("https://groups.google.com/g/hookedcue-beta");
     const play = html.indexOf("https://play.google.com/apps/testing/com.minus.hookedcue");
     const join = html.indexOf("https://app.hookedcue.com/join");

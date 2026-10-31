@@ -22,3 +22,24 @@ export function secureToken(bytes = 18): string {
   crypto.getRandomValues(buf);
   return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+/**
+ * `length` characters drawn uniformly from `alphabet` (2 to 256 of them).
+ * Bytes that would bias the pick (an alphabet that doesn't divide 256) are
+ * thrown away and redrawn.
+ */
+export function secureCode(length: number, alphabet: string): string {
+  const n = alphabet.length;
+  const ceiling = 256 - (256 % n);
+  let out = "";
+  const buf = new Uint8Array(Math.max(16, length * 2));
+  while (out.length < length) {
+    crypto.getRandomValues(buf);
+    for (const b of buf) {
+      if (b >= ceiling) continue;
+      out += alphabet[b % n];
+      if (out.length === length) break;
+    }
+  }
+  return out;
+}

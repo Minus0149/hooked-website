@@ -1,11 +1,19 @@
 import { v, ConvexError } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { DISPOSABLE_MESSAGE, emailKey, isDisposableEmail } from "./emailIdentity";
 import { ipRateKey } from "./callerIp";
 import { inviteEmail, inviteReminderEmail } from "./emailTemplate";
+import {
+  cleanInviteCode,
+  inviteCodeHash,
+  inviteCodeMatches,
+  newInviteCode,
+  withNewHash,
+  type InviteVerdict,
+} from "./inviteCodes";
 import { cameByInvite, cleanCode, referralDecision, referralLockedUntil } from "./referralRules";
 import { runtimeFor } from "./runtime";
 import {
@@ -310,9 +318,11 @@ export const list = query({
       return { page: [], isDone: true, continueCursor: "" };
     }
     const opts = { ...paginationOpts, numItems: Math.min(Math.max(1, paginationOpts.numItems), 100) };
-    return status
+    const result = status
       ? await ctx.db.query("accessRequests").withIndex("by_status", (q) => q.eq("status", status)).order("desc").paginate(opts)
       : await ctx.db.query("accessRequests").order("desc").paginate(opts);
+    // the code hashes stay on the server, even for staff
+    return { ...result, page: result.page.map(({ inviteCodeHashes: _hashes, ...row }) => row) };
   },
 });
 
@@ -445,9 +455,10 @@ export function signupAllowed(status: string | null | undefined): boolean {
   return status === "approved";
 }
 
-/** Where an invite sends someone: the app's create-account screen, email filled in. */
-export function joinUrl(site: string, email: string): string {
-  return `${site.replace(/\/+$/, "")}/join?email=${encodeURIComponent(email)}`;
+/** Where an invite sends someone: the app's create-account screen, email and invite code filled in. */
+export function joinUrl(site: string, email: string, code?: string): string {
+  const base = `${site.replace(/\/+$/, "")}/join?email=${encodeURIComponent(email)}`;
+  return code ? `${base}&code=${encodeURIComponent(code)}` : base;
 }
 
 /** Whose invite this is — nobody's if the code is unknown or its owner is suspended. */
@@ -464,10 +475,12 @@ export const REMIND_WITHIN_DAYS = 30;
 
 /** One reminder, only to someone invited 3–30 days ago who still has no account. */
 export function needsReminder(
-  row: { status: string; invited?: boolean; remindedAt?: string; decidedAt?: string },
+  row: { status: string; invited?: boolean; remindedAt?: string; decidedAt?: string; inviteClaimedAt?: string },
   hasProfile: boolean,
   nowMs: number,
 ): boolean {
+  // a used code means the account exists (it may just not be confirmed yet)
+  if (row.inviteClaimedAt) return false;
   if (row.status !== "approved" || !row.invited || row.remindedAt || hasProfile || !row.decidedAt) return false;
   const age = (nowMs - Date.parse(row.decidedAt)) / 86_400_000;
   return age >= REMIND_AFTER_DAYS && age <= REMIND_WITHIN_DAYS;
@@ -491,7 +504,9 @@ export const remindUnjoined = internalMutation({
         .withIndex("by_email", (q) => q.eq("email", row.email))
         .first();
       if (!needsReminder(row, profile !== null, now)) continue;
-      const mail = inviteReminderEmail(row.name, joinUrl(site, row.email));
+      // only the hash of the first email's code is kept, so the reminder carries a new one (both work)
+      const code = await issueInviteCode(ctx, row);
+      const mail = inviteReminderEmail(row.name, joinUrl(site, row.email, code), code);
       await ctx.scheduler.runAfter(0, internal.email.send, { to: row.email, subject: mail.subject, html: mail.html });
       await ctx.db.patch(row._id, { remindedAt: new Date(now).toISOString() });
       sent++;
@@ -543,7 +558,8 @@ async function sendInvite(ctx: MutationCtx, id: Id<"accessRequests">) {
   const row = await ctx.db.get(id);
   if (!row || row.status !== "approved" || row.invited) return;
   const site = process.env.SITE_URL ?? "https://app.hookedcue.com";
-  const mail = inviteEmail(row.name, joinUrl(site, row.email));
+  const code = await issueInviteCode(ctx, row);
+  const mail = inviteEmail(row.name, joinUrl(site, row.email, code), code);
   await ctx.scheduler.runAfter(0, internal.email.send, { to: row.email, subject: mail.subject, html: mail.html });
   await ctx.db.patch(id, { invited: true });
 }
@@ -610,4 +626,168 @@ async function applyReferral(
   });
   await sendInvite(ctx, row._id);
   return { status: "approved", duplicate: result.duplicate, referred: true };
+}
+
+/*
+ * One-time invite codes (convex/inviteCodes.ts). An approved address used to
+ * be enough to create the account, so whoever typed an invited email first
+ * kept their own password, and the real owner's click on the confirmation
+ * link made that account usable. Sign-up now has to present a code that was
+ * only ever mailed to the inbox (auth.ts databaseHooks.user.create).
+ */
+
+/** Hashes are peppered with the auth secret, so the table alone can't be searched for codes. */
+const codePepper = () => process.env.BETTER_AUTH_SECRET ?? "";
+
+/** Mint a code for this request and keep only its hash. Returns the code, for the email. */
+async function issueInviteCode(ctx: MutationCtx, row: Doc<"accessRequests">): Promise<string> {
+  const code = newInviteCode();
+  const hash = await inviteCodeHash(row._id, code, codePepper());
+  await ctx.db.patch(row._id, {
+    inviteCodeHashes: withNewHash(row.inviteCodeHashes, hash),
+    inviteCodeIssuedAt: new Date().toISOString(),
+  });
+  return code;
+}
+
+/** Wrong codes allowed per inbox and per caller in an hour, before even the right one is refused. */
+export const INVITE_CODE_TRIES = { email: 10, ip: 30, windowMs: 60 * 60_000 } as const;
+
+/**
+ * Whether this sign-up may use the invite. A typed code is counted against the
+ * inbox and the caller before it is compared, so guessing costs the guesser;
+ * the limit is caught rather than thrown so the count it wrote is kept.
+ * Whether the address is approved at all is auth.ts's check, made first.
+ */
+export async function inviteCodeVerdict(
+  ctx: MutationCtx,
+  rawEmail: string,
+  rawCode: string | undefined,
+  ip: string,
+): Promise<InviteVerdict> {
+  const code = cleanInviteCode(rawCode);
+  if (!code) return "missing";
+  const email = cleanText(rawEmail, MAX.email).toLowerCase();
+  try {
+    await enforceRateLimit(ctx, `invite-code:ip:${ipRateKey(ip)}`, INVITE_CODE_TRIES.ip, INVITE_CODE_TRIES.windowMs);
+    await enforceRateLimit(ctx, `invite-code:email:${emailKey(email) || "anon"}`, INVITE_CODE_TRIES.email, INVITE_CODE_TRIES.windowMs);
+  } catch {
+    return "limited";
+  }
+  // the row the sign-up gate itself reads (approvalRow), so the code is the invite's
+  const row = await approvalRow(ctx, email);
+  if (!row || row.status !== "approved") return "wrong";
+  if (!(await inviteCodeMatches(row._id, code, row.inviteCodeHashes ?? [], codePepper()))) return "wrong";
+  return row.inviteClaimedAt ? "used" : "ok";
+}
+
+/** Asked by the sign-up hook in auth.ts, which runs in the HTTP action. */
+export const checkInviteCode = internalMutation({
+  args: { email: v.string(), code: v.optional(v.string()), ip: v.string() },
+  handler: async (ctx, { email, code, ip }) => inviteCodeVerdict(ctx, email, code, ip),
+});
+
+/** The account was created with the code: no code on this request works again. */
+export async function claimInvite(ctx: MutationCtx, rawEmail: string, userId: string) {
+  const row = await approvalRow(ctx, rawEmail);
+  if (!row || row.inviteClaimedAt) return;
+  await ctx.db.patch(row._id, { inviteClaimedAt: new Date().toISOString(), inviteClaimedBy: userId });
+}
+
+export const claimInviteCode = internalMutation({
+  args: { email: v.string(), userId: v.string() },
+  handler: async (ctx, { email, userId }) => claimInvite(ctx, email, userId),
+});
+
+/** Invited before codes existed, and not in yet: the one-off reissue below writes to them. */
+export function needsReissue(row: {
+  status: string;
+  invited?: boolean;
+  inviteCodeHashes?: string[];
+  inviteReissuedAt?: string;
+  inviteClaimedAt?: string;
+}): boolean {
+  return (
+    row.status === "approved" &&
+    row.invited === true &&
+    !row.inviteCodeHashes?.length &&
+    !row.inviteReissuedAt &&
+    !row.inviteClaimedAt
+  );
+}
+
+/**
+ * One-off, for people whose invite email went out before it carried a code:
+ * they can't create an account until they have one. Not run automatically;
+ * after deploying, look first, then send:
+ *
+ *   npx convex run --prod access:reissueInviteCodes '{"dryRun":true}'
+ *   npx convex run --prod access:reissueInviteCodes '{}'
+ *
+ * Each approved, invited, not-yet-joined request gets a code and one fresh
+ * invite email (inviteReissuedAt keeps it to one). An unconfirmed sign-in
+ * already sitting on the exact address is removed first: it holds no profile
+ * and no data, and it is either the owner's own abandoned attempt (they sign
+ * up again with the code) or someone who typed their address first, whose
+ * account the owner's next click on a confirmation link would have handed
+ * over. A confirmed sign-in with no profile is left alone and listed, for a
+ * person to look at. Approved rows that were never emailed are listed too:
+ * approving them again from the admin queue sends the invite, code included.
+ */
+export const reissueInviteCodes = internalMutation({
+  args: { dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, { dryRun }) => {
+    const site = process.env.SITE_URL ?? "https://app.hookedcue.com";
+    const approved = await ctx.db
+      .query("accessRequests")
+      .withIndex("by_status", (q) => q.eq("status", "approved"))
+      .collect();
+    const mailed: string[] = [];
+    const removedUnconfirmed: string[] = [];
+    const confirmedNoProfile: string[] = [];
+    const neverInvited: string[] = [];
+    for (const row of approved) {
+      if (!needsReissue(row)) {
+        if (!row.invited && !row.inviteCodeHashes?.length) neverInvited.push(row.email);
+        continue;
+      }
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_email", (q) => q.eq("email", row.email))
+        .first();
+      if (profile) continue;
+      const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+        model: "user",
+        where: [{ field: "email", value: row.email }],
+      })) as { _id: string; emailVerified?: boolean } | null;
+      if (user?.emailVerified) {
+        confirmedNoProfile.push(row.email);
+        continue;
+      }
+      if (user) {
+        removedUnconfirmed.push(row.email);
+        if (!dryRun) await removeSignIn(ctx, String(user._id));
+      }
+      mailed.push(row.email);
+      if (dryRun) continue;
+      const code = await issueInviteCode(ctx, row);
+      const mail = inviteEmail(row.name, joinUrl(site, row.email, code), code, { reissued: true });
+      await ctx.scheduler.runAfter(0, internal.email.send, { to: row.email, subject: mail.subject, html: mail.html });
+      await ctx.db.patch(row._id, { inviteReissuedAt: new Date().toISOString() });
+    }
+    return { dryRun: dryRun === true, mailed, removedUnconfirmed, confirmedNoProfile, neverInvited: neverInvited.slice(0, 200) };
+  },
+});
+
+/** A sign-in with no profile behind it: its sessions, its password and the user row (as admin.deleteUserData). */
+async function removeSignIn(ctx: MutationCtx, userId: string) {
+  for (const model of ["session", "account"] as const) {
+    await ctx.runMutation(components.betterAuth.adapter.deleteMany, {
+      input: { model, where: [{ field: "userId", value: userId }] },
+      paginationOpts: { numItems: 500, cursor: null },
+    });
+  }
+  await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+    input: { model: "user", where: [{ field: "_id", value: userId }] },
+  });
 }

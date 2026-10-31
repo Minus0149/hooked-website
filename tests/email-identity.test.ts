@@ -95,7 +95,7 @@ describe("the access queue dedupes on the key", () => {
   });
   it("sign-up refuses a temporary inbox even with an old approval", () => {
     const auth = src("auth.ts");
-    const before = auth.slice(auth.indexOf("before: async (user)"));
+    const before = auth.slice(auth.indexOf("before: async (user"));
     expect(before.indexOf("isDisposableEmail")).toBeLessThan(before.indexOf("approvalStatus("));
   });
   it("both HTTP routes answer a temporary inbox with the message, not a generic failure", () => {

@@ -161,7 +161,7 @@ const toLocal = (t: ServerTrackWithHooks): Track => ({
   accent: t.accent,
 });
 
-function Shell({ joinEmail }: { joinEmail?: string }) {
+function Shell({ joinEmail, joinCode }: { joinEmail?: string; joinCode?: string }) {
   const {
     state,
     swipe,
@@ -1404,6 +1404,7 @@ function Shell({ joinEmail }: { joinEmail?: string }) {
               isAdmin={staff.isAdmin}
               onBack={() => setViewWithHistory("home")}
               joinEmail={joinEmail}
+              joinCode={joinCode}
             />
           )}
           {(view === "settings" || view.startsWith("settings:")) && (
@@ -1685,7 +1686,10 @@ export default function App() {
 
   return (
     <StoreProvider>
-      <Shell joinEmail={route.kind === "join" ? route.email : undefined} />
+      <Shell
+        joinEmail={route.kind === "join" ? route.email : undefined}
+        joinCode={route.kind === "join" ? route.code : undefined}
+      />
     </StoreProvider>
   );
 }

@@ -5,6 +5,7 @@ import {
   AUTH_COPY,
   authProblem,
   friendlyAuthError,
+  inviteCodeProblem,
   isNotApproved,
   type AuthMode,
 } from "../lib/authForms";
@@ -16,21 +17,27 @@ import { useT } from "../lib/lang";
  * HookedCue is a beta you apply for, so this leads with signing in. Creating
  * an account is for invited emails only (the server refuses anyone else and
  * the form turns that refusal into an Apply button), reached from the invite
- * link (/join) or the small "Got an invite?" link.
+ * link (/join) or the small "Got an invite?" link. Creating one also needs the
+ * one-time code from the invite email: the link brings it (/join?code=…), and
+ * the code box takes it typed by hand.
  */
 export function AuthForm({
   initialMode = "signin",
   initialEmail = "",
+  initialCode = "",
   onApply,
 }: {
   initialMode?: AuthMode;
   initialEmail?: string;
+  /** the invite code from the invite link */
+  initialCode?: string;
   /** open the beta application; without it the Apply link goes to the profile screen */
   onApply?: () => void;
 }) {
   const tt = useT();
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState(initialEmail);
+  const [inviteCode, setInviteCode] = useState(initialCode);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +57,9 @@ export function AuthForm({
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy) return;
-    const problem = authProblem(mode, email, password);
+    const problem =
+      authProblem(mode, email, password) ??
+      (mode === "join" ? inviteCodeProblem(inviteCode) : null);
     if (problem) {
       setError(problem);
       return;
@@ -70,6 +79,9 @@ export function AuthForm({
               name: email.trim().split("@")[0],
               // the confirmation link lands back in the app
               callbackURL: `${window.location.origin}/`,
+              // checked by the server's sign-up hook (convex/auth.ts). Better
+              // Auth passes extra body fields through; its types don't list them.
+              ...({ inviteCode: inviteCode.trim() } as object),
             })
           : await authClient.signIn.email({ email: email.trim(), password });
     } catch (err) {
@@ -141,6 +153,28 @@ export function AuthForm({
           onChange={(e) => setEmail(e.target.value)}
         />
       </label>
+
+      {mode === "join" && (
+        <label className="auth-field">
+          <span className="auth-label">{tt(AUTH_COPY.codeLabel)}</span>
+          <input
+            className="auth-input auth-code-input"
+            type="text"
+            placeholder={tt(AUTH_COPY.codePlaceholder)}
+            value={inviteCode}
+            autoComplete="one-time-code"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={20}
+            aria-describedby="auth-code-hint"
+            onChange={(e) => setInviteCode(e.target.value)}
+          />
+          <span id="auth-code-hint" className="auth-hint">
+            {tt(AUTH_COPY.codeHint)}
+          </span>
+        </label>
+      )}
 
       <div className="auth-field">
         <span className="auth-label-row">

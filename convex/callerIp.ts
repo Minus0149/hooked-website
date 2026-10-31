@@ -39,3 +39,18 @@ export function ipRateKey(ip: string): string {
   if (groups.length !== 8 || groups.some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return raw;
   return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/64`;
 }
+
+/**
+ * The caller's IP from request headers. Cloudflare fronts *.convex.site and
+ * sets cf-connecting-ip itself (a request that brings its own is refused), so
+ * that one is trustworthy; the others are fallbacks for local runs.
+ */
+export function headerIp(headers: Pick<Headers, "get"> | null | undefined): string {
+  const cf = headers?.get("cf-connecting-ip");
+  if (cf) return cf.trim().slice(0, 64);
+  const real = headers?.get("x-real-ip");
+  if (real) return real.trim().slice(0, 64);
+  const fwd = headers?.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim().slice(0, 64);
+  return "unknown";
+}
