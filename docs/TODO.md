@@ -15,6 +15,13 @@ Nothing yet records:
 
 `recommend.rebuild` runs every 6 h but publishes nothing until at least 3 people have reacted to the same songs. Production had 14 swipes from 2 listeners on 28 Oct.
 
+## Security pass 3, 31 Oct 2026 (local commits, nothing deployed)
+- **Deploy together:** `npx convex deploy` and the web app in one go. `access.list` and `contentReports.listOpen` are paged now, so an old admin dashboard against the new backend (or the reverse) shows an error on those two tabs until both are out. Schema changes are additive (optional `accessRequests.emailKey`, `imports.claimedAt`; new `blocks` table; indexes `by_emailKey`, `promotionOrders.by_code_status`).
+- **Then run once (prod):** `npx convex run --prod access:backfillEmailKeys '{}'` (lookups fall back to the exact address until it has) and `npx convex run --prod creators:scrubMediaUrls '{}'` (blanks artwork/preview links on hosts outside convex/mediaHosts.ts; a track left with no audio is hidden).
+- **Landing:** deploy after Convex (the disposable-email 422 comes from Convex /beta). Every landing page now renders per request (nonce CSP).
+- **Open, needs a decision:** someone who signs up first with an approved address that hasn't joined yet keeps their password if the real owner clicks the confirmation email. Fix needs an invite code in the invite email that sign-up must present (web and phone forms, then a Play build).
+- **Phone app:** a Block action and the blocked list, and the owner's "remove member", are web only so far.
+
 ## Audit 28 Oct 2026 (web, local commits, nothing deployed)
 - **Deploy, in this order:** `npx convex deploy -y` (prod: ConvexError refusals, social fixes, auth rate limits; schema unchanged), then the web app (Dokploy). Until both ship, prod still redacts every refusal to "Server Error", so a new account that hasn't confirmed its email sees the app with nothing syncing instead of "check your inbox".
 - Caddyfile now sends `X-Robots-Tag: noindex` on app screens; only `/` is indexable.
