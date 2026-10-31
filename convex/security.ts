@@ -3,6 +3,7 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authComponent } from "./auth";
 import { PERMISSIONS, trackFields } from "./schema";
+import { safeMediaUrl } from "./mediaHosts";
 
 const trackValidator = v.object(trackFields);
 
@@ -141,7 +142,10 @@ function cleanHttpsUrl(value: string, maxLength: number, field: string) {
     throw new ConvexError(`${field} must be a valid URL`);
   }
   if (url.protocol !== "https:") throw new ConvexError(`${field} must use HTTPS`);
-  return url.toString();
+  // only the hosts the catalogue uses (mediaHosts.ts): every listener's device loads it
+  const safe = safeMediaUrl(url.toString(), process.env.CONVEX_CLOUD_URL);
+  if (!safe) throw new ConvexError(`${field} must be on Apple's, Deezer's or HookedCue's own servers`);
+  return safe;
 }
 
 export function cleanTrack(track: TrackInput): TrackInput {

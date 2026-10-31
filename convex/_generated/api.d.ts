@@ -45,6 +45,7 @@ import type * as insights from "../insights.js";
 import type * as insightsRules from "../insightsRules.js";
 import type * as library from "../library.js";
 import type * as matching from "../matching.js";
+import type * as mediaHosts from "../mediaHosts.js";
 import type * as moods from "../moods.js";
 import type * as promotionRules from "../promotionRules.js";
 import type * as promotions from "../promotions.js";
@@ -109,6 +110,7 @@ declare const fullApi: ApiFromModules<{
   insightsRules: typeof insightsRules;
   library: typeof library;
   matching: typeof matching;
+  mediaHosts: typeof mediaHosts;
   moods: typeof moods;
   promotionRules: typeof promotionRules;
   promotions: typeof promotions;

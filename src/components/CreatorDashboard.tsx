@@ -234,7 +234,7 @@ function CreatorWorkspace({ tracks, curator }: { tracks: Track[]; curator: boole
             onChange={(e) => setForm({ ...form, artist: e.target.value })} required maxLength={60} />
           <input className="auth-input" placeholder="genre" value={form.genre}
             onChange={(e) => setForm({ ...form, genre: e.target.value })} maxLength={40} />
-          <input className="auth-input" placeholder="artwork url (https)" value={form.artwork}
+          <input className="auth-input" placeholder="artwork: Apple Music image link (optional)" value={form.artwork}
             onChange={(e) => setForm({ ...form, artwork: e.target.value })} maxLength={500} />
           <label className="creator-rights">
             <input type="checkbox" checked={form.rights}

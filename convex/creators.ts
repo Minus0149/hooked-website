@@ -15,7 +15,7 @@ import {
   keepJoined,
   mergeById,
 } from "./creatorRules";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import {
   cleanAccent,
   cleanText,
@@ -27,6 +27,7 @@ import {
   requireUser,
 } from "./security";
 import { touchCatalog } from "./catalog";
+import { mediaHostMessage, safeMediaUrl } from "./mediaHosts";
 
 /**
  * The creator side: artists publish their own music and mark the hooks in it.
@@ -411,7 +412,15 @@ export const createTrack = mutation({
     const artist = cleanText(args.artist, MAX.artistName);
     if (!title || !artist) throw new ConvexError("A title and an artist, at minimum");
 
-    const https = (url: string) => (/^https:\/\//i.test(url) ? cleanText(url, 500) : "");
+    // blank, or a host on the list (mediaHosts.ts): listeners' devices and the
+    // landing's share images load this, so it can't point anywhere
+    const media = (raw: string, field: "Artwork" | "Preview") => {
+      const url = cleanText(raw, 500);
+      if (!url) return "";
+      const safe = safeMediaUrl(url, process.env.CONVEX_CLOUD_URL);
+      if (!safe) throw new ConvexError(mediaHostMessage(field));
+      return safe;
+    };
     const trackId = `own:${user.id}:${Date.now().toString(36)}`;
 
     await ctx.db.insert("tracks", {
@@ -419,8 +428,8 @@ export const createTrack = mutation({
       title,
       artist,
       album: cleanText(args.album ?? "", MAX.album),
-      artwork: https(args.artwork),
-      previewUrl: https(args.previewUrl ?? ""),
+      artwork: media(args.artwork, "Artwork"),
+      previewUrl: media(args.previewUrl ?? "", "Preview"),
       durationMs: Math.max(0, Math.min(args.durationMs ?? 0, 20 * 60_000)),
       genre: cleanText(args.genre, MAX.genre),
       accent: cleanAccent(args.accent ?? "#ff3d71"),
@@ -630,5 +639,41 @@ export const grant = internalMutation({
       decidedBy: "operator",
     });
     return { email: target, created: true };
+  },
+});
+
+/**
+ * One-off: blank artwork and preview links already stored on a host outside
+ * mediaHosts.ts (creator rows written before the rule), on tracks and on feed
+ * posts that copied them. A track left with no audio at all is hidden. Not run
+ * automatically; after deploying:
+ *
+ *   npx convex run --prod creators:scrubMediaUrls '{}'
+ *
+ * It patches a page at a time and schedules the next page itself.
+ */
+export const scrubMediaUrls = internalMutation({
+  args: { table: v.optional(v.union(v.literal("tracks"), v.literal("posts"))), cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, { table = "tracks", cursor }) => {
+    const own = process.env.CONVEX_CLOUD_URL;
+    const bad = (url: string) => url !== "" && safeMediaUrl(url, own) === null;
+    const page = await ctx.db.query(table).paginate({ numItems: 200, cursor: cursor ?? null });
+    let patched = 0;
+    for (const row of page.page) {
+      const patch: { artwork?: string; previewUrl?: string; hidden?: boolean } = {};
+      if (bad(row.artwork)) patch.artwork = "";
+      if (bad(row.previewUrl)) patch.previewUrl = "";
+      if (Object.keys(patch).length === 0) continue;
+      if (table === "tracks" && patch.previewUrl === "" && !("audioStorageId" in row && row.audioStorageId)) patch.hidden = true;
+      await ctx.db.patch(row._id, patch);
+      patched++;
+    }
+    if (table === "tracks" && patched > 0) await touchCatalog(ctx, { urgent: true });
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.creators.scrubMediaUrls, { table, cursor: page.continueCursor });
+    } else if (table === "tracks") {
+      await ctx.scheduler.runAfter(0, internal.creators.scrubMediaUrls, { table: "posts", cursor: null });
+    }
+    return { table, patched, done: page.isDone };
   },
 });
