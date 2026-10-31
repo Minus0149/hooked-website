@@ -508,7 +508,15 @@ export default defineSchema({
   // One table on purpose — the admin reviews a single queue, and approval here
   // is what lets an account be created at all (see library.ensureProfile).
   accessRequests: defineTable({
+    /** as typed (lowercased): what invites are mailed to */
     email: v.string(),
+    /**
+     * Who the address belongs to (convex/emailIdentity.ts emailKey): Gmail's
+     * dots and every "+tag" folded away. Dedupe and caps look up by this.
+     * Absent on rows from before 31 Oct 2026 until access:backfillEmailKeys runs;
+     * lookups fall back to `email` for those.
+     */
+    emailKey: v.optional(v.string()),
     name: v.string(),
     source: v.union(v.literal("app"), v.literal("landing")),
     status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
@@ -533,6 +541,7 @@ export default defineSchema({
     referralCode: v.optional(v.string()),
   })
     .index("by_email", ["email"])
+    .index("by_emailKey", ["emailKey"])
     .index("by_status", ["status"])
     .index("by_source", ["source"])
     .index("by_referredBy", ["referredBy"]),

@@ -1,5 +1,7 @@
 import { httpRouter } from "convex/server";
+import { ConvexError } from "convex/values";
 import { applyOriginAllowed } from "./applyOrigin";
+import { DISPOSABLE_MESSAGE } from "./emailIdentity";
 import { ingestIp } from "./callerIp";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -42,6 +44,12 @@ function safeEqual(a: string, b: string): boolean {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
+}
+
+/** The words a mutation refused with: a ConvexError's own string, else the message. */
+export function refusalText(error: unknown): string {
+  if (error instanceof ConvexError && typeof error.data === "string") return error.data;
+  return error instanceof Error ? error.message : "";
 }
 
 const str = (value: unknown) => (typeof value === "string" ? value : "");
@@ -123,8 +131,11 @@ http.route({
       });
       return Response.json({ ok: true, ...result }, { headers });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "could not submit";
+      const message = refusalText(error) || "could not submit";
       const rateLimited = message.includes("Too many requests");
+      if (message === DISPOSABLE_MESSAGE) {
+        return Response.json({ ok: false, error: "disposable", message }, { status: 422, headers });
+      }
       return Response.json(
         { ok: false, message: rateLimited ? "too many tries. give it a bit." : message },
         { status: rateLimited ? 429 : 400, headers },
@@ -184,9 +195,13 @@ http.route({
       });
     } catch (error) {
       console.error("[access] landing ingest failed:", error);
-      const message = error instanceof Error ? error.message : "";
+      const message = refusalText(error);
       if (message.includes("Too many requests")) {
         return new Response("rate limited", { status: 429 });
+      }
+      // the landing shows this one to the person (it's their address, not a bug)
+      if (message === DISPOSABLE_MESSAGE) {
+        return Response.json({ ok: false, error: "disposable", message }, { status: 422 });
       }
       return new Response("invalid signup", { status: 422 });
     }

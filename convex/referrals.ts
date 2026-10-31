@@ -2,7 +2,8 @@ import { ConvexError } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { runtimeFor } from "./runtime";
 import { getProfile, requirePermission, requireUser } from "./security";
-import { inviteLink, isFoundingListener, makeCode } from "./referralRules";
+import { findRequest } from "./access";
+import { cameByInvite, inviteLink, isFoundingListener, makeCode, referralLockedUntil } from "./referralRules";
 import { secureRandom } from "./secureRandom";
 import { publicName } from "./socialRules";
 
@@ -60,8 +61,11 @@ export const mine = query({
     people.sort((a, b) => b.at.localeCompare(a.at));
     const joined = people.filter((p) => p.joined).length;
     const cap = runtime.referralCap;
+    // someone let in on a friend's invite waits a week for their own (referralRules.ts)
+    const lockedUntil = referralLockedUntil(profile._creationTime, cameByInvite(await findRequest(ctx, profile.email)), Date.now());
     return {
       enabled: cap > 0,
+      lockedUntil,
       code: code?.code ?? null,
       link: code ? inviteLink(LANDING(), code.code) : null,
       cap,

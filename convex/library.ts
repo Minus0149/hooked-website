@@ -21,6 +21,7 @@ import {
 import { touchCatalog } from "./catalog";
 import { normalizeUsername, usernameProblem } from "../src/lib/username";
 import { coerceAfterHook, publicName } from "./socialRules";
+import { approvalRow } from "./access";
 
 export type ProfileVerdict =
   | "create"
@@ -65,12 +66,8 @@ export const ensureProfile = mutation({
     if (existing) return existing;
 
     const email = (user.email ?? "").toLowerCase();
-    const request = email
-      ? await ctx.db
-          .query("accessRequests")
-          .withIndex("by_email", (q) => q.eq("email", email))
-          .unique()
-      : null;
+    // exact address first, then the same inbox spelled another way (emailIdentity.ts)
+    const request = email ? await approvalRow(ctx, email) : null;
     const verdict = profileGate(request?.status ?? null, user.emailVerified);
     // the client turns these into the pending / rejected / apply / inbox screens
     if (verdict !== "create") throw new ConvexError(verdict);

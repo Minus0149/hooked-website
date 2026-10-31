@@ -55,6 +55,19 @@ export function InviteCard() {
 
   const full = data.remaining === 0;
 
+  // let in on a friend's invite: their own invites open after a week (convex/referralRules.ts)
+  if (data.lockedUntil) {
+    const day = new Date(data.lockedUntil).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    return (
+      <section className="invite-card" aria-labelledby="invite-title">
+        <div className="invite-head">
+          <h3 id="invite-title">invite friends</h3>
+        </div>
+        <p className="invite-copy">{`Your invites open on ${day}, a week after you joined. Friends can still apply now and join the queue.`}</p>
+      </section>
+    );
+  }
+
   return (
     <section className="invite-card" aria-labelledby="invite-title">
       <div className="invite-head">

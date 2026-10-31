@@ -8,7 +8,16 @@
  * Everything past that joins the normal queue like anyone else.
  */
 
+import { sameEmail } from "./emailIdentity";
+
 export const REFERRAL_DEFAULT_CAP = 3;
+/**
+ * Someone let in through a friend's invite gets no invites of their own until
+ * their account is this old. Without it one invite fanned out: each friend
+ * approved on the spot could approve three more at once, and so on, so a
+ * single code (or one person with many inboxes) skipped the whole waitlist.
+ */
+export const REFERRED_INVITE_WAIT_DAYS = 7;
 /** Successful invites (friends who actually made an account) that earn the badge. */
 export const FOUNDING_LISTENER_AT = 2;
 
@@ -40,7 +49,23 @@ export type ReferralInput = {
   existingStatus: "pending" | "approved" | "rejected" | null;
   /** approvals this inviter has already used */
   used: number;
+  /** when the inviter's own invites unlock (referralLockedUntil); absent or null = already open */
+  inviterLockedUntil?: number | null;
+  now?: number;
 };
+
+/** A request approved through someone's invite, rather than by the queue or an operator. */
+export function cameByInvite(row: { referredBy?: string | null; decidedBy?: string | null } | null): boolean {
+  if (!row) return false;
+  return !!row.referredBy || (row.decidedBy ?? "").startsWith("referral:");
+}
+
+/** When an account's own invites start working, or null if they already do. */
+export function referralLockedUntil(profileCreatedAt: number, cameIn: boolean, now: number): number | null {
+  if (!cameIn) return null;
+  const until = profileCreatedAt + REFERRED_INVITE_WAIT_DAYS * 86_400_000;
+  return now < until ? until : null;
+}
 
 /**
  * approve — skip the waitlist, counts against the inviter
@@ -48,7 +73,9 @@ export type ReferralInput = {
  */
 export function referralDecision(r: ReferralInput): "approve" | "ignore" {
   if (r.cap <= 0 || !r.inviter) return "ignore";
-  if (r.applicantEmail.trim().toLowerCase() === r.inviter.email.trim().toLowerCase()) return "ignore";
+  // the same inbox under another spelling (j.doe+1@gmail.com) is still yourself
+  if (sameEmail(r.applicantEmail, r.inviter.email)) return "ignore";
+  if (r.inviterLockedUntil && (r.now ?? Date.now()) < r.inviterLockedUntil) return "ignore";
   // a decision already made stands: an invite never un-rejects anyone, and an
   // approved person doesn't need (or use up) an invite
   if (r.existingStatus === "rejected" || r.existingStatus === "approved") return "ignore";

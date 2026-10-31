@@ -8,7 +8,8 @@ import authConfig from "./auth.config";
 import { smtpSettings } from "./emailConfig";
 import { resetEmail, verifyEmail } from "./emailTemplate";
 import { APIError } from "better-auth/api";
-import { NOT_APPROVED_MESSAGE, signupAllowed } from "./access";
+import { NOT_APPROVED_MESSAGE, approvalRow, signupAllowed } from "./access";
+import { DISPOSABLE_MESSAGE, isDisposableEmail } from "./emailIdentity";
 import { AUTH_RATE_LIMIT, authTrustedOrigins } from "./authLimits";
 
 const siteUrl = process.env.SITE_URL ?? "https://app.hookedcue.com";
@@ -50,16 +51,11 @@ async function sendEmail(
 async function approvalStatus(ctx: GenericCtx<DataModel>, email: string): Promise<string | null> {
   const c = ctx as unknown as {
     runQuery?: (fn: typeof internal.access.approvalFor, args: { email: string }) => Promise<string | null>;
-    db?: { query: (t: "accessRequests") => { withIndex: (i: "by_email", f: (q: { eq: (k: "email", v: string) => unknown }) => unknown) => { unique: () => Promise<{ status: string } | null> } } };
+    db?: Parameters<typeof approvalRow>[0]["db"];
   };
   if (c.runQuery) return c.runQuery(internal.access.approvalFor, { email });
-  if (c.db) {
-    const row = await c.db
-      .query("accessRequests")
-      .withIndex("by_email", (q) => q.eq("email", email.trim().toLowerCase()))
-      .unique();
-    return row?.status ?? null;
-  }
+  // the same lookup approvalFor makes: exact address, then the same inbox
+  if (c.db) return (await approvalRow({ db: c.db }, email))?.status ?? null;
   return null;
 }
 
@@ -110,6 +106,11 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
       user: {
         create: {
           before: async (user) => {
+            // a request from a temporary inbox is refused, so this only bites
+            // an approval made before the list existed
+            if (isDisposableEmail(String(user.email ?? ""))) {
+              throw new APIError("FORBIDDEN", { message: DISPOSABLE_MESSAGE });
+            }
             const status = await approvalStatus(ctx, String(user.email ?? ""));
             if (!signupAllowed(status)) {
               throw new APIError("FORBIDDEN", { message: NOT_APPROVED_MESSAGE });

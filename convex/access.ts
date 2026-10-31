@@ -1,9 +1,10 @@
 import { v, ConvexError } from "convex/values";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
+import { DISPOSABLE_MESSAGE, emailKey, isDisposableEmail } from "./emailIdentity";
 import { inviteEmail, inviteReminderEmail } from "./emailTemplate";
-import { cleanCode, referralDecision } from "./referralRules";
+import { cameByInvite, cleanCode, referralDecision, referralLockedUntil } from "./referralRules";
 import { runtimeFor } from "./runtime";
 import {
   cleanText,
@@ -118,20 +119,56 @@ export function detailsPatch(
   return patch;
 }
 
+type RequestDb = { db: Pick<MutationCtx["db"], "query"> };
+
+/**
+ * The access request for whoever owns this address: by its emailKey first, so
+ * j.doe+x@gmail.com finds jdoe@gmail.com's row, then by the exact address for
+ * rows written before emailKey existed (until access:backfillEmailKeys has run).
+ */
+export async function findRequest(ctx: RequestDb, rawEmail: string): Promise<Doc<"accessRequests"> | null> {
+  const email = rawEmail.trim().toLowerCase();
+  if (!email) return null;
+  const byKey = await ctx.db
+    .query("accessRequests")
+    .withIndex("by_emailKey", (q) => q.eq("emailKey", emailKey(email)))
+    .first();
+  if (byKey) return byKey;
+  return await ctx.db
+    .query("accessRequests")
+    .withIndex("by_email", (q) => q.eq("email", email))
+    .first();
+}
+
+/**
+ * The sign-up gate's lookup: the exact address first (what the person was
+ * approved as), then the same inbox under another spelling. Signing up still
+ * means confirming that address, so the fallback only spares someone approved
+ * as J.Doe@gmail.com from being told jdoe@gmail.com isn't invited.
+ */
+export async function approvalRow(ctx: RequestDb, rawEmail: string): Promise<Doc<"accessRequests"> | null> {
+  const email = rawEmail.trim().toLowerCase();
+  if (!email) return null;
+  const exact = await ctx.db
+    .query("accessRequests")
+    .withIndex("by_email", (q) => q.eq("email", email))
+    .first();
+  return exact ?? (await findRequest(ctx, email));
+}
+
 /** Shared by the public mutation and the landing webhook, so both validate identically. */
 async function upsertRequest(
-  ctx: { db: any },
+  ctx: MutationCtx,
   input: Incoming,
 ): Promise<{ status: "pending" | "approved" | "rejected"; duplicate: boolean }> {
   const email = cleanText(input.email, MAX.email).toLowerCase();
   if (!EMAIL_RE.test(email)) throw new ConvexError("A real email address is required");
+  // a throwaway inbox holds an invite nobody keeps, and costs nothing to repeat
+  if (isDisposableEmail(email)) throw new ConvexError(DISPOSABLE_MESSAGE);
   const name = nameFor(input.name, email);
   const details = detailFields(input);
 
-  const existing = await ctx.db
-    .query("accessRequests")
-    .withIndex("by_email", (q: any) => q.eq("email", email))
-    .unique();
+  const existing = await findRequest(ctx, email);
 
   // Never let a re-submission reset a decision — someone who's been rejected
   // can't clear it by filling the form again. A pending one may fill in the
@@ -144,6 +181,7 @@ async function upsertRequest(
 
   await ctx.db.insert("accessRequests", {
     email,
+    emailKey: emailKey(email),
     name,
     source: input.source,
     status: "pending" as const,
@@ -179,7 +217,8 @@ export const submit = internalMutation({
   handler: async (ctx, { ip, ref, ...args }) => {
     // per-IP first: the ceiling that actually costs an attacker something
     await enforceRateLimit(ctx, `access:ip:${ip}`, 8, 60 * 60_000);
-    const key = cleanText(args.email, MAX.email).toLowerCase() || "anon";
+    // per person, not per spelling: j.doe+1@gmail.com and jdoe+2@gmail.com share one
+    const key = emailKey(cleanText(args.email, MAX.email)) || "anon";
     await enforceRateLimit(ctx, `access:email:${key}`, 5, 10 * 60_000);
     // and a floor under the whole queue, so a botnet spread across many IPs
     // can't fill the table one "valid" row at a time
@@ -208,6 +247,9 @@ export const record = internalMutation({
   handler: async (ctx, { ip, ref, ...args }) => {
     // the landing server is trusted, but the shared secret could leak
     if (ip) await enforceRateLimit(ctx, `access:ip:${ip}`, 30, 60 * 60_000);
+    // two calls per signup (email, then details), so a little looser than the app's 5
+    const key = emailKey(cleanText(args.email, MAX.email)) || "anon";
+    await enforceRateLimit(ctx, `access:email:${key}`, 10, 10 * 60_000);
     await enforceRateLimit(ctx, "access:global", 300, 60 * 60_000);
     const result = await upsertRequest(ctx, { ...args, source: "landing" });
     return await applyReferral(ctx, ref, args.email, result);
@@ -276,9 +318,9 @@ export const remove = mutation({
     await enforceRateLimit(ctx, `access:remove:${user.id}`, 60, 60 * 60_000);
     const row = await ctx.db.get(id);
     if (!row) return;
-    const existing = (await ctx.db.query("profiles").collect()).some(
-      (p) => p.email.toLowerCase() === row.email.toLowerCase(),
-    );
+    // an index lookup, not a read of every profile
+    const existing =
+      (await ctx.db.query("profiles").withIndex("by_email", (q) => q.eq("email", row.email)).first()) !== null;
     if (existing) {
       throw new ConvexError(
         "That email already has an account — reject it instead, or delete the user from Users.",
@@ -332,10 +374,7 @@ export const approve = internalMutation({
     const now = new Date().toISOString();
     const done: { email: string; was: string }[] = [];
     for (const email of valid) {
-      const existing = await ctx.db
-        .query("accessRequests")
-        .withIndex("by_email", (q) => q.eq("email", email))
-        .unique();
+      const existing = await findRequest(ctx, email);
       if (existing) {
         await ctx.db.patch(existing._id, { status: "approved", decidedAt: now, decidedBy: "operator" });
         await sendInvite(ctx, existing._id);
@@ -343,6 +382,7 @@ export const approve = internalMutation({
       } else {
         const newId = await ctx.db.insert("accessRequests", {
           email,
+          emailKey: emailKey(email),
           name: nameFor("", email),
           source: "landing",
           status: "approved",
@@ -430,11 +470,34 @@ export const remindUnjoined = internalMutation({
 export const approvalFor = internalQuery({
   args: { email: v.string() },
   handler: async (ctx, { email }) => {
-    const row = await ctx.db
-      .query("accessRequests")
-      .withIndex("by_email", (q) => q.eq("email", email.trim().toLowerCase()))
-      .unique();
+    const row = await approvalRow(ctx, email);
     return row?.status ?? null;
+  },
+});
+
+/**
+ * One-off backfill for rows written before emailKey existed. Not run
+ * automatically; after deploying:
+ *
+ *   npx convex run --prod access:backfillEmailKeys '{}'
+ *
+ * It patches a page at a time and schedules the next page itself. Until it
+ * has run, lookups still find those rows by their exact address.
+ */
+export const backfillEmailKeys = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, { cursor }) => {
+    const page = await ctx.db.query("accessRequests").paginate({ numItems: 200, cursor: cursor ?? null });
+    let patched = 0;
+    for (const row of page.page) {
+      const key = emailKey(row.email);
+      if (row.emailKey !== key) {
+        await ctx.db.patch(row._id, { emailKey: key });
+        patched++;
+      }
+    }
+    if (!page.isDone) await ctx.scheduler.runAfter(0, internal.access.backfillEmailKeys, { cursor: page.continueCursor });
+    return { patched, done: page.isDone };
   },
 });
 
@@ -480,10 +543,13 @@ async function applyReferral(
     .withIndex("by_code", (q) => q.eq("code", code))
     .first();
   const inviterProfile = codeRow ? await getProfile(ctx, codeRow.userId) : null;
-  const row = await ctx.db
-    .query("accessRequests")
-    .withIndex("by_email", (q) => q.eq("email", email))
-    .unique();
+  const row = await findRequest(ctx, email);
+  // an inviter who came in on someone's invite waits a week for their own
+  const inviterRequest = inviterProfile ? await findRequest(ctx, inviterProfile.email) : null;
+  const now = Date.now();
+  const inviterLockedUntil = inviterProfile
+    ? referralLockedUntil(inviterProfile._creationTime, cameByInvite(inviterRequest), now)
+    : null;
   const used = codeRow
     ? (await ctx.db
         .query("accessRequests")
@@ -498,6 +564,8 @@ async function applyReferral(
     // the row was just written as pending when new, so "new" and "pending" are the same case
     existingStatus: result.duplicate ? result.status : null,
     used,
+    inviterLockedUntil,
+    now,
   });
   if (decision !== "approve" || !row || !codeRow) return { ...result, referred: false };
   await ctx.db.patch(row._id, {
