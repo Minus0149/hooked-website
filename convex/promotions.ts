@@ -16,6 +16,9 @@ import {
   APPROVAL_DAYS,
   approvalPayable,
   checkCode,
+  discountsAtOrder,
+  ORDER_HOLD_MS,
+  paymentSettles,
   coercePromotionConfig,
   customPackage,
   nextRequestStatus,
@@ -51,6 +54,9 @@ import {
   requireUser,
 } from "./security";
 import { promotionApprovedEmail, promotionRejectedEmail } from "./emailTemplate";
+
+/** New guest view rows per hour, across every device key (recordPromoted). */
+const ANON_VIEWS_PER_HOUR = 3000;
 import { isMood } from "./moods";
 import { moodFitFor, type MoodId } from "../src/data/mood";
 import { MOOD_MATCH } from "../src/data/ranking";
@@ -519,6 +525,25 @@ export const beginOrder = mutation({
         r.status === "approved" ? "This approval has lapsed — ask again." : "This request isn't approved for payment.",
       );
     }
+    // the approval's discounts must still be there: a one-use code or the
+    // launch offer could otherwise be paid for on several approvals at once
+    const now = Date.now();
+    const held = (o: Doc<"promotionOrders">) => o.status === "created" && o.requestId !== requestId && now - o.createdAt < ORDER_HOLD_MS;
+    const mine = await ctx.db.query("promotionOrders").withIndex("by_user", (q) => q.eq("userId", user.id)).collect();
+    const codeOrders = r.approved.code
+      ? await ctx.db.query("promotionOrders").withIndex("by_code_status", (q) => q.eq("code", r.approved!.code).eq("status", "created")).collect()
+      : [];
+    const verdict = discountsAtOrder({
+      launchOffPaise: r.approved.launchOffPaise,
+      code: asDiscount(await codeRow(ctx, r.approved.code)),
+      hasCode: !!r.approved.code,
+      firstCampaign: !mine.some((o) => o.status === "paid"),
+      otherLaunchOrders: mine.filter((o) => held(o) && o.launchOffPaise > 0).length,
+      otherCodeOrders: codeOrders.filter(held).length,
+      now,
+      userId: user.id,
+    });
+    if (!verdict.ok) throw new ConvexError(verdict.reason);
     // an unpaid order for this approval is reused, so a retried checkout can't double-charge
     if (r.orderId) {
       const existing = await ctx.db.get(r.orderId);
@@ -553,11 +578,30 @@ export const orderForCheckout = internalQuery({
   handler: async (ctx, { orderId }) => ctx.db.get(orderId),
 });
 
+/**
+ * Set once. Two checkouts at the same moment (a double tap, two tabs) each
+ * made a Razorpay order, and the second overwrote the first here: paying the
+ * first then matched no order, so the money came in with no campaign. The
+ * first id stays, and both checkouts hand that one to Razorpay's window.
+ */
 export const attachRazorpayOrder = internalMutation({
   args: { orderId: v.id("promotionOrders"), razorpayOrderId: v.string() },
-  handler: async (ctx, { orderId, razorpayOrderId }) => {
+  handler: async (ctx, { orderId, razorpayOrderId }): Promise<string> => {
+    const order = await ctx.db.get(orderId);
+    if (!order) throw new ConvexError("No such order.");
+    if (order.razorpayOrderId) return order.razorpayOrderId;
     await ctx.db.patch(orderId, { razorpayOrderId });
+    return razorpayOrderId;
   },
+});
+
+export const orderByRazorpayId = internalQuery({
+  args: { razorpayOrderId: v.string() },
+  handler: async (ctx, { razorpayOrderId }) =>
+    ctx.db
+      .query("promotionOrders")
+      .withIndex("by_rzp_order", (q) => q.eq("razorpayOrderId", razorpayOrderId))
+      .unique(),
 });
 
 /** Step 2: create the Razorpay order for exactly the stored amount. */
@@ -597,8 +641,8 @@ export const checkout = action({
     if (!res.ok) throw new ConvexError(`Razorpay refused the order (${res.status}).`);
     const created = (await res.json()) as { id: string; amount: number };
     if (created.amount !== order.totalPaise) throw new ConvexError("Razorpay returned a different amount.");
-    await ctx.runMutation(internal.promotions.attachRazorpayOrder, { orderId, razorpayOrderId: created.id });
-    return { configured: true, keyId, razorpayOrderId: created.id, amount: order.totalPaise, currency: "INR" };
+    const kept: string = await ctx.runMutation(internal.promotions.attachRazorpayOrder, { orderId, razorpayOrderId: created.id });
+    return { configured: true, keyId, razorpayOrderId: kept, amount: order.totalPaise, currency: "INR" };
   },
 });
 
@@ -613,6 +657,26 @@ export const confirmPayment = action({
     const secret = process.env.RAZORPAY_KEY_SECRET ?? "";
     const ok = await paymentSignatureValid(args.razorpayOrderId, args.razorpayPaymentId, args.razorpaySignature, secret);
     if (!ok) throw new ConvexError("That payment couldn't be verified.");
+    // A valid signature says Razorpay saw a payment for this order, not that
+    // the money was captured: with auto-capture off an authorised payment is
+    // voided later. Start the campaign here only for a captured payment of the
+    // exact amount; anything else waits for the webhook (order.paid /
+    // payment.captured), which starts it the moment Razorpay captures.
+    const order = await ctx.runQuery(internal.promotions.orderByRazorpayId, { razorpayOrderId: args.razorpayOrderId });
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    if (!order || !keyId || !secret) return { campaignId: null };
+    let payment: { status?: string; order_id?: string; amount?: number; currency?: string } | null = null;
+    try {
+      const res = await fetch(`${RAZORPAY_API}/payments/${encodeURIComponent(args.razorpayPaymentId)}`, {
+        headers: { authorization: "Basic " + btoa(`${keyId}:${secret}`) },
+      });
+      if (res.ok) payment = (await res.json()) as typeof payment;
+    } catch {
+      payment = null;
+    }
+    if (!paymentSettles(payment, { razorpayOrderId: args.razorpayOrderId, totalPaise: order.totalPaise })) {
+      return { campaignId: null };
+    }
     return ctx.runMutation(internal.promotions.markPaid, {
       razorpayOrderId: args.razorpayOrderId,
       razorpayPaymentId: args.razorpayPaymentId,
@@ -1021,6 +1085,15 @@ export const recordPromoted = mutation({
       .withIndex("by_campaign_viewer", (q) => q.eq("campaignId", campaignId).eq("viewer", viewer))
       .first();
     if (!view) {
+      // a device key is free to mint, and each new one wrote a row here: past a
+      // shared hourly ceiling, guests' cards just go uncounted (they never bill)
+      if (viewer.startsWith("a:")) {
+        try {
+          await enforceRateLimit(ctx, "promo:view:anon:new", ANON_VIEWS_PER_HOUR, 60 * 60_000);
+        } catch {
+          return;
+        }
+      }
       const id = await ctx.db.insert("promotionViews", {
         campaignId,
         viewer,

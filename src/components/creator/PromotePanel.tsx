@@ -149,7 +149,13 @@ export function PromotePanel({ tracks }: { tracks: Track[] }) {
               razorpayPaymentId: r.razorpay_payment_id,
               razorpaySignature: r.razorpay_signature,
             })
-              .then(() => notify("Paid — your song is in the deck now.", "success"))
+              // null: Razorpay hasn't captured it yet; the webhook starts the campaign when it does
+              .then((r) =>
+                notify(
+                  r.campaignId ? "Paid — your song is in the deck now." : "Paid — it starts as soon as Razorpay confirms, usually within a minute.",
+                  "success",
+                ),
+              )
               .catch(() =>
                 setError(
                   "Your payment went through but we couldn't confirm it yet. It will show here within a few minutes; if not, email hello@hookedcue.com.",

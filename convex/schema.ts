@@ -633,7 +633,9 @@ export default defineSchema({
     paidAt: v.optional(v.number()),
   })
     .index("by_rzp_order", ["razorpayOrderId"])
-    .index("by_user", ["userId", "createdAt"]),
+    .index("by_user", ["userId", "createdAt"])
+    // unpaid orders holding a discount code (promotions.beginOrder)
+    .index("by_code_status", ["code", "status"]),
 
   /** What a paid order buys: a number of distinct listeners hearing the hook. */
   promotionCampaigns: defineTable({

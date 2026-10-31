@@ -124,6 +124,15 @@ sellers charge, so it can't be mistaken for one.
   options `key`, `amount`, `currency`, `name`, `order_id`, `handler`.
 - **Verify:** `hmac_sha256(order_id + "|" + razorpay_payment_id, key_secret)`
   must equal `razorpay_signature` (`paymentSignatureValid`).
+  The checkout handler then fetches the payment (`GET /v1/payments/:id`) and
+  starts the campaign only when it is `captured`, for this order and the
+  exact amount (`paymentSettles`); otherwise the webhook starts it when
+  Razorpay captures. A Razorpay order id is attached to our order once, so
+  two checkouts at the same moment can't leave a paid order unmatched.
+- **Discounts at the till:** `beginOrder` checks the approval's code and
+  launch offer again (`discountsAtOrder`): a code that has been used up, or
+  is held by another unpaid order from the last 2 hours, and a launch offer
+  after a paid campaign or on a second open order, are refused.
 - **Webhook:** `POST /razorpay/webhook` on the Convex site URL. The
   `X-Razorpay-Signature` header is HMAC-SHA256 of the **raw** body with the
   webhook secret; duplicates are dropped by `x-razorpay-event-id`. Events:

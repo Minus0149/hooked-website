@@ -388,3 +388,54 @@ export function pickCampaign<T>(cands: Candidate<T>[]): T | null {
     .sort((a, b) => b.behind - a.behind);
   return starving[0]?.item ?? null;
 }
+
+/**
+ * How long an unpaid order holds its discounts for: a checkout left open
+ * longer than this stops counting against a code or the launch offer.
+ */
+export const ORDER_HOLD_MS = 2 * 60 * 60_000;
+
+/**
+ * At the till: the discounts fixed at approval must still be there. A code
+ * with one use left, or the first-campaign launch offer, was checked only when
+ * a request was made and approved, and used up only once paid, so several
+ * approved requests (one artist's songs, or friends sharing a code) could all
+ * be paid at the discount. Other unpaid orders made in the last ORDER_HOLD_MS
+ * count as uses already.
+ */
+export function discountsAtOrder(o: {
+  launchOffPaise: number;
+  code: DiscountCode | null;
+  hasCode: boolean;
+  firstCampaign: boolean;
+  /** this artist's other unpaid orders carrying the launch offer */
+  otherLaunchOrders: number;
+  /** other unpaid orders carrying this code */
+  otherCodeOrders: number;
+  now: number;
+  userId: string;
+}): CodeVerdict {
+  if (o.launchOffPaise > 0 && (!o.firstCampaign || o.otherLaunchOrders > 0)) {
+    return { ok: false, reason: "The launch offer is for your first campaign only. Withdraw this one and ask again for a new quote." };
+  }
+  if (o.hasCode) {
+    const c = o.code ? { ...o.code, uses: o.code.uses + o.otherCodeOrders } : null;
+    const verdict = checkCode(c, o.now, o.userId);
+    if (!verdict.ok) return { ok: false, reason: `${verdict.reason} Withdraw this one and ask again for a new quote.` };
+  }
+  return { ok: true };
+}
+
+/** What confirmPayment needs to see before it starts a campaign without waiting for the webhook. */
+export function paymentSettles(
+  p: { status?: string; order_id?: string; amount?: number; currency?: string } | null,
+  order: { razorpayOrderId: string; totalPaise: number },
+): boolean {
+  return (
+    !!p &&
+    p.status === "captured" &&
+    p.order_id === order.razorpayOrderId &&
+    p.amount === order.totalPaise &&
+    p.currency === "INR"
+  );
+}

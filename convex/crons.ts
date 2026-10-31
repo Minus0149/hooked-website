@@ -70,6 +70,20 @@ crons.daily(
   internal.retention.sweepReports,
 );
 
+// Rate-limit rows and guests' promoted-card views, which device keys (free to
+// mint) used to grow without end (convex/retention.ts).
+crons.daily(
+  "sweep expired rate limits",
+  { hourUTC: 4, minuteUTC: 52 },
+  internal.retention.sweepRateLimits,
+);
+crons.daily(
+  "sweep old guest promotion views",
+  { hourUTC: 5, minuteUTC: 7 },
+  internal.retention.sweepAnonPromotionViews,
+  {},
+);
+
 /**
  * Rebuild "people who reacted to this reacted to that" from the swipe log.
  *
