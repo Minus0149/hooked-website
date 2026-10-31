@@ -377,6 +377,14 @@ export function joinUrl(site: string, email: string): string {
   return `${site.replace(/\/+$/, "")}/join?email=${encodeURIComponent(email)}`;
 }
 
+/** Whose invite this is — nobody's if the code is unknown or its owner is suspended. */
+export function inviterFor(
+  codeRow: { userId: string } | null,
+  profile: { email: string; suspended?: boolean } | null,
+): { userId: string; email: string } | null {
+  return codeRow && profile && !profile.suspended ? { userId: codeRow.userId, email: profile.email } : null;
+}
+
 export const REMIND_AFTER_DAYS = 3;
 /** Older approvals are left alone: a first reminder weeks later reads as spam. */
 export const REMIND_WITHIN_DAYS = 30;
@@ -485,7 +493,7 @@ async function applyReferral(
   const runtime = await runtimeFor(ctx);
   const decision = referralDecision({
     cap: runtime.referralCap,
-    inviter: codeRow && inviterProfile ? { userId: codeRow.userId, email: inviterProfile.email } : null,
+    inviter: inviterFor(codeRow, inviterProfile),
     applicantEmail: email,
     // the row was just written as pending when new, so "new" and "pending" are the same case
     existingStatus: result.duplicate ? result.status : null,

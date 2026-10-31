@@ -53,3 +53,12 @@ describe("inviteReminderEmail", () => {
     expect(html).toContain("iPhone");
   });
 });
+
+describe("inviterFor", async () => {
+  const { inviterFor } = await import("../convex/access");
+  it("a suspended account's invite code approves nobody", () => {
+    expect(inviterFor({ userId: "u1" }, { email: "a@b.co", suspended: true })).toBeNull();
+    expect(inviterFor({ userId: "u1" }, { email: "a@b.co" })).toEqual({ userId: "u1", email: "a@b.co" });
+    expect(inviterFor(null, { email: "a@b.co" })).toBeNull();
+  });
+});
