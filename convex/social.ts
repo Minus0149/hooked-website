@@ -3,7 +3,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/s
 import type { Doc } from "./_generated/dataModel";
 import { authComponent } from "./auth";
 import { trackFields } from "./schema";
-import { cleanText, cleanTrack, enforceRateLimit, getProfile, requireGatedUser } from "./security";
+import { cleanText, enforceRateLimit, getProfile, requireGatedUser } from "./security";
 import { normalizeUsername } from "../src/lib/username";
 import {
   BLOCK_LIST_MAX,
@@ -35,6 +35,7 @@ import {
   roomIsOpen,
 } from "./socialRules";
 import { secureRandom } from "./secureRandom";
+import { knownSongIds, requireSong } from "./songs";
 
 /**
  * The social side of HookedCue: follows, songs shared to followers, shared and
@@ -302,7 +303,8 @@ export const shareToFollowers = mutation({
   handler: async (ctx, { track, note }) => {
     const { user } = await requireGatedUser(ctx);
     await enforceRateLimit(ctx, `post:${user.id}`, 20, 60 * 60_000);
-    const safe = cleanTrack(track);
+    // only the id is the client's: the card shows the catalogue's own details (songs.ts)
+    const safe = await requireSong(ctx, track.trackId);
     const clean = cleanNote(note);
     // sharing the same song twice in a row replaces the first post
     const last = await ctx.db.query("posts").withIndex("by_user_at", (q) => q.eq("userId", user.id)).order("desc").first();
@@ -526,7 +528,7 @@ export const addToPlaylist = mutation({
     if (!pl) throw new ConvexError("Playlist not found");
     const { access } = await playlistAccess(ctx, pl);
     if (!canAddToPlaylist(access, user.id)) throw new ConvexError("You can't add songs to this playlist");
-    const safe = cleanTrack(track);
+    const safe = await requireSong(ctx, track.trackId);
     const dup = (await ctx.db.query("librarySongs").withIndex("by_playlist", (q) => q.eq("playlistId", playlistId)).collect()).some(
       (s) => s.trackId === safe.trackId,
     );
@@ -591,7 +593,9 @@ export const createRoom = mutation({
     const { user, profile } = await requireGatedUser(ctx);
     await enforceRateLimit(ctx, `room:create:${user.id}`, 10, 60 * 60_000);
     // bounded before any work: the array arrives straight from the client
-    const ids = [...new Set(trackIds.slice(0, ROOM_MAX_TRACKS * 4).map((t) => cleanText(t, 120)).filter(Boolean))].slice(0, ROOM_MAX_TRACKS);
+    const wanted = [...new Set(trackIds.slice(0, ROOM_MAX_TRACKS * 4).map((t) => cleanText(t, 120)).filter(Boolean))].slice(0, ROOM_MAX_TRACKS);
+    // songs that exist: a made-up id would be dealt to everyone in the room
+    const ids = await knownSongIds(ctx, wanted);
     if (ids.length < 2) throw new ConvexError("A room needs a few songs to start");
     // one open room per host: opening a new one closes the last
     const now = Date.now();

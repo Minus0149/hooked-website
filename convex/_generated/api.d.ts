@@ -61,6 +61,7 @@ import type * as share from "../share.js";
 import type * as shareRules from "../shareRules.js";
 import type * as social from "../social.js";
 import type * as socialRules from "../socialRules.js";
+import type * as songs from "../songs.js";
 import type * as sponsoredDecks from "../sponsoredDecks.js";
 import type * as tracks from "../tracks.js";
 
@@ -124,6 +125,7 @@ declare const fullApi: ApiFromModules<{
   shareRules: typeof shareRules;
   social: typeof social;
   socialRules: typeof socialRules;
+  songs: typeof songs;
   sponsoredDecks: typeof sponsoredDecks;
   tracks: typeof tracks;
 }>;

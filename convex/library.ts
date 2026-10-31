@@ -9,7 +9,6 @@ import { saveTarget, swipeAction, trackFields } from "./schema";
 import {
   cleanAccent,
   cleanText,
-  cleanTrack,
   enforceRateLimit,
   ensureActiveProfile,
   getProfile,
@@ -21,6 +20,7 @@ import {
 import { touchCatalog } from "./catalog";
 import { normalizeUsername, usernameProblem } from "../src/lib/username";
 import { coerceAfterHook, publicName } from "./socialRules";
+import { resolveSong } from "./songs";
 import { approvalRow } from "./access";
 
 export type ProfileVerdict =
@@ -326,7 +326,12 @@ export const recordSwipe = mutation({
     const profile = await getProfile(ctx, user.id);
     ensureActiveProfile(profile);
     await enforceRateLimit(ctx, `swipe:${user.id}`, 180, 60_000);
-    const safeTrack = cleanTrack(track);
+    // the id is all that's trusted: title, artwork and preview come from the
+    // catalogue (convex/songs.ts). An unknown id writes nothing, quietly, so a
+    // song deleted since it was dealt can't jam the client's retry queue.
+    const found = await resolveSong(ctx, track.trackId);
+    if (!found) return;
+    const safeTrack = found.track;
     await ctx.db.insert("swipes", {
       userId: user.id,
       action,
