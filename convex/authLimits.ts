@@ -31,3 +31,21 @@ export const AUTH_RATE_LIMIT = {
     "/get-session": { window: 60, max: 120 },
   },
 };
+
+/**
+ * Where Better Auth may send someone after a link (callbackURL, redirectTo)
+ * and which Origin headers it accepts.
+ *
+ * Better Auth matches a non-http origin as a prefix, so the "exp://" entry
+ * that used to be here trusted every exp:// URL on any host. Anyone could ask
+ * for a password reset for someone else's email with redirectTo set to
+ * exp://their-server/--/x; the genuine reset email then bounced the reader
+ * there with ?token=<reset token> appended, and on a phone with Expo Go
+ * installed that opens Expo Go, which fetches the URL from the attacker's
+ * server, token included. Nothing needs it: the phone app sends no Origin
+ * header and its callbacks are the https web app. "hooked://" is the app's
+ * own scheme.
+ */
+export function authTrustedOrigins(siteUrl: string): string[] {
+  return [siteUrl, "hooked://"];
+}

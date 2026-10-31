@@ -9,7 +9,7 @@ import { smtpSettings } from "./emailConfig";
 import { resetEmail, verifyEmail } from "./emailTemplate";
 import { APIError } from "better-auth/api";
 import { NOT_APPROVED_MESSAGE, signupAllowed } from "./access";
-import { AUTH_RATE_LIMIT } from "./authLimits";
+import { AUTH_RATE_LIMIT, authTrustedOrigins } from "./authLimits";
 
 const siteUrl = process.env.SITE_URL ?? "https://app.hookedcue.com";
 // falls back to the deployment's own HTTP URL, which Convex provides to every function
@@ -67,8 +67,8 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth({
     baseURL: authSiteUrl,
     secret: authSecret,
-    // web SPA + the Expo app (dev client scheme and Expo Go)
-    trustedOrigins: [siteUrl, "hooked://", "exp://"],
+    // the web SPA and the phone app's own scheme; never "exp://" (authLimits.ts)
+    trustedOrigins: authTrustedOrigins(siteUrl),
     advanced: {
       ipAddress: {
         ipAddressHeaders: ["cf-connecting-ip", "x-real-ip", "x-forwarded-for"],
