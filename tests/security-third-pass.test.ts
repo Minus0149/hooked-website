@@ -112,3 +112,12 @@ describe("one listener can't pad a song's hook stats", () => {
     expect(lib).toMatch(/enforceRateLimit\(ctx, `hookstat:\$\{userId\}:\$\{hookId\}`, 1, 86_400_000\)/);
   });
 });
+
+describe("minted device keys can't stop accounts' crash reports", () => {
+  it("the shared ceiling holds back guests only, and counts only guests' rows", () => {
+    const report = fnBody("errors.ts", "report");
+    expect(report).toMatch(/if \(!user\) \{\s*const recent = await ctx\.db\.query\("errorReports"\)/);
+    expect(report).toMatch(/r\.at >= hourAgo && !r\.userId/);
+    expect(report).toMatch(/enforceRateLimit\(ctx, `err-report:\$\{identity\}`, 10/);
+  });
+});

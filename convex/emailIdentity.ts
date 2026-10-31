@@ -17,14 +17,20 @@ import { DISPOSABLE_DOMAINS } from "./disposableDomains";
 const DOTLESS_DOMAINS = new Set(["gmail.com"]);
 const DOMAIN_ALIASES: Record<string, string> = { "googlemail.com": "gmail.com" };
 
+/**
+ * Full-width and other compatibility forms fold to plain letters first (NFKC),
+ * so ｊｄｏｅ@ｇｍａｉｌ.ｃｏｍ is jdoe@gmail.com rather than a new person.
+ */
+const fold = (raw: string) => raw.normalize("NFKC").trim().toLowerCase();
+
 export function emailDomain(raw: string): string {
-  const email = raw.trim().toLowerCase();
+  const email = fold(raw);
   const at = email.lastIndexOf("@");
   return at < 0 ? "" : email.slice(at + 1).replace(/\.+$/, "");
 }
 
 export function emailKey(raw: string): string {
-  const email = raw.trim().toLowerCase();
+  const email = fold(raw);
   const at = email.lastIndexOf("@");
   if (at <= 0) return email;
   let local = email.slice(0, at);

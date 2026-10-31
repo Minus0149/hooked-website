@@ -36,6 +36,11 @@ describe("emailKey folds the spellings of one inbox together", () => {
     expect(emailKey("not-an-email")).toBe("not-an-email");
     expect(emailDomain("a@b.co.")).toBe("b.co");
   });
+  it("folds full-width and other compatibility letters (NFKC)", () => {
+    const wide = (t: string) => [...t].map((c) => (/[a-z.@]/.test(c) ? String.fromCharCode(c.charCodeAt(0) + 0xfee0) : c)).join("");
+    expect(emailKey(wide("j.doe@gmail.com"))).toBe("jdoe@gmail.com");
+    expect(isDisposableEmail(wide("x@mailinator.com"))).toBe(true);
+  });
   it("sameEmail compares on the key", () => {
     expect(sameEmail("jdoe@gmail.com", "J.DOE+invite@googlemail.com")).toBe(true);
     expect(sameEmail("jdoe@gmail.com", "jdoe2@gmail.com")).toBe(false);

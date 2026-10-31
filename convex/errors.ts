@@ -48,11 +48,16 @@ export const report = mutation({
 
     // the dam: anon identities are free to mint, so per-identity limits alone
     // can't bound total writes. 300 reports/hour across ALL identities is
-    // far above any real crash volume and far below a flooding budget.
-    const recent = await ctx.db.query("errorReports").order("desc").take(300);
-    const hourAgo = Date.now() - 60 * 60_000;
-    if (recent.filter((r) => r.at >= hourAgo).length >= 300) {
-      throw new ConvexError("Report queue is full right now — please try again later");
+    // far above any real crash volume and far below a flooding budget. It
+    // holds back device keys only: minted keys filling it used to stop every
+    // signed-in listener's crash reports too (accounts are invite-only, and
+    // each has its own 10 an hour above).
+    if (!user) {
+      const recent = await ctx.db.query("errorReports").order("desc").take(300);
+      const hourAgo = Date.now() - 60 * 60_000;
+      if (recent.filter((r) => r.at >= hourAgo && !r.userId).length >= 300) {
+        throw new ConvexError("Report queue is full right now — please try again later");
+      }
     }
 
     let userEmail: string | undefined;
