@@ -38,8 +38,13 @@ export async function getProfile(ctx: QueryCtx | MutationCtx, userId: string) {
     .unique();
 }
 
+/**
+ * A suspended account holds no permissions. Suspension used to stop only the
+ * listener side, so a suspended moderator with users.manage could still run
+ * the queue, and unsuspend themself with admin.setSuspended.
+ */
 export function hasPermission(profile: Profile | null, permission: Permission) {
-  if (!profile) return false;
+  if (!profile || profile.suspended) return false;
   return profile.isAdmin || (profile.permissions ?? []).includes(permission);
 }
 

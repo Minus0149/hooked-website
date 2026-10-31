@@ -26,10 +26,11 @@ async function getViewer(ctx: QueryCtx | MutationCtx) {
 }
 
 function hasPerm(
-  profile: { isAdmin: boolean; permissions?: string[] } | null,
+  profile: { isAdmin: boolean; permissions?: string[]; suspended?: boolean } | null,
   perm: Perm,
 ) {
-  if (!profile) return false;
+  // suspended means no dashboard either (security.hasPermission)
+  if (!profile || profile.suspended) return false;
   return profile.isAdmin || (profile.permissions ?? []).includes(perm);
 }
 
