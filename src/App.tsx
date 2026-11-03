@@ -839,7 +839,7 @@ function Shell({ joinEmail, joinCode }: { joinEmail?: string; joinCode?: string 
   const autoAdvanceRef = useRef(state.autoAdvance);
   autoAdvanceRef.current = state.autoAdvance;
   const {
-    playing, progress, remaining, volume, toggle, seek, setVolume,
+    playing, clock, volume, toggle, seek, setVolume,
     hookIndex, hookCount, hook, nextHook,
   } = usePlayer(
     listening ? onDeck : null,
@@ -923,7 +923,7 @@ function Shell({ joinEmail, joinCode }: { joinEmail?: string; joinCode?: string 
             action,
             hookId: validHookId,
             // for the artist's free insights: where in the hook, and in what mood
-            ...insightContext(hookRef.current?.durationMs, progressRef.current, moodRef.current),
+            ...insightContext(hookRef.current?.durationMs, clock.get().progress, moodRef.current),
           },
           recordSwipe,
         );
@@ -934,8 +934,6 @@ function Shell({ joinEmail, joinCode }: { joinEmail?: string; joinCode?: string 
 
   const hookRef = useRef(hook);
   hookRef.current = hook;
-  const progressRef = useRef(progress);
-  progressRef.current = progress;
   const moodRef = useRef(state.mood);
   moodRef.current = state.mood;
 
@@ -1279,7 +1277,7 @@ function Shell({ joinEmail, joinCode }: { joinEmail?: string; joinCode?: string 
   return (
     <div className="stage">
       <div className="phone-wrap">
-      <div className="phone">
+      <div className="phone" data-touring={!onboarded || undefined}>
         <div className="screen">
           {view === "home" && (
             <>
@@ -1345,8 +1343,7 @@ function Shell({ joinEmail, joinCode }: { joinEmail?: string; joinCode?: string 
                 tracks={state.queue.slice(0, 3)}
                 backToken={backToken}
                 playing={playing}
-                progress={progress}
-                remaining={remaining}
+                clock={clock}
                 saveTarget={state.saveTarget}
                 onToggle={toggle}
                 onSeek={seek}

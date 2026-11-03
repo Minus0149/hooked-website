@@ -10,6 +10,7 @@ import { usePlayer } from "../audio/usePlayer";
 import { IconBack, IconHeart, IconPlay, IconSearch, IconShare, IconUser, IconX } from "./icons";
 import { normalizeCode, ROOM_PRESENCE_MS } from "../../convex/socialRules";
 import { serverMessage } from "../lib/serverError";
+import { useClock } from "../audio/playerClock";
 
 /**
  * The social side of the app: people, follows, the feed of songs friends
@@ -954,7 +955,8 @@ export function RoomScreen({
   };
   // the host's player moves the room on; a guest's just waits for the next song
   // the host always moves on when a song ends (a looping host would freeze the room)
-  const { playing, toggle, progress } = usePlayer(track, nextTrack, Boolean(track), moveOn, undefined, room?.isHost ? "next" : afterHook);
+  const { playing, toggle, clock } = usePlayer(track, nextTrack, Boolean(track), moveOn, undefined, room?.isHost ? "next" : afterHook);
+  const { progress } = useClock(clock);
 
   const myReaction = room?.reactions.find((r) => r.me)?.action ?? null;
   const save = async () => {

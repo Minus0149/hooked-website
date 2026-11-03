@@ -2,6 +2,7 @@ import { storedVolume } from "../lib/volume";
 import { distinctHooks, hookGain, hookTiming } from "../lib/hookPlayback";
 import { afterHookAction, type AfterHook } from "../../convex/socialRules";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPlayerClock } from "./playerClock";
 import type { HookWindow, Track } from "../types";
 
 const FALLBACK_HOOK: HookWindow = { id: "whole", startMs: 0, durationMs: Number.POSITIVE_INFINITY };
@@ -55,8 +56,9 @@ export function usePlayer(
   trackRef.current = track;
 
   const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0); // 0..1 through the current hook
-  const [remaining, setRemaining] = useState(Infinity); // seconds left in the hook
+  // the playhead (0..1 through the hook, seconds left) lives outside React
+  // state so a 4Hz timeupdate doesn't re-render the whole app (playerClock.ts)
+  const [clock] = useState(createPlayerClock);
   const [hookIndex, setHookIndex] = useState(0);
 
   const hooks = hooksOf(track);
@@ -78,8 +80,7 @@ export function usePlayer(
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
-    setProgress(0);
-    setRemaining(Infinity);
+    clock.set({ progress: 0, remaining: Infinity });
     setHookIndex(0);
     hookIndexRef.current = 0;
     playingOnRef.current = false;
@@ -128,13 +129,11 @@ export function usePlayer(
       if (playingOnRef.current) {
         // past the hook: show progress through the rest of the clip instead
         const d = audio.duration > 0 ? audio.duration : 30;
-        setProgress(Math.min(audio.currentTime / d, 1));
-        setRemaining(Math.max(d - audio.currentTime, 0));
+        clock.set({ progress: Math.min(audio.currentTime / d, 1), remaining: Math.max(d - audio.currentTime, 0) });
         return;
       }
       const t = hookTiming(hook, audio.currentTime, audio.duration);
-      setProgress(t.progress);
-      setRemaining(t.remaining);
+      clock.set({ progress: t.progress, remaining: t.remaining });
 
       if (t.done) advanceRef.current(true);
     };
@@ -239,7 +238,7 @@ export function usePlayer(
     const target = list[hookIndexRef.current];
     if (audio) {
       audio.currentTime = target.startMs / 1000;
-      setProgress(0);
+      clock.set({ progress: 0 });
       if (audio.paused) void audio.play().catch(() => undefined);
     }
   };
@@ -266,8 +265,8 @@ export function usePlayer(
     const { startS, lengthS } = hookTiming(hook, audio.currentTime, audio.duration);
     const clamped = Math.min(Math.max(fraction, 0), 0.999);
     audio.currentTime = startS + clamped * lengthS;
-    setProgress(clamped);
-  }, []);
+    clock.set({ progress: clamped });
+  }, [clock]);
 
   const setVolume = useCallback((v: number) => {
     const clamped = Math.min(Math.max(v, 0), 1);
@@ -278,7 +277,7 @@ export function usePlayer(
   }, []);
 
   return {
-    playing, progress, remaining, volume, toggle, seek, setVolume,
+    playing, clock, volume, toggle, seek, setVolume,
     hookIndex, hookCount: hooks.length, hook: hooks[hookIndex] ?? hooks[0], nextHook,
   };
 }

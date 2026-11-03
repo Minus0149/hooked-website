@@ -300,7 +300,7 @@ export function Onboarding({
         {step === 1 && (
           <motion.div
             key="lang"
-            className="ob-step-wrap"
+            className="ob-step-wrap ob-scroll"
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -18 }}
@@ -327,7 +327,7 @@ export function Onboarding({
         {step === 2 && (
           <motion.div
             key="genre"
-            className="ob-step-wrap"
+            className="ob-step-wrap ob-scroll"
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -18 }}
@@ -354,7 +354,7 @@ export function Onboarding({
         {step === 3 && (
           <motion.div
             key="adventure"
-            className="ob-step-wrap"
+            className="ob-step-wrap ob-scroll"
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -18 }}
@@ -392,6 +392,7 @@ export function Onboarding({
             <div className="ob-demo">
               <motion.div
                 className="ob-arrow"
+                data-dir={gs.dir}
                 style={gs.arrowPos}
                 animate={{ opacity: [0.35, 1, 0.35] }}
                 transition={{ duration: 1.4, repeat: Infinity }}

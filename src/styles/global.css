@@ -116,9 +116,10 @@ button {
   position: absolute;
   inset: -20%;
   background:
-    radial-gradient(40% 50% at 30% 20%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
-    radial-gradient(35% 45% at 75% 80%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%);
-  filter: blur(40px);
+    radial-gradient(48% 58% at 30% 20%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 78%),
+    radial-gradient(43% 53% at 75% 80%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 78%);
+  /* no filter: blur(): a 40px blur over 140% of the screen was re-rasterised
+     at 3x on every accent change (every swipe). A wider falloff looks the same. */
   transition: background 0.8s ease;
 }
 /* Sat at the stage's bottom edge, which on a short window is exactly where
@@ -182,10 +183,10 @@ button {
   inset: -30%;
   pointer-events: none;
   background:
-    radial-gradient(45% 38% at 70% 12%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
-    radial-gradient(50% 40% at 15% 85%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%);
-  filter: blur(50px);
-  animation: drift 14s ease-in-out infinite alternate;
+    radial-gradient(53% 46% at 70% 12%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 78%),
+    radial-gradient(58% 48% at 15% 85%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 78%);
+  /* was blur(50px) + an endless drift: the phone's GPU redrew a blurred layer
+     160% of the screen every frame, under every swipe */
   transition: background 0.8s ease;
   z-index: 0;
 }
@@ -404,8 +405,9 @@ button {
   border-radius: 14px;
   border: 3px solid;
   pointer-events: none;
-  background: rgba(5, 5, 9, 0.55);
-  backdrop-filter: blur(4px);
+  /* solid, not a backdrop blur: four stamps ride the dragged card, and a
+     backdrop blur inside a moving layer is re-sampled every frame of a drag */
+  background: rgba(5, 5, 9, 0.72);
 }
 .stamp-up { top: 26px; left: 50%; translate: -50% 0; color: #fff; border-color: #fff; rotate: -4deg; }
 .stamp-down { bottom: 96px; left: 50%; translate: -50% 0; color: var(--save); border-color: var(--save); rotate: 3deg; }
@@ -1181,10 +1183,9 @@ button {
   pointer-events: none;
   background: radial-gradient(
     55% 65% at 50% 30%,
-    color-mix(in srgb, var(--pl-accent, var(--accent)) 26%, transparent),
-    transparent 75%
+    color-mix(in srgb, var(--pl-accent, var(--accent)) 22%, transparent),
+    transparent 85%
   );
-  filter: blur(28px);
 }
 .library-body {
   flex: 1;
@@ -4531,3 +4532,55 @@ html:lang(hi) body * { letter-spacing: 0 !important; }
 .crowd-nums span:last-child.crowd-mine { color: var(--text); font-weight: 700; }
 .crowd-line { margin: 0; font-size: 13.5px; line-height: 1.4; color: var(--text); }
 .crowd-streak { color: var(--more); font-weight: 700; }
+
+/* ---------- onboarding on short phones (320x568, 360x640, 375x667) ----------
+   The step was centred in the space between the logo and the buttons, so on a
+   short screen it spilled out both ways: the headline over the logo, the
+   copy under the dots, the last genre chips under the button. "safe center"
+   keeps the top in view; the demo card is sized from the screen's height;
+   the taste questions scroll inside their own box. */
+.ob-step-wrap { justify-content: safe center; }
+.ob-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 0;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.ob-scroll::-webkit-scrollbar { display: none; }
+.ob-demo { width: min(240px, 60vw, calc(40svh * 0.75)); }
+@media (max-height: 720px) {
+  .onboarding { padding: 16px 20px calc(12px + env(safe-area-inset-bottom)); }
+  .ob-step-wrap { gap: 14px; }
+  .ob-headline { font-size: clamp(22px, 6.6vw, 28px); }
+  .ob-copy { font-size: 14px; line-height: 1.45; }
+  .ob-dots { margin: 10px 0; }
+  .ob-primary { padding: 14px; }
+  .ob-skip { margin-top: 0; padding: 10px 0; min-height: 40px; }
+  .ob-chips { margin-top: 4px; gap: 6px; }
+  .ob-chip { padding: 9px 13px; min-height: 40px; font-size: 13px; }
+  .ob-choices { margin-top: 4px; gap: 8px; }
+  .ob-choice { padding: 10px 14px; }
+  .ob-demo { width: min(220px, 56vw, calc(34svh * 0.75)); }
+  .ob-demo-hold { margin-bottom: 18px; }
+  /* 52px above/below the card landed on the headline and the help text;
+     on a short screen the up/down hints sit just inside the card's edge */
+  .ob-arrow[data-dir="up"] { top: 8px !important; }
+  .ob-arrow[data-dir="down"] { bottom: 8px !important; top: auto !important; }
+}
+@media (max-height: 600px) {
+  .ob-headline { font-size: 21px; }
+  .ob-step-wrap { gap: 10px; }
+  .ob-demo { width: min(200px, calc(30svh * 0.75)); }
+  .ob-copy { font-size: 13.5px; }
+  .ob-chip { min-height: 36px; padding: 7px 12px; }
+}
+
+/* While the first-run tour covers the screen, nothing under it is seen, yet
+   the home screen kept compositing its blurred, animated glow layers and
+   artwork behind it on every frame: on a phone GPU that was the tour's lag.
+   Hide the covered layers (not unmount: the deck and audio stay ready) and
+   drop the animated mesh until the tour is done. */
+.phone[data-touring] .screen > :not(.onboarding):not(.toast) { visibility: hidden; }
+.phone[data-touring]::before,
+.phone[data-touring]::after { display: none; }

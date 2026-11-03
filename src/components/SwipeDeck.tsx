@@ -17,6 +17,7 @@ import type { Verdict } from "../data/predict";
 import { MoodWheel, type WheelOrigin } from "./MoodWheel";
 import { gesture } from "../design/tokens";
 import { useDialog } from "../lib/dialog";
+import { useClock, useClockSelect, type PlayerClock } from "../audio/playerClock";
 import { appleMusicUrl, ITUNES_CREDIT, needsItunesCredit } from "../lib/attribution";
 import { PROMOTED_LABEL, PROMOTED_WHY } from "../lib/promoted";
 import { useT } from "../lib/lang";
@@ -34,8 +35,7 @@ interface Props {
   tracks: Track[]; // [onDeck, next, nextNext]
   backToken: number; // bumped by ↩ — cancels any in-flight save FX
   playing: boolean;
-  progress: number;
-  remaining: number; // seconds left in the preview
+  clock: PlayerClock; // the playhead; only the leaves that draw it subscribe
   saveTarget: string;
   onToggle: () => void;
   onSeek: (fraction: number) => void;
@@ -133,12 +133,13 @@ type FX = { type: "more" | "never"; key: number };
 function HookDots({
   count,
   index,
-  progress,
+  clock,
 }: {
   count: number;
   index: number;
-  progress: number;
+  clock: PlayerClock;
 }) {
+  const { progress } = useClock(clock);
   if (count <= 1) return null;
   return (
     <div className="hookdots" aria-hidden="true">
@@ -156,12 +157,13 @@ function HookDots({
 
 /** Draggable/clickable scrub bar along the card's bottom edge. */
 function ScrubBar({
-  progress,
+  clock,
   onSeek,
 }: {
-  progress: number;
+  clock: PlayerClock;
   onSeek: (fraction: number) => void;
 }) {
+  const { progress } = useClock(clock);
   const ref = useRef<HTMLDivElement | null>(null);
   const seekFromEvent = (clientX: number) => {
     const rect = ref.current?.getBoundingClientRect();
@@ -338,7 +340,7 @@ function NeverFlashFX() {
 function TopCard({
   track,
   playing,
-  progress,
+  clock,
   hookIndex,
   hookCount,
   hookLabel,
@@ -353,7 +355,7 @@ function TopCard({
 }: {
   track: Track;
   playing: boolean;
-  progress: number;
+  clock: PlayerClock;
   hookIndex: number;
   hookCount: number;
   hookLabel?: string;
@@ -447,7 +449,7 @@ function TopCard({
     >
       <img className="card-art" src={track.artwork} alt={track.album} draggable={false} />
       <div className="card-scrim" />
-      <HookDots count={hookCount} index={hookIndex} progress={progress} />
+      <HookDots count={hookCount} index={hookIndex} clock={clock} />
       {hookCount > 1 && (
         <button
           type="button"
@@ -504,7 +506,7 @@ function TopCard({
         {/* Apple's condition for playing its previews (lib/attribution.ts) */}
         {needsItunesCredit(track) && <p className="card-credit">{tx(ITUNES_CREDIT)}</p>}
       </div>
-      <ScrubBar progress={progress} onSeek={onSeek} />
+      <ScrubBar clock={clock} onSeek={onSeek} />
     </motion.div>
   );
 }
@@ -513,8 +515,7 @@ export function SwipeDeck({
   tracks,
   backToken,
   playing,
-  progress,
-  remaining,
+  clock,
   saveTarget,
   onToggle,
   onSeek,
@@ -532,6 +533,8 @@ export function SwipeDeck({
   onPickMood,
   onClearMood,
 }: Props) {
+  // flips once per song, so the deck doesn't re-render on every tick
+  const nearEnd = useClockSelect(clock, (c) => c.remaining <= 5 && c.remaining > 0);
   const tx = useT();
   const [onDeck, next, nextNext] = tracks;
   const lastDir = useRef<SwipeDir>("up");
@@ -706,7 +709,7 @@ export function SwipeDeck({
               key={`${onDeck.id}:${backToken}`}
               track={onDeck}
               playing={playing}
-              progress={progress}
+              clock={clock}
               hookIndex={hookIndex}
               hookCount={hookCount}
               hookLabel={hookLabel}
@@ -727,7 +730,7 @@ export function SwipeDeck({
         </AnimatePresence>
 
         <AnimatePresence>
-          {onDeck && remaining <= 5 && remaining > 0 && !fullSongOpen && (
+          {onDeck && nearEnd && !fullSongOpen && (
             <motion.button
               key={`chip-${onDeck.id}`}
               className="fullsong-chip"
