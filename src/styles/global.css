@@ -227,6 +227,9 @@ button {
   font-size: 17px;
   letter-spacing: -0.02em;
 }
+/* the logo mark (waveform whose loudest bar is a hook) sits in front of every wordmark */
+.wordmark, .ob-logo { display: inline-flex; align-items: center; }
+.wordmark::before, .ob-logo::before { content: ""; flex: none; width: 1.3em; height: 1.3em; margin-right: 0.38em; background: url(/hookedcue-mark.svg) center / contain no-repeat; }
 .wordmark .dot {
   color: var(--accent);
   transition: color 0.5s ease;
@@ -958,6 +961,7 @@ button {
   font-size: 15px;
   text-align: center;
 }
+.ob-logo { display: flex; justify-content: center; }
 .ob-step-wrap {
   flex: 1;
   display: flex;
