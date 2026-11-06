@@ -13,9 +13,9 @@
     "check": "node scripts/check-mojibake.mjs && tsc -b && tsc --noEmit -p convex && vitest run"
   },
   "dependencies": {
-    "@convex-dev/better-auth": "^0.12.5",
+    "@convex-dev/better-auth": "^0.13.0",
     "aws4fetch": "^1.0.20",
-    "better-auth": "~1.6.9",
+    "better-auth": "~1.7.18",
     "convex": "^1.41.0",
     "motion": "^11.15.0",
     "nodemailer": "^10.2.1",
