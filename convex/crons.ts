@@ -6,8 +6,8 @@ import { internal } from "./_generated/api";
  * is batched here on purpose. Doing it inline would rewrite rows that every
  * client's catalogue query depends on, thousands of times an hour.
  *
- * Hourly is fast enough: a hook needs 20 plays before it is allowed to move at
- * all, so nothing is waiting on a shorter interval.
+ * Every 6 hours is fast enough: a hook needs 20 plays before it is allowed to
+ * move at all, so nothing is waiting on a shorter interval.
  */
 const crons = cronJobs();
 
@@ -20,15 +20,18 @@ export function schedulesOn(env: Record<string, string | undefined>): boolean {
   return env.HOOKED_CRONS?.trim().toLowerCase() !== "off";
 }
 
-crons.hourly(
+// Every 6 hours, not hourly: both ranking jobs read every hookStats row and
+// the hot tracks (sound profiles and all), 24 times a day on a plan with
+// ~33 MB of database I/O a day. A hook needs 20 plays before it moves anyway.
+crons.interval(
   "rank hooks by save rate",
-  { minuteUTC: 7 },
+  { hours: 6 },
   internal.hooks.rerank,
 );
 
-crons.hourly(
+crons.interval(
   "compute catalogue heat for the adventure answer",
-  { minuteUTC: 11 },
+  { hours: 6 },
   internal.hooks.computeHeat,
 );
 
@@ -39,7 +42,7 @@ crons.hourly(
  */
 crons.interval(
   "sweep stale import runs",
-  { minutes: 10 },
+  { minutes: 60 },
   internal.imports.sweepStale,
 );
 
@@ -50,7 +53,7 @@ crons.interval(
  */
 crons.interval(
   "rollup daily counters",
-  { minutes: 10 },
+  { minutes: 60 },
   internal.admin.rollupStats,
 );
 
@@ -99,9 +102,11 @@ crons.daily(
  * counters table. Offset from the others so the heavy jobs never share a
  * minute.
  */
+// Daily (was 6-hourly, Nov 2026): each run reads up to 6k swipes and every
+// trackNeighbors row, and a few testers' swipes barely move it in a day.
 crons.interval(
   "rebuild the recommendation model",
-  { hours: 6 },
+  { hours: 24 },
   internal.recommend.rebuild,
 );
 

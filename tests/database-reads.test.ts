@@ -76,3 +76,30 @@ describe("catalogue rebuild and curation", () => {
     expect(block).toContain("{ hours: 72 }");
   });
 });
+
+describe("jobs Convex support named (19 Nov 2026)", () => {
+  const crons = src("crons.ts");
+  const every = (name: string) => crons.split(`"${name}"`)[1].split(");")[0];
+
+  it("fold daily counters from new rows only, never whole tables", () => {
+    const rollup = src("admin.ts").split("export const rollupStats")[1].split("export const")[0];
+    for (const t of ["profiles", "accessRequests", "imports"]) {
+      expect(rollup).not.toMatch(new RegExp(`query\("${t}"\)\s*\.collect\(\)`));
+    }
+    expect(rollup).toContain('withIndex("by_creation_time", (q) => q.gt("_creationTime", wm))');
+  });
+
+  it("run the rollup and the import sweep hourly, not every 10 minutes", () => {
+    expect(every("rollup daily counters")).toContain("{ minutes: 60 }");
+    expect(every("sweep stale import runs")).toContain("{ minutes: 60 }");
+  });
+
+  it("rank hooks and compute heat every 6 hours", () => {
+    expect(every("rank hooks by save rate")).toContain("{ hours: 6 }");
+    expect(every("compute catalogue heat for the adventure answer")).toContain("{ hours: 6 }");
+  });
+
+  it("rebuild recommendations once a day", () => {
+    expect(every("rebuild the recommendation model")).toContain("{ hours: 24 }");
+  });
+});

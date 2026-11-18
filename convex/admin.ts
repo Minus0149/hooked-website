@@ -607,7 +607,7 @@ async function readWatermark(ctx: QueryCtx): Promise<number> {
 /**
  * Fold everything written since the last run into statsDaily.
  *
- * Runs every few minutes from crons.ts. Each run only touches rows newer than
+ * Runs hourly from crons.ts. Each run only touches rows newer than
  * its watermark, so the cost is proportional to recent activity, not to the
  * size of history — that's what keeps `stats` cheap enough to be reactive.
  */
@@ -640,10 +640,14 @@ export const rollupStats = internalMutation({
     if (swipeRows.length >= CAP) truncated = true;
 
     // ---- signups / requests / imports -----------------------------------
+    // Only rows created since the watermark. These used to read the three
+    // tables whole on every run (every 10 minutes, on prod and dev), which
+    // Convex support named as a database I/O cost in Nov 2026. Each row's
+    // timestamp is set when it is inserted, so creation time bounds it.
     const [profiles, requests, imports] = await Promise.all([
-      ctx.db.query("profiles").collect(),
-      ctx.db.query("accessRequests").collect(),
-      ctx.db.query("imports").collect(),
+      ctx.db.query("profiles").withIndex("by_creation_time", (q) => q.gt("_creationTime", wm)).take(CAP),
+      ctx.db.query("accessRequests").withIndex("by_creation_time", (q) => q.gt("_creationTime", wm)).take(CAP),
+      ctx.db.query("imports").withIndex("by_creation_time", (q) => q.gt("_creationTime", wm)).take(CAP),
     ]);
     for (const p of profiles) {
       if (p._creationTime <= wm) continue;
