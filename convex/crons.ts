@@ -11,6 +11,15 @@ import { internal } from "./_generated/api";
  */
 const crons = cronJobs();
 
+/**
+ * Set HOOKED_CRONS=off on a deployment to run none of these (the dev
+ * deployment: its copy of every job read the same tables as prod and spent
+ * the same free-plan database I/O for nothing).
+ */
+export function schedulesOn(env: Record<string, string | undefined>): boolean {
+  return env.HOOKED_CRONS?.trim().toLowerCase() !== "off";
+}
+
 crons.hourly(
   "rank hooks by save rate",
   { minuteUTC: 7 },
@@ -45,15 +54,13 @@ crons.interval(
   internal.admin.rollupStats,
 );
 
-// The analytics snapshot is the expensive report (it reads history once) —
-// computed offline, read instantly. Nightly keeps it fresh enough; admins can
-// also recompute on demand from the dashboard.
-crons.daily(
-  "recompute analytics snapshot",
-  { hourUTC: 3, minuteUTC: 17 },
-  internal.admin.computeSnapshot,
-  {},
-);
+// The analytics snapshot (admin.computeSnapshot) is NOT scheduled any more.
+// It reads every swipe, track and hook in one go; past ~10k tracks it went
+// over Convex's per-call read limit and failed every night, after reading
+// ~16 MB on prod and again on dev. That waste helped use up the free plan's
+// database I/O (Nov 2026, deployments switched off). Admins can still
+// recompute it from the dashboard; bring the nightly run back once it reads
+// in pages.
 
 // Ad event log: caps only need ~45 days of memory. Older rows are dead weight.
 crons.daily(
@@ -144,4 +151,4 @@ crons.daily(
   internal.access.remindUnjoined,
 );
 
-export default crons;
+export default schedulesOn(process.env) ? crons : cronJobs();

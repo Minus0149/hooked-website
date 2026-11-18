@@ -272,6 +272,13 @@ export default defineSchema({
     // hook recognition v3's work queue: tracks not yet heard by the current
     // pipeline (hookVersion missing or older) — see hookPlans.pending
     .index("by_hookVersion", ["hookVersion"])
+    // the analysers' work queues (convex/analyzer.ts): tracks not yet analysed,
+    // energy on an old scale, sound not heard by the current model. Without
+    // these each batch read the whole catalogue (Nov 2026: the free plan's
+    // database I/O ran out and the deployment was switched off)
+    .index("by_analyzedAt", ["analyzedAt"])
+    .index("by_energyCal", ["energyCal"])
+    .index("by_soundVersion", ["soundVersion"])
     // the admin catalogue's search box (title or artist)
     .searchIndex("search_title", { searchField: "title" })
     .searchIndex("search_artist", { searchField: "artist" }),

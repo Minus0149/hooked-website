@@ -1,4 +1,5 @@
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, type QueryCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { cleanText } from "./security";
 import { touchCatalog } from "./catalog";
@@ -18,20 +19,58 @@ import { HOOK_PIPELINE_VERSION } from "./hookRules";
 
 const MAX_WINDOWS = 6;
 
+/** How many tracks one work-queue call may hand out. */
+export const queueLimit = (limit: number) => Math.min(Math.max(Math.floor(limit) || 1, 1), 500);
+
+/** A track the analysers can work on: listed, with a preview to download. */
+export const workable = (t: Pick<Doc<"tracks">, "hidden" | "previewUrl">) => t.hidden !== true && !!t.previewUrl;
+
+/**
+ * The tracks whose `field` is not `want` (missing counts as not), up to `limit`.
+ *
+ * Read through that field's index, so a run costs the tracks it hands out, not
+ * the catalogue. The old versions read every track on every call: with 10k+
+ * tracks that was ~15 MB per batch, which is most of what used up the free
+ * plan's database I/O in Nov 2026 and got the deployment switched off.
+ */
+async function tracksWhereNot(
+  ctx: QueryCtx,
+  index: "by_analyzedAt" | "by_energyCal" | "by_soundVersion",
+  field: "analyzedAt" | "energyCal" | "soundVersion",
+  want: number | undefined,
+  limit: number,
+  also: (t: Doc<"tracks">) => boolean = () => true,
+): Promise<Doc<"tracks">[]> {
+  const n = queueLimit(limit);
+  const keep = (t: Doc<"tracks">) => workable(t) && also(t);
+  const out: Doc<"tracks">[] = [];
+  const seen = new Set<string>();
+  const add = (rows: Doc<"tracks">[]) => {
+    for (const t of rows) {
+      if (out.length >= n) return;
+      if (seen.has(t._id) || !keep(t)) continue;
+      seen.add(t._id);
+      out.push(t);
+    }
+  };
+  // Convex sorts a missing field before every value, so "missing" is its own range
+  const base = () => ctx.db.query("tracks");
+  const listed = (q: ReturnType<ReturnType<typeof base>["withIndex"]>) =>
+    q.filter((f) => f.and(f.neq(f.field("hidden"), true), f.neq(f.field("previewUrl"), undefined)));
+  add(await listed(base().withIndex(index, (q) => q.eq(field, undefined))).take(n));
+  if (want !== undefined && out.length < n) {
+    add(await listed(base().withIndex(index, (q) => q.gt(field, undefined).lt(field, want as never))).take(n));
+    if (out.length < n) add(await listed(base().withIndex(index, (q) => q.gt(field, want as never))).take(n));
+  }
+  return out;
+}
+
 /** Tracks still waiting for analysis, in manageable batches. */
 export const pendingTracks = internalQuery({
   args: { limit: v.number() },
   handler: async (ctx, { limit }) => {
-    const all = await ctx.db.query("tracks").collect();
-    return all
-      .filter(
-        (t) =>
-          t.hidden !== true &&
-          t.analyzedAt === undefined &&
-          !!t.previewUrl,
-      )
-      .slice(0, Math.min(Math.max(limit, 1), 500))
-      .map((t) => ({
+    const waiting = await tracksWhereNot(ctx, "by_analyzedAt", "analyzedAt", undefined, limit);
+    return waiting.map((t) => ({
         trackId: t.trackId,
         title: t.title,
         artist: t.artist,
@@ -51,17 +90,8 @@ export const pendingTracks = internalQuery({
 export const staleEnergyTracks = internalQuery({
   args: { limit: v.number(), cal: v.number() },
   handler: async (ctx, { limit, cal }) => {
-    const all = await ctx.db.query("tracks").collect();
-    return all
-      .filter(
-        (t) =>
-          t.hidden !== true &&
-          t.analyzedAt !== undefined &&
-          !!t.previewUrl &&
-          t.energyCal !== cal,
-      )
-      .slice(0, Math.min(Math.max(limit, 1), 500))
-      .map((t) => ({
+    const stale = await tracksWhereNot(ctx, "by_energyCal", "energyCal", cal, limit, (t) => t.analyzedAt !== undefined);
+    return stale.map((t) => ({
         trackId: t.trackId,
         title: t.title,
         artist: t.artist,
@@ -95,11 +125,8 @@ export const ingestEnergy = internalMutation({
 export const soundPendingTracks = internalQuery({
   args: { limit: v.number(), version: v.number() },
   handler: async (ctx, { limit, version }) => {
-    const all = await ctx.db.query("tracks").collect();
-    return all
-      .filter((t) => t.hidden !== true && !!t.previewUrl && t.soundVersion !== version)
-      .slice(0, Math.min(Math.max(limit, 1), 500))
-      .map((t) => ({ trackId: t.trackId, title: t.title, artist: t.artist, previewUrl: t.previewUrl }));
+    const pending = await tracksWhereNot(ctx, "by_soundVersion", "soundVersion", version, limit);
+    return pending.map((t) => ({ trackId: t.trackId, title: t.title, artist: t.artist, previewUrl: t.previewUrl }));
   },
 });
 
