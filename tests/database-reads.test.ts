@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { queueLimit, workable } from "../convex/analyzer";
 import { schedulesOn } from "../convex/crons";
+import { RUNTIME_DEFAULTS } from "../convex/runtime";
 
 /**
  * Nov 2026: the free plan's database I/O (1 GB/month) ran out and Convex
@@ -55,5 +56,23 @@ describe("scheduled jobs", () => {
 
   it("do not include the whole-history analytics snapshot", () => {
     expect(src("crons.ts")).not.toMatch(/internal\.admin\.computeSnapshot/);
+  });
+});
+
+describe("catalogue rebuild and curation", () => {
+  it("rebuilds the catalogue from listed tracks only, through an index", () => {
+    expect(src("schema.ts")).toContain('.index("by_hidden", ["hidden"])');
+    const page = src("catalog.ts").split("export const snapshotPage")[1].split("export const")[0];
+    expect(page).toContain('.withIndex("by_hidden", (q) => q.lt("hidden", true))');
+    expect(page).not.toMatch(/query\("tracks"\)\s*\.paginate/);
+  });
+
+  it("rebuilds in the background at most once a day", () => {
+    expect(RUNTIME_DEFAULTS.catalogRebuildHours).toBeGreaterThanOrEqual(24);
+  });
+
+  it("curates every 3 days, not daily", () => {
+    const block = src("crons.ts").split('"curate the catalogue"')[1].split(");")[0];
+    expect(block).toContain("{ hours: 72 }");
   });
 });

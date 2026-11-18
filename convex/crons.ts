@@ -125,9 +125,12 @@ crons.daily(
  * fourth song, and songs that left every chart (convex/curation.ts). Half an
  * hour after the pull so today's chart clock is already set.
  */
-crons.daily(
+// Every 3 days, not daily: a pass reads every track (hidden ones too, since it
+// may un-hide them) and cost ~19 MB a day on prod, Nov 2026. New chart songs
+// wait up to 3 days to be judged, which nothing in the deck notices.
+crons.interval(
   "curate the catalogue",
-  { hourUTC: 5, minuteUTC: 53 },
+  { hours: 72 },
   internal.curation.run,
   {},
 );

@@ -147,7 +147,13 @@ export const snapshotStart = internalQuery({
 export const snapshotPage = internalQuery({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, { paginationOpts }) => {
-    const page = await ctx.db.query("tracks").paginate(paginationOpts);
+    // hidden is optional: missing and false both sort before true, so this range
+    // is exactly the listed tracks. Reading hidden ones too was the biggest
+    // single use of the free plan's database I/O (538 MB of 2.5 GB, Nov 2026).
+    const page = await ctx.db
+      .query("tracks")
+      .withIndex("by_hidden", (q) => q.lt("hidden", true))
+      .paginate(paginationOpts);
     const tracks: CatalogTrack[] = [];
     for (const t of page.page) {
       if (t.hidden === true) continue;

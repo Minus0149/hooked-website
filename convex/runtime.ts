@@ -69,8 +69,10 @@ export const RUNTIME_DEFAULTS = {
    * file, so rebuilding 20 s after each analyser/chart write blew through the
    * free plan (3.17 GB of file writes in a few days, 2026-09-27). Admin actions
    * — hiding a song, a creator publishing — still rebuild within a minute.
+   * 24 since Nov 2026: at 12 the rebuilds alone read ~30 MB a day, close to
+   * the free plan's whole database I/O allowance (1 GB a month).
    */
-  catalogRebuildHours: 12,
+  catalogRebuildHours: 24,
   /**
    * The oldest Android build (versionCode) still allowed to run. Phones below
    * it get Play's full-screen update and can't continue without it; above it,

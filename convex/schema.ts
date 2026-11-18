@@ -279,6 +279,9 @@ export default defineSchema({
     .index("by_analyzedAt", ["analyzedAt"])
     .index("by_energyCal", ["energyCal"])
     .index("by_soundVersion", ["soundVersion"])
+    // the catalogue rebuild reads only listed tracks (hidden ones are most of
+    // the table once curation has run); see catalog.snapshotPage
+    .index("by_hidden", ["hidden"])
     // the admin catalogue's search box (title or artist)
     .searchIndex("search_title", { searchField: "title" })
     .searchIndex("search_artist", { searchField: "artist" }),
