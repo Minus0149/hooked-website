@@ -1,4 +1,4 @@
-import { Component, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import {
@@ -7,6 +7,9 @@ import {
   mailtoHref,
   type ErrorReport,
 } from "../lib/error-report";
+import { RECHECK_MS, backendDown, looksLikeServerError } from "../lib/backendHealth";
+
+const CONVEX_URL = import.meta.env.VITE_CONVEX_URL as string;
 
 type Props = {
   children: ReactNode;
@@ -18,18 +21,25 @@ type Props = {
 type State = {
   error: Error | null;
   info: ErrorInfo | null;
+  /** for a "Server Error": is the whole backend down? null while we ask */
+  down: boolean | null;
 };
 
 export class AppErrorBoundary extends Component<Props, State> {
-  state: State = { error: null, info: null };
+  state: State = { error: null, info: null, down: null };
 
   static getDerivedStateFromError(error: Error): Partial<State> {
-    return { error };
+    return { error, down: null };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("hooked app crashed", error, info);
     this.setState({ info });
+    // A backend that is switched off answers every call with "Server Error":
+    // ask once whether it's the whole backend before showing a crash.
+    if (looksLikeServerError(error.message || "")) {
+      void backendDown(CONVEX_URL).then((down) => this.setState({ down }));
+    }
   }
 
   render() {
@@ -40,6 +50,10 @@ export class AppErrorBoundary extends Component<Props, State> {
     }
 
     const message = error.message || "Unexpected app error";
+    if (looksLikeServerError(message)) {
+      if (this.state.down === null) return <main className="fatal-screen" aria-busy="true" />;
+      if (this.state.down) return <Maintenance />;
+    }
     const isConvexDeployError =
       message.includes("Could not find public function") ||
       message.includes("npx convex dev") ||
@@ -71,6 +85,44 @@ export class AppErrorBoundary extends Component<Props, State> {
       </main>
     );
   }
+}
+
+/**
+ * Shown instead of the crash screen while the backend itself is down. Checks
+ * again every 30 s and opens the app by itself once it answers, so nobody has
+ * to switch this off when the backend is back.
+ */
+export function Maintenance({ convexUrl = CONVEX_URL }: { convexUrl?: string }) {
+  const [checking, setChecking] = useState(false);
+
+  const check = async () => {
+    setChecking(true);
+    const down = await backendDown(convexUrl);
+    if (!down) window.location.reload();
+    else setChecking(false);
+  };
+
+  useEffect(() => {
+    const t = window.setInterval(() => void check(), RECHECK_MS);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convexUrl]);
+
+  return (
+    <main className="fatal-screen">
+      <section className="fatal-card" aria-live="polite">
+        <p className="fatal-kicker">HookedCue</p>
+        <h1>Back in a little while</h1>
+        <p className="fatal-copy">
+          HookedCue can't reach its server right now. Your saved songs are safe. This page opens the app by
+          itself as soon as it's back.
+        </p>
+        <button className="fatal-action" type="button" disabled={checking} onClick={() => void check()}>
+          {checking ? "Checking" : "Try now"}
+        </button>
+      </section>
+    </main>
+  );
 }
 
 /**
